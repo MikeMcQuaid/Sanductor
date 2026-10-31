@@ -45,7 +45,7 @@ struct FeedbackStagesTests {
         }
         await localReview(fixture, id: "1")
         await AutofixCoordinator().refresh(store: fixture.store, driver: fixture.driver())
-        #expect(await fixture.state.deliveries.isEmpty)
+        #expect(await fixture.state.deliveries.count == 1)
         await fixture.update { $0.checksComplete = true }
         for index in 1 ... limit {
             await localReview(fixture, id: String(index))

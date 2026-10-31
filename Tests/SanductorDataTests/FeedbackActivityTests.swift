@@ -57,7 +57,7 @@ struct FeedbackActivityTests {
     }
 
     @Test(arguments: [true, false])
-    func `missing CI results wait with a count or an unknown status`(unknown: Bool) async throws {
+    func `missing CI results do not block other feedback`(unknown: Bool) async throws {
         let fixture = try AutofixFixture()
         fixture.store.update { $0.pullRequestAutomation[AutofixFixture.key]?.autofixCI = true }
         let state = try #require(fixture.store.load().pullRequestAutomation[AutofixFixture.key])
@@ -76,13 +76,11 @@ struct FeedbackActivityTests {
         let target = try #require(await driver.target(state, summary))
         let ready = try await AutofixCoordinator().feedbackReady(
             state,
-            summary: summary,
             target: target,
             context: AutofixContext(key: AutofixFixture.key, store: fixture.store, driver: driver),
         )
-        #expect(ready == false)
-        #expect(fixture.store.load().pullRequestAutomation[AutofixFixture.key]?.pending == (unknown
-                ? "Waiting for CI results" : "Waiting for 2 CI jobs"))
+        #expect(ready)
+        #expect(fixture.store.load().pullRequestAutomation[AutofixFixture.key]?.pending.isEmpty == true)
     }
 
     @Test
@@ -97,7 +95,7 @@ struct FeedbackActivityTests {
         await coordinator.refresh(store: fixture.store, driver: fixture.driver())
         let log = fixture.store.load().pullRequestAutomation[AutofixFixture.key]?.activityLog
         #expect(log?.contains { $0.message.contains("Started") } == true)
-        #expect(log?.last?.message == "Existing work · Waiting for 1 CI job")
+        #expect(log?.last?.message == "GitHub feedback · Fix-and-commit prompt sent; follow progress in the agent pane")
         await coordinator.refresh(store: fixture.store, driver: fixture.driver())
         #expect(fixture.store.load().pullRequestAutomation[AutofixFixture.key]?.activityLog == log)
         let decoder = JSONDecoder()

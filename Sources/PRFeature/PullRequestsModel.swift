@@ -34,6 +34,7 @@ final class PullRequestsModel {
         self.items = items
         self.github = github
         self.store = store
+        preparePrompt = { try service.promptForPasting($0) }
         let gate = PullRequestStore(github: github, store: store)
         pullRequests = gate
         fetchList = { scope, limit in
@@ -196,6 +197,7 @@ final class PullRequestsModel {
     /// which is also where the app keeps when it last asked.
     let pullRequests: PullRequestStore
     let store: MetadataStore
+    let preparePrompt: (String) throws -> String
 
     /// The branch actually checked out in the worktree, refreshed on
     /// reload; agents sometimes switch branches inside a worktree.
@@ -235,6 +237,7 @@ final class PullRequestsModel {
     var isLoading = false
     /// Bumped per reload: a page fetch a reload overtook leaves the
     /// loading state and the page to it.
+    var checkCopyGeneration = 0
     var listingGeneration = 0
 
     /// True once the first listing answered; the creation form only
@@ -382,12 +385,10 @@ final class PullRequestsModel {
         didSet { saveDraft() }
     }
 
-    /// See `PullRequestsModel+Create`: whether it opens as a draft.
     var prIsDraft = false {
         didSet { saveDraft() }
     }
 
-    /// Worktree items supplied by the sidebar's polling.
     var items: [WorktreeItem] {
         didSet {
             // The sidebar's poll may have fetched a fresher summary

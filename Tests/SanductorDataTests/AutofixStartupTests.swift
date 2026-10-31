@@ -24,7 +24,7 @@ struct AutofixStartupTests {
     }
 
     @Test(arguments: ["ci", "head", "revision", "working", "permissions"])
-    func `startup still gates incomplete or changed feedback`(change: String) async throws {
+    func `startup accepts partial feedback but rejects changed heads and revisions`(change: String) async throws {
         let fixture = try AutofixFixture()
         fixture.store.update { metadata in
             metadata.pullRequestAutomation[AutofixFixture.key]?.autofixCI = change == "ci"
@@ -61,7 +61,7 @@ struct AutofixStartupTests {
             }
         }
         await AutofixCoordinator().refresh(store: fixture.store, driver: driver)
-        #expect(await fixture.state.deliveries.isEmpty)
+        #expect(await fixture.state.deliveries.count == (["ci", "working"].contains(change) ? 1 : 0))
     }
 
     @Test

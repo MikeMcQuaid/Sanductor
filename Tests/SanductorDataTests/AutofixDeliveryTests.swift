@@ -34,21 +34,20 @@ struct AutofixDeliveryTests {
         }
         let commands = await runner.commands
         let sent = try #require(commands.last { $0.contains("prompt") })
-        #expect(sent.last?.hasSuffix("Report progress here.") == true)
         #expect(sent.prefix(4) == ["herdr", "agent", "prompt", "pane"])
         #expect(commands.allSatisfy { arguments in
             arguments.contains("snapshot") || arguments.contains("process-info")
                 || arguments.contains("prompt")
         })
-        let prompt = try String(contentsOfFile: world.paths.promptsDirectory + "/autofix-attempt.md", encoding: .utf8)
+        let prompt = try #require(commands.first { $0.contains("prompt") }?.last)
+        #expect(FileManager.default.fileExists(atPath: world.paths.promptsDirectory + "/autofix-attempt.md") == false)
         #expect(prompt.contains("Required CI: test failed\nFailure details"))
         #expect(prompt.contains("Preserve unrelated uncommitted work"))
         #expect(prompt.contains("start another session or push"))
         if committing {
-            let file = world.paths.promptsDirectory + "/autofix-attempt-commit.md"
-            let followUp = try String(contentsOfFile: file, encoding: .utf8)
+            let followUp = try #require(sent.last)
             #expect(followUp.contains("commit only the fixes you made"))
-            #expect(followUp.contains("autofix-attempt.md"))
+            #expect(followUp.contains("already supplied in this conversation"))
             #expect(followUp.contains("start another session or push"))
             #expect(followUp.contains("Sanductor will verify your committed result and keep watching"))
         }

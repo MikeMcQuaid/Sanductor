@@ -15,8 +15,10 @@ struct PullRequestChecksView: View {
     var body: some View {
         if let checks = summary.checkDetails {
             if let selected = checks.first(where: { $0.id == selectedID }) {
-                CheckLogView(check: selected, fetchLog: model.fetchCheckLog) { selectedID = nil }
-                    .id(selected.id)
+                CheckLogView(check: selected, fetchLog: model.fetchCheckLog, preparePrompt: model.preparePrompt) {
+                    selectedID = nil
+                }
+                .id(selected.id)
             } else {
                 ScrollView {
                     LazyVStack(spacing: 0) {

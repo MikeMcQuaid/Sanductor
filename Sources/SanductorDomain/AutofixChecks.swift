@@ -27,7 +27,7 @@ public struct AutofixCheck: Codable, Hashable, Sendable {
 
 // MARK: - AutofixChecks
 
-/// Every reported job must finish before automation gathers failures.
+/// Completed failures are actionable independently of unfinished jobs.
 public struct AutofixChecks: Codable, Hashable, Sendable {
     // MARK: Lifecycle
 
@@ -47,10 +47,6 @@ public struct AutofixChecks: Codable, Hashable, Sendable {
     }
 
     public var failures: [AutofixCheck] {
-        guard isComplete else {
-            return []
-        }
-
-        return results.filter(\.isFailure)
+        results.filter { $0.status == "COMPLETED" && $0.isFailure }
     }
 }

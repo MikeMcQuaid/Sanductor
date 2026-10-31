@@ -8,9 +8,6 @@ extension AutofixCoordinator {
         let store = context.store
         let driver = context.driver
         let target = await driver.target(state, summary)
-        if try await reconcileIdleChanges(state, target: target, context: context) {
-            return
-        }
         guard let target else {
             store.update { value in
                 value.pullRequestAutomation[key]?.pending = "Waiting for an agent session on this branch to apply fixes"
@@ -18,6 +15,12 @@ extension AutofixCoordinator {
             return
         }
 
+        if try await gatherRemote(state, summary: summary, target: target, context: context) {
+            return
+        }
+        if try await reconcileIdleChanges(state, target: target, context: context) {
+            return
+        }
         if let attempt = state.attempt {
             try await finish(attempt, target: target, context: context)
             return

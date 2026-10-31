@@ -163,6 +163,16 @@ public struct FeedbackView: View {
         }
     }
 
+    func setIncludesOptionalChecks(_ include: Bool) {
+        do {
+            try service.setIncludesOptionalChecks(include, for: state)
+            message = ""
+            generation += 1
+        } catch {
+            message = error.localizedDescription
+        }
+    }
+
     func review() async {
         isReviewing = true
         message = "Reviewing local changes"
@@ -219,7 +229,11 @@ public struct FeedbackView: View {
         isCopying = true
         defer { isCopying = false }
         do {
-            try await NSPasteboard.general.setString(service.copyFeedback(state), forType: .string)
+            guard try await PromptClipboard.copy(service.copyFeedback(state), prepare: service.promptForPasting) else {
+                message = "Could not copy feedback"
+                return
+            }
+
             message = "Copied all available feedback"
         } catch {
             message = error.localizedDescription; available = nil

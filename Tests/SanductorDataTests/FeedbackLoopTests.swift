@@ -35,8 +35,8 @@ struct FeedbackLoopTests {
         await fixture.update { $0.hasSession = true; $0.activity = .working }
         await coordinator.refresh(store: fixture.store, driver: driver)
         #expect(fixture.store.load().pullRequestAutomation[AutofixFixture.key]?.activityStatus
-            == "Your agent is working on something else. Autofix will wait until it finishes.")
-        #expect(await fixture.state.deliveries.isEmpty)
+            == "Fix-and-commit prompt sent; follow progress in the agent pane")
+        #expect(await fixture.state.deliveries.count == 1)
         await fixture.update { $0.activity = .done }
         await coordinator.refresh(store: fixture.store, driver: driver)
         #expect(await fixture.state.deliveries.count == 1)

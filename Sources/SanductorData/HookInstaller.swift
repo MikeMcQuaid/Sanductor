@@ -27,6 +27,7 @@ struct HookInstaller {
         for directory in [paths.eventsDirectory, paths.promptsDirectory, paths.friendlyWorktreesDirectory] {
             try manager.createDirectory(atPath: directory, withIntermediateDirectories: true)
         }
+        try PromptPayload.adoptExisting(paths: paths, store: MetadataStore(file: paths.metadataFile))
         try installScript()
         try installSettingsEntries()
     }

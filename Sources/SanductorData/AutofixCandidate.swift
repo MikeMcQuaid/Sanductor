@@ -24,13 +24,17 @@ struct AutofixCandidate: Equatable {
         )
     }
 
-    static func checks(summary: PullRequestSummary, state: PullRequestAutomation) -> Self? {
+    static func checks(
+        summary: PullRequestSummary, state: PullRequestAutomation, includeOptional: Bool = false,
+    ) -> Self? {
         guard state.autofixCI else {
             return nil
         }
 
         let failures = (summary.autofixChecks?.failures ?? []).filter { check in
             check.runID.isEmpty == false && state.handledEvents.contains(check.runID) == false
+                && (includeOptional || summary.autofixChecks?.required.isEmpty != false
+                    || summary.autofixChecks?.required.contains(check.name) == true)
         }
         guard failures.isEmpty == false else {
             return nil
@@ -110,7 +114,7 @@ struct AutofixCandidate: Equatable {
             marks[thread.resolveID] = PendingThreadResolution(head: head, commentID: latest)
             sections.append("Thread " + thread.resolveID + " in " + thread.path
                 + (thread.line.map { ":" + String($0) } ?? "") + "\n"
-                + eligible.lazy.map(\.asText).joined(separator: "\n"))
+                + eligible.lazy.map { ReviewCopy.text($0) }.joined(separator: "\n"))
         }
         guard commentEvents.isEmpty == false else {
             return nil

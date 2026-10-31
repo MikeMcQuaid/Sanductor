@@ -173,10 +173,11 @@ public struct PullRequestAutomation: Codable, Equatable, Sendable {
 public struct PendingThreadResolution: Codable, Equatable, Sendable {
     // MARK: Lifecycle
 
-    public init(head: String, commentID: String, fixCommit: String? = nil) {
+    public init(head: String, commentID: String, fixCommit: String? = nil, autofixAttemptID: String? = nil) {
         self.head = head
         self.commentID = commentID
         self.fixCommit = fixCommit
+        self.autofixAttemptID = autofixAttemptID
     }
 
     public init(from decoder: any Decoder) throws {
@@ -184,6 +185,7 @@ public struct PendingThreadResolution: Codable, Equatable, Sendable {
         head = try container.decode(String.self, forKey: .head)
         commentID = try container.decode(String.self, forKey: .commentID)
         fixCommit = try container.decodeIfPresent(String.self, forKey: .fixCommit)
+        autofixAttemptID = try container.decodeIfPresent(String.self, forKey: .autofixAttemptID)
         requested = try container.decodeIfPresent(Bool.self, forKey: .requested) ?? false
     }
 
@@ -192,6 +194,7 @@ public struct PendingThreadResolution: Codable, Equatable, Sendable {
     public let head: String
     public let commentID: String
     public let fixCommit: String?
+    public let autofixAttemptID: String?
     public var requested = false
 }
 

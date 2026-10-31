@@ -80,20 +80,26 @@ extension FeedbackView {
         GroupBox {
             VStack(alignment: .leading, spacing: Self.spacing) {
                 sourceRow(
-                    "CI",
+                    "Required Checks",
                     selection: binding(\.autofixCI),
                     status: remoteStatus(.checks, selected: state.autofixCI, available: available),
                     unavailable: state.number <= 0,
                 )
+                Toggle("Optional Checks", isOn: Binding(
+                    get: { service.includesOptionalChecks(state) },
+                    set: { include in setIncludesOptionalChecks(include) },
+                ))
+                .disabled(inputsLocked || state.autofixCI == false || state.number <= 0)
+                .hoverHelp("Include optional CI failures; shared with the Checks pane")
                 sourceRow(
-                    "Bot reviews",
+                    "Bot Reviews",
                     selection: binding(\.autofixBots),
                     status: remoteStatus(.githubReview, selected: state.autofixBots, available: available),
                     unavailable: state.number <= 0,
                 )
                 .hoverHelp("Includes Copilot, CodeRabbit and GitHub quality/security comments, with nitpicks")
                 sourceRow(
-                    "Human reviews",
+                    "Human Reviews",
                     selection: binding(\.autofixReviews),
                     status: remoteStatus(.reviews, selected: state.autofixReviews, available: available),
                     unavailable: state.number <= 0,
@@ -151,6 +157,10 @@ extension FeedbackView {
         }
 
         if source == .checks {
+            let count = available.counts[.checks] ?? 0
+            if count > 0 {
+                return String(count) + (count == 1 ? " failed job" : " failed jobs")
+            }
             guard let checks = summary.autofixChecks else {
                 return "Waiting for CI checks"
             }
@@ -162,8 +172,7 @@ extension FeedbackView {
                 return String(finished.count) + "/"
                     + String(Set(checks.results.map(\.name)).union(checks.required).count) + " jobs finished"
             }
-            let count = available.counts[.checks] ?? 0
-            return count == 0 ? "No failures" : String(count) + (count == 1 ? " failed job" : " failed jobs")
+            return "No failures"
         }
         let count = source == .githubReview
             ? [.copilot, .codeRabbit, .githubReview].reduce(0) { $0 + (available.counts[$1] ?? 0) }

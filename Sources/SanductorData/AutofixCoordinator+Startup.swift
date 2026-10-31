@@ -12,7 +12,7 @@ extension AutofixCoordinator {
         checks.feedbackWorktreePath = target.worktree.path
         checks.autofixLocalReviews = false
         guard await ready(target, head: head, context: context),
-              try await feedbackReady(checks, summary: summary, target: target, context: context)
+              try await feedbackReady(checks, target: target, context: context)
         else {
             return
         }
@@ -39,7 +39,7 @@ extension AutofixCoordinator {
             try await send(feedback, summary: summary, head: head, target: target, context: context)
             return
         }
-        guard try await feedbackReady(checks, summary: summary, target: target, context: context, fresh: true) else {
+        guard try await feedbackReady(checks, target: target, context: context) else {
             return
         }
 
@@ -83,11 +83,15 @@ extension AutofixCoordinator {
         head: String,
         target: AutofixDriver.Target,
         driver: AutofixDriver,
+        remoteOnly: Bool = false,
     ) async throws -> AutofixCandidate? {
         if state.hasRemoteSources, let remote = summary.headCommit, remote != head,
            await state.acceptsFeedback(from: remote, contains: { await driver.containsHead(target, $0) }) == false
         {
             return nil
+        }
+        if remoteOnly {
+            return try await candidate(state: state, summary: summary, head: head, fresh: true, driver: driver)
         }
         if state.hasRemoteSources,
            let conflicts = try await conflictCandidate(summary: summary, head: head, target: target, driver: driver)
@@ -118,9 +122,7 @@ extension AutofixCoordinator {
         ) {
             return feedback
         }
-        let events = state.autofixBots ? try await driver.reviewComments(state, true) : []
-        guard await driver.isDirty(target), state.autofixCI == false || summary.autofixChecks?.isComplete == true,
-              await reviewsReady(state, summary: summary, events: events, driver: driver, fresh: true)
+        guard await driver.isDirty(target)
         else {
             return nil
         }

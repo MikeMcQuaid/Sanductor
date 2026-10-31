@@ -60,7 +60,7 @@ public extension PullRequestAutomation {
     // MARK: Internal
 
     internal mutating func countLocalRound(for attempt: AutofixAttempt) {
-        guard attempt.commitRequestedHead == nil else {
+        guard self.attempt == nil, attempt.commitRequestedHead == nil else {
             return
         }
 

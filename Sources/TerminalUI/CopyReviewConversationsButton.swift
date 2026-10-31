@@ -1,4 +1,4 @@
-import AppKit
+import SanductorData
 import SanductorDomain
 import SwiftUI
 
@@ -18,8 +18,7 @@ public struct CopyReviewConversationsButton: View {
             help: "Copy all unresolved local AI and GitHub conversations, with files and lines",
             disabled: open.isEmpty,
         ) {
-            NSPasteboard.general.clearContents()
-            NSPasteboard.general.setString(ReviewThread.digest(of: open), forType: .string)
+            PromptClipboard.copy(ReviewCopy.digest(of: open))
         }
         .accessibilityLabel("Copy " + String(open.count) + " unresolved conversations")
     }

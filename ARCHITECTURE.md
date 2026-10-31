@@ -110,6 +110,11 @@ plus resume.
 
 ### First-launch setup
 
+Setup explains that agents use the sandbox account and shared workspace,
+while the Shell pane uses the host account for dependency installation.
+Agent sessions survive quitting through herdr; local shells do not.
+Keychain recovery names the sandbox account, never the host keychain.
+
 After initial setup succeeds, the saved completion marker opens the
 dashboard, schedules and terminals immediately on later launches. Local
 prerequisites are rechecked once in the background, with independent
@@ -117,6 +122,12 @@ checks running concurrently. A failure replaces the workspace with setup
 guidance and blocks further actions until repaired. A first-ever launch
 shows startup progress in the normal app window until checks succeed.
 The workspace then opens; setup controls appear only after a failure.
+New users see three native popovers anchored to the repository, agent and
+tools panes, explaining their roles and the host/sandbox trust boundary.
+A pending marker is saved only when first-time setup succeeds, so existing
+users skip the tour and an interrupted tour resumes on relaunch. Dismissing
+or finishing it clears the marker. `script/tutorial [app-path]` sets only
+that marker for a stopped app and launches it; checks still run first.
 Completed setups show no startup progress. After a failure, manual
 rechecks show a spinner only after half a second. Agent availability
 updates in the mounted dashboard when the background check completes.
@@ -265,8 +276,17 @@ session control <pane> --takeover`, newline-delimited JSON over pipes)
 rather than drawing a remote screen over a PTY. herdr streams
 `terminal.frame` records of base64 ANSI bytes, opening with a full
 repaint, which the pane decodes (`HerdrTerminal` in Domain,
-`HerdrTerminalChannel` in DataAccess) into a local SwiftTerm view;
-keystrokes go back as `terminal.input`, resizes as `terminal.resize` and
+`HerdrTerminalChannel` in DataAccess) into a local SwiftTerm view.
+Keystrokes go through a serial interactive writer queue, so a busy client
+cannot block the main thread and command order is preserved. Pipe reads
+split records once per chunk and batch adjacent frames without dropping
+ANSI updates. Precise wheel deltas use the terminal's actual cell size,
+retain momentum and reset fractional movement at a new gesture.
+Each whole line is a separate `terminal.scroll` record, batched into one
+write: herdr 0.9.5 ignores the `lines` count when forwarding wheel input to
+mouse-aware agents or alternate-screen applications. Sending one record
+per line preserves accelerated gestures and ordinary scrollback alike.
+Keystrokes go back as `terminal.input`, resizes as `terminal.resize` and
 the wheel as `terminal.scroll`. The channel reads its client through
 the pipe's readability handler, never a blocking read: every mounted
 pane keeps a client, most of them silent, and reads that wait on each
@@ -276,6 +296,12 @@ to a window, falling back to Core Graphics if Metal is unavailable.
 On the Mac, its render loop prepares and draws frames off the main
 thread. SwiftTerm owns frame scheduling and keeps per-row GPU buffers,
 rebuilding only dirty rows.
+Typing leaves the cursor's blink cadence running: SwiftTerm 1.99.1's
+per-key blink reset takes the render lock, which can be held while Metal
+waits for a drawable and stalls input across the window.
+Screen changes mark fullscreen content for layout on AppKit's next
+update, allowing repeated notifications to coalesce instead of forcing
+nested SwiftUI layout during event handling.
 Pointer hits on the Mac's Metal surface go to the terminal view, so
 clicking gives the terminal keyboard focus rather than its drawing view.
 Keystrokes go straight to the transport without a main-queue buffer;
@@ -729,9 +755,11 @@ the default branch. Placeholders and host directories supply no base.
    agent may clone a base of its own and cut worktrees from it), with
    the owning clone as their repository path. Sessions always launch
    from the real path because transcripts are keyed by cwd.
-4. The prompt is written to `sanductor/prompts/<session>.md` in the
-   shared workspace and travels inside the launch command as
-   `-- "$(cat …)"`, the path shell-quoted: pasting it after launch
+4. The prompt is written to `sanductor/prompts/prompt-<UUID>.md` in the
+   shared workspace. The shell reads and removes it before launch,
+   using absolute command paths to exclude shell aliases. It travels
+   as one argument after `--`, with its path shell-quoted: pasting it
+   after launch
    raced the agent's terminal setup, which flushed pending input, and
    without the `--` a prompt opening with a dash (a list, say) was
    read as an option and refused. The prompt's own characters are
@@ -779,6 +807,19 @@ Start Agent Session checked to exist rather than run. The repository
 page resumes any past conversation into a fresh worktree.
 
 ### Watch and steer
+
+Work settings provide an opt-in visibility filter for selected GitHub
+organisations, using local working days and hours (Monday to Friday,
+09:00 to 17:00 by default). Outside those hours their repositories and
+selected panes are hidden; schedules and agents continue running. The
+filter updates at the next boundary and on wake or settings changes.
+Organisation names retain GitHub's capitalisation in settings; matching
+and deduplication are case-insensitive.
+The Mac publishes visibility in its sidebar snapshot; the iPhone follows
+that state on refresh or reconnect, without configuring or evaluating a
+working schedule of its own.
+Schedule previews mask recognised Sentry and GitHub tokens; editing and
+launching retain the original prompt.
 
 Scheduled prompts belong to the host metadata, with a repository path,
 prompt, agent, model, effort and daily, weekly or monthly recurrence.
@@ -1193,7 +1234,9 @@ An empty result says no findings, not that the code is correct. This
 first pass reviews diff context only and neither executes tests nor
 reads additional source files.
 
-1. `GitClient` produces diffs with rename detection; `DiffParser` turns
+1. `GitClient` explicitly requests rename detection, including untracked
+   destinations in its private index; renamed files retain both paths,
+   including pure renames with no hunks. `DiffParser` turns
    them into files, hunks and lines. Scope is the last commit (or
    uncommitted changes when there are any), the unpushed commits, or
    the whole branch against its merge base, remembered per worktree
@@ -1390,14 +1433,19 @@ steps.
   wait`) and every action of the app's own each wake a reading. The
   poll behind them re-reads on Settings' interval while the window
   shows, a minute while it is covered, and on battery a minute
-  showing and five covered (`RefreshCadence`, `PowerSource`). A tick
-  of its own asks herdr for the pane listing only once a minute
+  showing and five covered (`RefreshCadence`, `PowerSource`). Git safety
+  checks share one power-state reading across their repository batch.
+  A tick of its own asks herdr for the pane listing only once a minute
   (five on battery) and reuses the last listing between, since that
   listing changes only through the events above and asking is a
   `sudo` login shell; git is read only for repositories the watcher
-  flagged or past their own safety interval. On battery every safety
-  interval, the stack rota and every pull request tier (floors
-  included) runs five times slower, one factor for the whole app.
+  flagged or past their own safety interval. Repository pickers and
+  published session choices use the loaded sidebar snapshot. Repository
+  discovery and subprocess setup run off the main actor, leaving input
+  handling free while filesystem and process services answer.
+  On battery every safety interval, the stack rota and every pull
+  request tier (floors included) runs five times slower, one factor
+  for the whole app.
 - **Polling is tiered by attention** with a minute floor per pull
   request: selected worktree first, then its repository, then expanded
   repositories, collapsed ones rarely. A pull request with checks
@@ -1527,7 +1575,13 @@ steps.
   required check GitHub has yet to hear from keeps it orange, which
   is what GitHub's own merge box says. A branch requiring nothing
   counts every check, as does a branch whose rules could not be read.
-  The Checks copy button takes only failures that count. The PR pane's
+  The Checks copy button remembers per PR whether to include only required
+  jobs or required and optional jobs. A native Optional Checks toggle
+  controls that choice for copying and Autofix. A passing required rollup
+  with optional failures uses a circle with a green left half and red right
+  half, using the same dot glyph and size as single-colour states.
+  Cancelled or skipped jobs without logs show a normal empty state
+  and do not fail bulk copying. The PR pane's
   Conversations/Checks tabs sit above all reviews and comments, using
   the same compact control as Worktree/Mine/Open. Checks counts use
   parentheses. Required-only and unfinished-only icon toggles share
@@ -1539,6 +1593,9 @@ steps.
   Selected summaries enrich workflow names and event types through
   `gh pr checks`, matching by job name and link while retaining the
   summary's statuses and requirement matching on bare job names.
+  Workflow names and event types are reused for unchanged job identities;
+  new jobs or incomplete labels fetch them again, without delaying status
+  refreshes or changing their cadence.
   Unknown rules remain labelled unknown. Check details travel with the
   enriched summary, using the existing refresh cadence; lightweight
   listings do not claim that checks are empty. A cached summary without
@@ -1823,8 +1880,14 @@ steps.
   A stack can span worktrees: git will not check out a branch
   another worktree holds, so that branch is rebased (and rolled back),
   named, in its own worktree. Before anything moves, the restack
-  refuses while such a worktree is dirty or its agent is not idle or
-  done, and Rebase dims with the reason. Push dims for those blockers
+  refuses while its agent is not idle or done, and Rebase dims with the
+  reason. Dirty worktrees are temporarily stashed, including untracked
+  files, then restored with their staged state; integrating remote work
+  before a push uses the same protection. A failed restack restores
+  branches before applying those changes. Restore conflicts retain the
+  stash with recovery instructions; existing user stashes stay untouched.
+  Creating a branch at HEAD keeps changes in place without stashing.
+  Push dims for those blockers
   only when branches being pushed need rebasing or signing and include
   the blocked worktree. Restacking stops when that worktree has switched
   branches by the time its turn comes. A failed bottom rebase retries
@@ -1908,20 +1971,10 @@ steps.
   finished failing Actions checks, counting the jobs it will copy,
   independently of unfinished jobs in the same run. Each job uses the
   same log reader as the checks view; cached summaries without check
-  details fall back to `gh run view --log-failed`. Bulk copies keep
-  the head and tail (forty lines of what was
-  run and in what environment, a hundred and sixty of the failure,
-  the progress between cut and counted, except every cut line naming
-  an error or a failure, each with three lines either side
-  within its job and step, extending through diagnostic blocks,
-  and lines naming a warning while
-  the tail's budget allows, since a periphery warning or a failed
-  test's own line sits in the middle of a long run and both ends
-  said only that something failed; each end bounded in bytes too,
-  4 KiB and 16 KiB, since one dumped blob can outweigh the rest)
-  condensed (job and step named
-  once in a heading, timestamps and colour stripped), Cmd opening the check in the
-  browser and Shift in the Browser tab. Copying clears the clipboard
+  details fall back to `gh run view --log-failed`. Bulk copies retain
+  every line, using the shared prompt-file fallback above the paste
+  budget. Cmd opens the check in the browser and Shift in the Browser
+  tab. Copying clears the clipboard
   before fetching logs and fills it when they arrive; a failed fetch
   leaves it empty. In the fallback, a run still in progress has
   no whole-run log, so its already-failed jobs answer with their own
@@ -2755,8 +2808,13 @@ surrounding Markdown source. With pretty printing disabled, SwiftSoup
 2.14.2 reuses original element source without normalising entity
 spellings; notice removal uses these original spans. Bot commit
 references remain as written. Code examples and existing links remain
-unchanged. This is cached presentation filtering: original events remain
-available to Copy all, review completion detection and autofix.
+unchanged. This is cached presentation filtering; original events remain
+available for review completion detection.
+Copied CodeRabbit feedback omits severity decorations, generated HTML
+and investigation disclosures, preserving the finding, suggested patch
+and follow-up instructions. The shared Markdown/HTML parser protects
+literal code and links. Human comments and stored source remain intact.
+The same cleaned feedback feeds manual copies and automated fix prompts.
 Headers, timeline entries, native disclosures, separate review threads
 and scrolling code or table regions remain selection boundaries.
 SwiftSoup maps common HTML formatting into Markdown and keeps nested
@@ -2778,7 +2836,7 @@ LF, CRLF and CR line endings. Locations are checked before slicing;
 unusable ranges leave the original text readable instead of crashing
 the PR pane.
 
-The shared Autofix controls select local AI reviews, all GitHub checks,
+The shared Autofix controls select local AI reviews, GitHub checks,
 bot reviews and human reviews from verified repository writers.
 The PR popover combines these sources; Review's narrower popover owns
 an independent worktree loop, even when a PR exists. Sources, reviewer
@@ -2789,8 +2847,10 @@ it. A rotating icon and compact status show active work and its wait,
 respecting Reduce Motion. An expandable activity log retains the latest
 100 transitions without adding entries for unchanged refreshes.
 
-Start loop waits for the branch's existing agent to finish its turn,
-then gathers selected feedback before delivering a fix-and-commit prompt.
+New CI failures and eligible reviews are delivered as soon as they arrive,
+without waiting for other jobs or reviewers. Further remote feedback joins
+the existing agent while it works, with durable claims preventing repeats.
+Local review and conflict recovery still wait for an idle agent.
 All fixes remain local. Autofix never signs or pushes, requests a remote
 review or waits for a push. It keeps watching the published PR for new
 CI jobs and eligible comments until stopped, including after local
@@ -2829,26 +2889,31 @@ explicitly resets the local cycle count but retains delivery claims.
 App launch resumes active loops, retaining attempts, local cycle counts,
 activity, delivery claims, review requests and resolution marks.
 Interrupted local collections retry for active loops; stopped loops and
-completed collections stay unchanged. An outstanding fix waits for its
-original agent and result without resending the prompt.
+completed collections stay unchanged. An outstanding fix accepts new
+remote feedback in its original session without resending earlier
+findings; its latest result covers the combined thread identifiers.
 Legacy remote rounds, automatic-push preferences and retries are ignored.
 
-CI automation waits for every reported job to finish, including optional
-jobs and any known required checks not yet reported. Unreadable branch
-protection does not hide reported CI. Every failed job can trigger a fix;
+CI automation handles completed failures while other jobs are pending.
+Autofix labels its sources Required Checks, Optional Checks, Bot Reviews
+and Human Reviews. Optional Checks shares the per-PR preference from
+the Checks pane.
+Required jobs are included by default; unreadable or empty branch rules
+include all reported jobs. Every selected failed job can trigger a fix;
 job identifiers distinguish reruns and prevent duplicate delivery.
 External checks use their timestamps and links, scoped to the published
 head when no run identifier exists.
 Autofix and its Copy all action include complete failed-job logs from the
 shared REST job-log reader, without condensing diagnostics or progress.
-Unavailable logs keep collection waiting. External checks retain their
-name and conclusion when no Actions log endpoint exists. Generated job
-links are included only after repository visibility is verified public.
-The Checks pane and its separate copy action retain their existing display
-rollup and condensed-log behaviour.
+Unavailable job logs are noted without delaying other feedback. External
+checks retain their name and conclusion without an Actions log endpoint.
+Generated job links are included only after repository visibility is
+verified public.
+The Checks pane retains its display rollup; its bulk copy includes complete
+selected logs without a shared truncation budget.
 
-Remote review collection waits for outstanding Copilot and CodeRabbit
-requests and requested human reviewers with verified write access.
+Outstanding Copilot, CodeRabbit or human review requests do not block
+feedback already available from other jobs or reviewers.
 Autofix observes requests; explicit review buttons remain responsible for
 creating them. Human feedback is eligible in public and private
 repositories only after GitHub confirms write access, rechecked before
@@ -2875,9 +2940,17 @@ Settings → Review edits the local review, local fix-and-commit, GitHub
 fix-and-commit and commit-only briefs. The app appends captured scope,
 untrusted-feedback rules, no-push instructions and the result protocol.
 Fix prompts travel through `herdr agent prompt` to the existing visible
-terminal, with a short instruction pointing to the findings file. Working
-agents finish first; blocked agents, unknown activity and the default
-branch never receive a prompt. Delivery is claimed durably before sending;
+terminal. Autofix and the UI feedback copy buttons share a 32 KiB UTF-8
+paste budget: ordinary text stays inline, while oversized text is stored
+in a unique file and the paste references it. Files retain the complete
+payload, so concurrent prompts cannot overwrite or truncate one another.
+A durable ledger keeps autofix inputs and results while their attempt or
+agent is active, then removes them once idle, with a minute's grace.
+Clipboard files expire after seven days because pasting is unobservable.
+Initial launch files are removed by the shell after reading; unused files
+expire with clipboard files. Setup adopts older prompt files for cleanup.
+Blocked agents, unknown activity and the default branch never receive a
+prompt. Delivery is claimed durably before sending;
 an ambiguous failure is reported and never repeated automatically.
 
 The agent writes a bounded result naming the resulting commit and only
@@ -2893,7 +2966,7 @@ repeating claimed feedback. Local findings are resolved only when their
 saved review run still matches, independently of remote read failures;
 the saved collection reflects those resolutions too. The result names
 all supplied findings verified fixed locally, including existing fixes
-on an unchanged local commit. Addressed remote threads are marked
+on an unchanged local commit. Delivered remote threads are marked
 Resolve on push and remain unresolved until the user pushes and GitHub
 confirms a new head containing the fix, or an identical tree after
 signing. Summary findings have no thread resolution action.
@@ -2911,10 +2984,13 @@ head different from the marked head confirms a push, wherever it was
 made; a local commit or a failed push confirms nothing. Fresh thread
 state must still be unresolved with the same latest comment before a
 single resolution request is claimed. Further comments cancel the mark.
-Autofix marks only the threads its result reports as addressed and saves
-the fix commit, so an unrelated push cannot resolve them. The PR
-pane shows both pending activity and the last result, and individual
-threads show a cancellable pending mark. All these ledgers survive
+Autofix marks delivered threads Resolve on push immediately, like the
+manual action; new replies still invalidate each mark. Completion adds
+the verified fix commit to addressed marks, so an unrelated push cannot
+resolve those marks. Automatic marks for findings left unfixed are
+removed; manual marks and user cancellations are preserved. The PR pane
+shows both pending activity and the last result, and individual threads
+show a cancellable pending mark. All these ledgers survive
 restarts and are not aged out with display caches.
 The compact Resolve on push action becomes Cancel while marked,
 hiding the immediate Resolve action until cancelled. Marking a thread
@@ -2938,9 +3014,7 @@ Not scheduled, recorded so the pieces already built line up with them:
 - An Answer Agent intent, once herdr's key sending has a wrapper beside
   `typeText`, so a blocked question can be answered from a notification
   or a phone.
-- A file-staging fallback for pastes beyond what a single write should
-  carry, and a login-item helper if delayed notifications prove
-  annoying.
+- A login-item helper if delayed notifications prove annoying.
 - Seeding the local buffer from `pane read --format ansi` on attach so
   scrollback reflows on resize, keeping the wheel local off the
   alternate screen.

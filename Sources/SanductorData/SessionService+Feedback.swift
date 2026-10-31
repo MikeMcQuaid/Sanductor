@@ -1,6 +1,27 @@
 import SanductorDomain
 
 public extension SessionService {
+    /// Prepares feedback for the existing agent composer without truncating it.
+    func promptForPasting(_ text: String) throws -> String {
+        try PromptPayload.prepare(text, paths: paths, store: store)
+    }
+
+    /// Shared with the Checks pane's per-PR output selection.
+    func includesOptionalChecks(_ state: PullRequestAutomation) -> Bool {
+        store.load().includeOptionalCheckLogs[AppMetadata.threadsKey(
+            repositoryPath: state.repositoryPath, number: state.number,
+        )] ?? false
+    }
+
+    /// Changes the shared Checks and Autofix preference for this PR.
+    func setIncludesOptionalChecks(_ include: Bool, for state: PullRequestAutomation) throws {
+        try store.updatePersisting { metadata in
+            metadata.includeOptionalCheckLogs[AppMetadata.threadsKey(
+                repositoryPath: state.repositoryPath, number: state.number,
+            )] = include
+        }
+    }
+
     /// Worktree-local loops and PR loops share one ledger with distinct identities.
     func feedbackState(
         repositoryPath: String,

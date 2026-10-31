@@ -118,7 +118,9 @@ public extension PullRequestAutomation {
             return "Review gathers local findings. Copy all copies ready feedback. Start loop begins automatic fixes."
         }
         if attempt != nil {
-            return "The agent must finish with a matching committed result before gathering more feedback."
+            return hasRemoteSources
+                ? "New CI failures and reviews join the current fix as they arrive. Push manually when ready."
+                : "The agent must finish with a matching committed result before the next local review."
         }
         if isPreparingExistingWork {
             return "Wait for selected feedback and finish existing local work."
@@ -126,9 +128,7 @@ public extension PullRequestAutomation {
         if isLocalStage {
             return "Current local findings trigger a fix once this branch’s fixing agent is idle."
         }
-        return "New eligible feedback triggers local fixes once the agent is idle"
-            + (autofixCI ? " and all CI jobs finish" : "")
-            + (autofixReviews || autofixBots ? " and requested reviews finish" : "")
-            + ". Push manually when you are ready; autofix only watches GitHub."
+        return "New eligible feedback triggers local fixes as it arrives. "
+            + "Push manually when ready; autofix only watches GitHub."
     }
 }

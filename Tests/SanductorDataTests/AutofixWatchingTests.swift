@@ -28,7 +28,7 @@ struct AutofixWatchingTests {
     }
 
     @Test
-    func `optional jobs delay a batch of CI and human feedback`() async throws {
+    func `optional jobs do not delay available CI and human feedback`() async throws {
         let fixture = try AutofixFixture()
         fixture.store.update { metadata in
             metadata.pullRequestAutomation[AutofixFixture.key]?.autofixCI = true
@@ -42,7 +42,7 @@ struct AutofixWatchingTests {
         }
         let coordinator = AutofixCoordinator()
         await coordinator.refresh(store: fixture.store, driver: fixture.driver())
-        #expect(await fixture.state.deliveries.isEmpty)
+        #expect(await fixture.state.deliveries.count == 1)
         await fixture.update { $0.optionalComplete = true }
         await coordinator.refresh(store: fixture.store, driver: fixture.driver())
         #expect(await fixture.state.deliveries.count == 1)
@@ -62,7 +62,7 @@ struct AutofixWatchingTests {
     }
 
     @Test(arguments: ["human", "reader", "copilot-pull-request-reviewer", "coderabbitai"])
-    func `pending reviews wait for either bot or verified writers`(reviewer: String) async throws {
+    func `pending reviews do not delay ready CI`(reviewer: String) async throws {
         let fixture = try AutofixFixture()
         fixture.store.update { metadata in
             metadata.pullRequestAutomation[AutofixFixture.key]?.autofixCI = true
@@ -76,7 +76,7 @@ struct AutofixWatchingTests {
         }
         let coordinator = AutofixCoordinator()
         await coordinator.refresh(store: fixture.store, driver: fixture.driver())
-        #expect(await fixture.state.deliveries.count == (reviewer == "reader" ? 1 : 0))
+        #expect(await fixture.state.deliveries.count == 1)
         await fixture.update { $0.requestedReviewers = [] }
         await coordinator.refresh(store: fixture.store, driver: fixture.driver())
         #expect(await fixture.state.deliveries.count == 1)

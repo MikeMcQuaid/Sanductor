@@ -3,8 +3,8 @@ import Foundation
 import Testing
 
 struct AutofixSubmissionIntegrationTests {
-    @Test
-    func `autofix sends Enter outside bracketed paste to submit a terminal prompt`() async throws {
+    @Test(arguments: ["idle", "working"])
+    func `autofix sends Enter outside bracketed paste to submit a terminal prompt`(activity: String) async throws {
         let (client, home) = try TestSupport.makeHerdrClient()
         let directory = try TestSupport.temporaryDirectory("autofix-submit")
         defer { TestSupport.stopServerSync(configHome: home) }
@@ -28,13 +28,14 @@ struct AutofixSubmissionIntegrationTests {
         #expect(await TestSupport.poll { FileManager.default.fileExists(atPath: directory + "/submitted") })
         let pane = try #require(try await client.panes().first)
         try await client.herdr([
-            "pane", "report-agent", pane.paneID, "--source", "test", "--agent", "codex", "--state", "idle",
+            "pane", "report-agent", pane.paneID, "--source", "test", "--agent", "codex", "--state", activity,
         ])
-        try await client.sendAutofix("Fix the supplied findings", sessionName: "reviewer", paneID: pane.paneID)
+        let prompt = String(repeating: "x", count: PromptPayload.inlineByteLimit)
+        try await client.sendAutofix(prompt, sessionName: "reviewer", paneID: pane.paneID, allowWorking: true)
         #expect(await TestSupport.poll {
             (try? String(contentsOfFile: directory + "/submitted", encoding: .utf8))?.hasSuffix("\r") == true
         })
         let received = try String(contentsOfFile: directory + "/submitted", encoding: .utf8)
-        #expect(received == "\u{1B}[200~Fix the supplied findings\u{1B}[201~\r")
+        #expect(received == "\u{1B}[200~" + prompt + "\u{1B}[201~\r")
     }
 }

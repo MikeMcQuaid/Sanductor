@@ -226,7 +226,7 @@ public struct SessionService: Sendable {
         let sessionName = SessionName.make(repository: slot.repository.name, branch: slot.branch, agent: agent)
         let arguments = runner(for: agent).optionArguments(model: options.model, effort: options.effort)
         await progress("Writing the prompt file")
-        let promptFile = try writePrompt(prompt, sessionName: sessionName)
+        let promptFile = try PromptPayload.write(prompt, paths: paths, store: store)
 
         // The prompt travels inside the launch command, read from
         // its file as the agent starts: pasting it after launch
@@ -249,13 +249,6 @@ public struct SessionService: Sendable {
         }
         await awaitReady(sessionName: sessionName)
         return sessionName
-    }
-
-    func writePrompt(_ prompt: String, sessionName: String) throws -> String {
-        try FileManager.default.createDirectory(atPath: paths.promptsDirectory, withIntermediateDirectories: true)
-        let promptFile = paths.promptsDirectory + "/" + sessionName + ".md"
-        try prompt.write(toFile: promptFile, atomically: true, encoding: .utf8)
-        return promptFile
     }
 
     /// The repository's worktree directory, a layout the app owns

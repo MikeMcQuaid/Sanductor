@@ -94,7 +94,7 @@ actor AutofixCoordinator {
             return
         }
         guard await ready(target, head: localHead, context: context),
-              try await feedbackReady(state.stageSelection, summary: summary, target: target, context: context),
+              try await feedbackReady(state.stageSelection, target: target, context: context),
               let current = store.load().pullRequestAutomation[key]
         else {
             return
@@ -118,52 +118,41 @@ actor AutofixCoordinator {
         target: AutofixDriver.Target,
         context: AutofixContext,
         committing: Bool = false,
+        remoteOnly: Bool = false,
     ) async throws {
         let store = context.store
         let driver = context.driver
-        guard let state = store.load().pullRequestAutomation[context.key] else {
+        guard let state = store.load().pullRequestAutomation[context.key], let paneID = target.session.paneID else {
             return
         }
 
+        let includesOptional = driver.includesOptionalChecks(state)
         let prompt = try await driver.prepare(state, summary, candidate)
         var selection = state
         if committing {
             selection.handledEvents = []
         }
-        guard let fresh = try await driver.summary(state, true), fresh.state == "OPEN", state.matches(fresh),
-              fresh.headBranch == summary.headBranch, fresh.headCommit == summary.headCommit,
-              let checked = try await deliveryCandidate(
-                  state: selection, summary: fresh, head: head, target: target, driver: driver,
-              ),
-              checked == candidate, let paneID = target.session.paneID,
-              try await driver.summary(state, true) == fresh
-        else {
-            store.update { $0.pullRequestAutomation[context.key]?.pending = "Waiting: captured feedback changed" }
-            return
+        if remoteOnly {
+            selection.autofixLocalReviews = candidate.sources.contains(.localReview)
+            selection.feedbackWorktreePath = target.worktree.path
         }
-        guard await ready(target, head: head, context: context) else {
+        guard try await canDeliver(
+            candidate, state: selection, capture: (summary, head), target: target, context: context,
+        ), driver.includesOptionalChecks(state) == includesOptional else {
             return
         }
 
-        if candidate.sources.contains(.localReview), state.isPreparingExistingWork == false {
-            guard let collection = try await driver.collect(state, target, false),
-                  collection.isPending == false, collection.failure == nil,
-                  collection.id == state.collection?.id
-            else {
-                return
-            }
-        }
         let attempt = AutofixAttempt(
             id: UUID().uuidString,
-            sources: candidate.sources,
+            sources: candidate.sources.union(state.attempt?.sources ?? []),
             head: head,
-            remoteHead: fresh.headCommit ?? head,
-            localThreadIDs: candidate.localThreadIDs,
-            branch: fresh.headBranch,
+            remoteHead: summary.headCommit ?? head,
+            localThreadIDs: candidate.localThreadIDs.union(state.attempt?.localThreadIDs ?? []),
+            branch: summary.headBranch,
             worktreePath: target.worktree.path,
             sessionName: target.session.name,
             paneID: paneID,
-            threads: candidate.threads,
+            threads: (state.attempt?.threads ?? [:]).merging(candidate.threads) { _, latest in latest },
             commitRequestedHead: committing ? head : nil,
             rebase: candidate.rebase,
         )
@@ -171,7 +160,7 @@ actor AutofixCoordinator {
             return
         }
 
-        await deliver(attempt, prompt: prompt, context: context)
+        await deliver(attempt, prompt: prompt, context: context, marks: candidate.threads)
     }
 
     func claim(
@@ -184,8 +173,10 @@ actor AutofixCoordinator {
         let store = context.store
         var claimed = false
         let claims: Set<String> = attempt.commitRequestedHead.map { ["commit:" + $0] } ?? events
+        let selected = settings.isPreparingExistingWork
+            ? settings.selectedSources : settings.stageSelection.selectedSources
         try store.updatePersisting { metadata in
-            guard var current = metadata.pullRequestAutomation[key], current.attempt == nil,
+            guard var current = metadata.pullRequestAutomation[key], current.attempt == settings.attempt,
                   current.handledEvents.isDisjoint(with: claims),
                   attempt.commitRequestedHead == nil || events.isSubset(of: current.handledEvents),
                   current.canStartFix || (current.isPreparingExistingWork && attempt.sources == [.existingWork]),
@@ -196,11 +187,12 @@ actor AutofixCoordinator {
                   current.isLocalStage == settings.isLocalStage,
                   current.isPreparingExistingWork == settings.isPreparingExistingWork,
                   attempt.sources == [.existingWork] || attempt.sources == [.conflicts]
-                  || attempt.sources.isSubset(of: current.isPreparingExistingWork
-                      ? current.selectedSources : current.stageSelection.selectedSources),
+                  || attempt.sources.subtracting(settings.attempt?.sources ?? []).isSubset(of: selected),
                   current.collection?.id == settings.collection?.id,
                   current.reviewer == settings.reviewer,
-                  metadata.pullRequestAutomation.values.allSatisfy({ $0.attempt?.worktreePath != attempt.worktreePath })
+                  metadata.pullRequestAutomation.allSatisfy({ otherKey, value in
+                      otherKey == key || value.attempt?.worktreePath != attempt.worktreePath
+                  })
             else {
                 return
             }

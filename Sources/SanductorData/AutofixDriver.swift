@@ -8,6 +8,7 @@ struct AutofixDriver {
         let worktree: Worktree
         let session: AgentSession
         var allowsUncommitted = false
+        var allowsWorking = false
     }
 
     typealias Preparation = @Sendable (
@@ -35,6 +36,7 @@ struct AutofixDriver {
     }
 
     let waitReason: @Sendable (Target, String) async -> String?
+    var includesOptionalChecks: @Sendable (PullRequestAutomation) -> Bool = { _ in false }
     var prepare: Preparation = { _, _, candidate in
         candidate.text
     }

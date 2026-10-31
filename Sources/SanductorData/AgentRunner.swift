@@ -109,7 +109,8 @@ extension AgentRunner {
             // After `--`, so a prompt opening with a dash (a list,
             // say) is read as the prompt rather than as an option
             // the agent refuses to start on.
-            joined += " -- \"$(cat " + promptFile.shellQuoted + ")\""
+            let quoted = promptFile.shellQuoted
+            joined += " -- \"$(/bin/cat " + quoted + " && /bin/rm -f -- " + quoted + ")\""
         }
         return joined
     }

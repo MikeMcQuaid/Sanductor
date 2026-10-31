@@ -66,7 +66,7 @@ struct AutomatedReviewFeedbackTests {
     }
 
     @Test
-    func `copy candidates include both bots while the requested review is pending`() async throws {
+    func `copy and automatic candidates include both bots while the requested review is pending`() async throws {
         let fixture = try AutofixFixture()
         var state = try #require(fixture.store.load().pullRequestAutomation[AutofixFixture.key])
         state.autofixBots = true
@@ -84,7 +84,7 @@ struct AutomatedReviewFeedbackTests {
         state.isAutomatic = true
         #expect(try await AutofixCoordinator().candidate(
             state: state, summary: summary, head: "head", fresh: true, driver: driver,
-        ) == nil)
+        ) == candidate)
     }
 
     @Test
