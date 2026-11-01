@@ -22,6 +22,10 @@ public final class MobileModel {
 
     /// Reuses an established connection or reconnects on foregrounding.
     public func activate() {
+        if isConnected, let remote {
+            requestRefresh(remote, includingPreferences: true)
+            return
+        }
         guard configuration.isValid, connectionTask == nil, isDisconnected == false else {
             return
         }
@@ -75,6 +79,10 @@ public final class MobileModel {
     @ObservationIgnored var eventChannel: SSHCommand?
     @ObservationIgnored var eventPaneIDs: [String] = []
     @ObservationIgnored var resubscribe = false
+
+    @ObservationIgnored var refreshTask: Task<Void, Never>?
+    @ObservationIgnored var refreshAgain = false
+    @ObservationIgnored var refreshPreferences = false
 
     var sidebar: [SidebarRepository] = [] {
         didSet {
@@ -197,8 +205,6 @@ public final class MobileModel {
 
     @ObservationIgnored private var terminalFailures = 0
     @ObservationIgnored private var connectionTask: Task<Void, Never>?
-    @ObservationIgnored private var refreshTask: Task<Void, Never>?
-    @ObservationIgnored private var refreshAgain = false
 
     private func run() async {
         var failures = 0
@@ -267,31 +273,6 @@ public final class MobileModel {
                     requestRefresh(client)
                 }
             }
-        }
-    }
-
-    private func requestRefresh(_ client: RemoteHerdr) {
-        refreshAgain = true
-        guard refreshTask == nil else {
-            return
-        }
-
-        refreshTask = Task {
-            defer {
-                if remote === client {
-                    refreshTask = nil
-                }
-            }
-            repeat {
-                refreshAgain = false
-                do {
-                    try await read(client)
-                } catch {
-                    if Task.isCancelled == false, remote === client {
-                        self.error = configuration.errorMessage(error)
-                    }
-                }
-            } while refreshAgain && Task.isCancelled == false
         }
     }
 }

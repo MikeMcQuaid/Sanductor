@@ -399,16 +399,10 @@ Hard-won on macOS 27 beta; check before assuming they expired.
   worktrees' terminals hold the same frame. A pane takes a wheel
   event only when the window's hit test lands on it and no other
   pane has claimed that event.
-- Agent TUIs (Codex, Claude Code) query the terminal's colours via
-  OSC 10/11 once at startup and cache them; re-theming the pane on
-  a macOS appearance switch made Codex draw white text on a white
-  composer. Agent panes pin the palette recorded at session launch
-  (`terminalSchemes` in the metadata) instead of following the
-  appearance; only shell panes re-theme live. Codex 0.148 through
-  at least 0.150 misthemes its composer in both palettes and its
-  theme setting does not control it; a forced dark palette proved
-  worse than the default, so Codex follows the launch appearance
-  like every other agent.
+- Terminal palettes follow the system appearance on Mac and iPhone,
+  including changes during active sessions. Older Codex versions
+  cached OSC 10/11 colours and could mistheme their composer; do not
+  restore palette pinning without reproducing that on current herdr.
 - herdr's terminal frames carry the rendered screen (cursor moves,
   colours, synchronised updates) and never the private modes the
   agent set, so a herdr-backed pane's local terminal never learns

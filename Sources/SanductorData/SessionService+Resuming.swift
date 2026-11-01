@@ -28,7 +28,7 @@ extension SessionService {
         }
 
         await progress("Backing up the conversation")
-        backUpConversation(of: worktree)
+        await backUpConversation(of: worktree)
         try await start(
             sessionName: sessionName,
             directory: worktree.path,
@@ -59,7 +59,7 @@ extension SessionService {
         ).filter { commands.contains($0) == false }
         try await start(sessionName: sessionName, directory: worktree.path, trying: commands)
         remember(sessionName: sessionName, worktreePath: worktree.path, resumeID: past.resumeID)
-        ConversationBackup(paths: paths).store(past, worktree: worktree)
+        await ConversationBackup(paths: paths).store(past, worktree: worktree)
         return sessionName
     }
 
@@ -157,12 +157,12 @@ extension SessionService {
     /// cannot reach, and says where it went. Called wherever a
     /// conversation is about to be relied on or left behind, since
     /// those are the moments it is worth having a copy of.
-    func backUpConversation(of worktree: Worktree) {
+    func backUpConversation(of worktree: Worktree) async {
         guard let newest = sessionsInDirectories(of: worktree.path, liveSession: nil).first else {
             return
         }
 
-        ConversationBackup(paths: paths).store(newest, worktree: worktree)
+        await ConversationBackup(paths: paths).store(newest, worktree: worktree)
     }
 
     /// Copies the conversation of every worktree with a running
@@ -183,7 +183,7 @@ extension SessionService {
                 continue
             }
 
-            backUpConversation(of: item.worktree)
+            await backUpConversation(of: item.worktree)
             copied.append(item.worktree.path)
         }
         guard copied.isEmpty == false else {

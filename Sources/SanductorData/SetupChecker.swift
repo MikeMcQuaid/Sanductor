@@ -40,7 +40,7 @@ public struct SetupChecker: Sendable {
         for runner in service.runners {
             _ = Quarantine.clear(for: runner.kind, binaryDirectories: agentBinaryDirectories)
         }
-        async let git = gitConfiguration()
+        async let git = gitConfiguration(checkSigning: verifyOnline)
         async let github = githubAccess(verifyOnline: verifyOnline)
         let sandbox = await sandboxAccess()
         let identity = await git
@@ -102,13 +102,10 @@ public struct SetupChecker: Sendable {
 
     private func githubAccess(verifyOnline: Bool) async -> [SetupIssue] {
         do {
-            guard await service.github.hasStoredAuthentication() else {
-                throw SessionServiceError("GitHub CLI has no stored authentication")
-            }
-
             if verifyOnline {
-                try await service.github.gh(["auth", "status", "--hostname", "github.com"], in: nil)
                 try await service.github.gh(["api", "--hostname", "github.com", "user", "--jq", ".login"], in: nil)
+            } else if await service.github.hasStoredAuthentication() == false {
+                throw SessionServiceError("GitHub CLI has no stored authentication")
             }
             return []
         } catch {

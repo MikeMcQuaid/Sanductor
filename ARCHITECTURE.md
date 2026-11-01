@@ -119,9 +119,15 @@ After initial setup succeeds, the saved completion marker opens the
 dashboard, schedules and terminals immediately on later launches. Local
 prerequisites are rechecked once in the background, with independent
 checks running concurrently. A failure replaces the workspace with setup
-guidance and blocks further actions until repaired. A first-ever launch
-shows startup progress in the normal app window until checks succeed.
-The workspace then opens; setup controls appear only after a failure.
+guidance and blocks further actions until repaired.
+AppKit’s launch notification starts preparation independently of the
+suppressed workspace scene, so no restored window is needed.
+On a first-ever launch, checks run before the workspace opens:
+success opens the workspace and only a failure opens setup.
+Checks taking more than half a second show generic opening progress
+while they finish, never the checks screen.
+Completed setups use their saved pass immediately, without waiting for
+subprocesses or network access before opening the workspace.
 New users see three native popovers anchored to the repository, agent and
 tools panes, explaining their roles and the host/sandbox trust boundary.
 A pending marker is saved only when first-time setup succeeds, so existing
@@ -149,11 +155,13 @@ succeeds, recorded in UserDefaults; later launches need no network for
 setup. GitHub's login command selects HTTPS; accepting its default Git
 authentication choice configures credentials without a separate command.
 Git identity and signing configuration are checked locally, including
-files included by the global Git configuration. Only first-time setup
-without a saved signing preference can disable the signed-commit
+files included by the global Git configuration. Signer availability is
+probed only during first-time setup, when its result can change a default.
+The first GitHub API request verifies authentication and connectivity
+together rather than running redundant sign-in probes. Only first-time
+setup without a saved signing preference can disable the signed-commit
 requirement when no signer is available. Later launches preserve saved
-choices and otherwise keep signing required, even if the signer probe
-fails. Setup never changes global Git configuration, blocks on signing or
+choices and otherwise keep signing required. Setup never changes global Git configuration, blocks on signing or
 attempts a signature. Agent quarantine is cleared through the existing launch
 repair before sign-in probes, which run from the sandbox home with its
 user's temporary directory and surface diagnostics on failure.
@@ -364,13 +372,13 @@ Rules that follow from that shape:
   which would otherwise own the pane's input forever. Full herdr
   clients over SSH attach independently and are never dropped.
   Closing the view releases the controller and never kills the session.
-- **Agent panes pin the palette recorded at launch**
-  (`terminalSchemes` in the metadata). Agent TUIs read the colours
-  once (OSC 10/11) and style their chrome for them forever; re-theming
-  on an appearance switch left the composer white on white. Only shell
-  panes re-theme live, and only the shell pane on screen answers
-  Cmd-K: the shells behind it record the count without acting on it,
-  so a clear can never wipe the next shell or worktree shown.
+- **Terminals follow the system appearance**, including changes during
+  an active session, on both Mac and iPhone. This is intentional after
+  manual verification with the current herdr bridge. Older agent TUIs
+  can cache startup colours and may need restarting after a switch.
+  Only the shell pane on screen answers Cmd-K: hidden shells record
+  the count without acting
+  on it, so a clear cannot wipe the next shell or worktree shown.
 - Copies from an agent pane reflow block by block for prose
   (`PasteableText`): paragraphs lose hard wraps, command-shaped runs
   keep every line. Clipboard cleanup replaces unwritten NUL cells with
@@ -529,6 +537,9 @@ flowchart TD
   (Foundation `Process`), `WorkspaceWatcher` (FSEvents),
   `FoundationModelClient` (the on-device model behind one summarisation
   seam) and `AgentRunner` with `ClaudeCodeRunner` and `CodexRunner`.
+  Commands without an explicit working directory run from `/` and
+  `PWD` matches the chosen directory, avoiding inherited access to a
+  protected launch directory.
 - **Feature targets** (`DashboardFeature`, `SessionFeature`,
   `ReviewFeature`, `PRFeature`): SwiftUI views and `@Observable`
   MainActor models given the service by injection. `SessionFeature` owns
@@ -932,7 +943,12 @@ shows a different branch from the one checked out.
   Notifications fire for a finished turn and for input
   needed, each with its own toggle and chime: any audio file, played
   in the app's own process through `NSSound`, the way a Mac app plays
-  a sound of its own. The system's alert path
+  a sound of its own. Choosing a custom sound imports a private copy
+  into `~/.sanductor/sounds`, retaining its original path in preferences.
+  Playback reads only that copy, never the original protected folder.
+  An old selection without a copy stays silent until explicitly imported
+  again; changing selections removes unused sound copies.
+  The system's alert path
   (`AudioServicesPlayAlertSound`) handed each chime to the audio
   daemon, which replayed one whose completion it lost, after a sleep
   and then for no reason it gave, in a loop until something displaced
@@ -1576,7 +1592,7 @@ steps.
   is what GitHub's own merge box says. A branch requiring nothing
   counts every check, as does a branch whose rules could not be read.
   The Checks copy button remembers per PR whether to include only required
-  jobs or required and optional jobs. A native Optional Checks toggle
+  jobs or required and optional jobs. A native Copy Optional checkbox
   controls that choice for copying and Autofix. A passing required rollup
   with optional failures uses a circle with a green left half and red right
   half, using the same dot glyph and size as single-colour states.
@@ -2031,10 +2047,28 @@ steps.
   containers is scanned too.
 - Transcripts live only in the disposable sandbox home, so each
   worktree's newest conversation is copied out (`ConversationBackup`)
-  on close, on resume and hourly while running, to iCloud Drive or the
-  app's directory, one file per worktree with an index beside it.
-  Deleting the worktree deletes the copy. Only the conversation, never
-  code.
+  on close, on resume and hourly while running, to the host's private
+  `~/.sanductor/conversations` directory, one file per worktree with an
+  index beside it. Copies use streaming gzip at its fastest level,
+  with atomic replacement and no changes to the agents' source files.
+  Existing transcript and migration backups are compressed in the
+  background after launch and daily thereafter.
+  Failed compression keeps the original and cleans up temporary output;
+  launch maintenance removes interrupted output older than a day.
+  Transcripts and backups expire after 30 days without modification.
+  Live sessions, open files and existing Git worktrees are protected;
+  an existing main checkout alone does not prevent expiry. Unknown
+  origins still expire by file age, rather than being kept forever.
+  Agent adapters locate original Codex and Claude transcripts for the
+  same maintenance; credentials, installed plugins and live databases
+  are never pruned. Deletion rechecks each file's timestamp and size.
+  A failed live-session or open-file listing postpones expiry.
+  Migration archives get a 30-day grace period from first maintenance;
+  protected conversations remain after the rest of the archive expires.
+  Worktree deletion removes its ordinary backup immediately.
+  Restore a compressed file with `gunzip -k <file.gz>`.
+  Background backups never probe iCloud or Documents.
+  Only the conversation is copied, never code.
 - Host directories of your own list under a repository
   (`Worktree.isHostDirectory`), kept in the metadata as configuration,
   with the editor in the agent's pane and a menu of Copy path, Forget,
@@ -2267,20 +2301,29 @@ inviting another launch.
 Requests are not replayed after an ambiguous connection failure.
 
 The selected terminal uses the same JSON frames and commands as the Mac
-through SwiftTerm's UIKit view. Its light/dark button matches the palette
-of the existing agent without following the phone’s appearance changes.
-The phone's keyboard accessory keeps Escape, Ctrl, Shift, Tab and arrows
-beside the extra-keyboard toggle. Its initial frame has the same
-non-zero height as its fitted layout so UIKit reserves the accessory
-row before presenting the keyboard. Ctrl and Shift apply to the next key
-and combine for modified arrows. The extra keyboard gives navigation
-keys such as PgDn wider buttons with inset labels. It replaces
-SwiftTerm's accessory and symbol keyboard through their public view
-properties; input still uses SwiftTerm's sender. Keys send once on
+through SwiftTerm's UIKit view. Its palette follows the phone's system
+appearance automatically, including changes during a session.
+The phone's keyboard accessory keeps Escape, Tab, up/down and Return
+beside the keypad toggle and Hide Keyboard. Hiding the keyboard
+leaves terminal control and the draft intact; tapping the terminal
+shows it again. Its initial frame has the same non-zero height as its
+fitted layout so UIKit reserves the accessory row before presenting it.
+The expanded keypad replaces function and symbol rows with line and
+word editing, history search, question selection and agent actions.
+Queue sends Tab to Codex and Return to Claude; Send now sends Return
+to Codex and Ctrl-X Ctrl-S to Claude, avoiding extended-key negotiation.
+Clear line sends Ctrl-A then Ctrl-K and never interrupts or exits an
+agent; Ctrl-U deletes to the line start and Ctrl-Y restores cut text.
+These are the agents' default bindings; custom keymaps can change them.
+Ctrl and Shift apply to the next key and combine for modified arrows.
+It replaces SwiftTerm's accessory and symbol keyboard through their
+public view properties; input still uses SwiftTerm's sender. Keys send once on
 semantic activation, including assistive controls; physical touches send
 immediately and only held arrows repeat. Mouse reporting has no
 toggle because herdr's frames omit the remote mouse modes; swipes keep
-scrolling through herdr.
+scrolling through herdr. Swipes preserve fractional lines and flicks
+continue at UIKit’s normal deceleration rate, paced by display frames.
+Touching, typing, leaving the terminal or backgrounding stops momentum.
 Attaching takes control; leaving the pane releases it without stopping
 the agent. App switches retain an established SSH connection, its event
 subscription and the selected terminal controller. Returning reuses them
@@ -2289,10 +2332,22 @@ connection attempt is still cancelled on backgrounding. iOS can suspend
 the app or close its sockets; interrupted connections use the existing
 automatic recovery. A displaced Mac
 controller waits for a user to return rather than automatically fighting
-the phone for control. **Take control** on the Mac reattaches without
+the phone for control. Its terminal is dimmed behind a prominent blue
+**Take control** button, which reattaches without
 losing the eventual process-exit notification; either reattach action
-clears the handoff state. The phone retries interrupted connections and
+clears the handoff state. The phone also keeps its last terminal screen
+visible during handoff, dimmed behind a rounded card when a frame has
+arrived. The message names another device, which may be a Mac or another
+phone. Handoff dismisses the keyboard and stops input and scrolling until
+control is reclaimed. The phone retries interrupted connections and
 remembers a successful connection across foregrounding and app restarts.
+Returning to an established connection refreshes repository names and
+the Mac’s sidebar projection without reattaching the terminal.
+Fetch and push rename notices trigger a non-recursive `ls-remote`
+confirmation against the selected URL before repairing the GitHub remote.
+Submodule redirects cannot rewrite the parent’s remote, and repairs keep
+its transport and unrelated fork destinations. The updated remote feeds
+the Mac and phone sidebar names on their next refresh.
 The desktop's review, editor, GitHub and historical-conversation surfaces
 are outside this companion's scope. The main screen keeps Settings and
 Connect or Disconnect at the top left in separate native glass buttons,

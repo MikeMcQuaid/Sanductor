@@ -171,8 +171,7 @@ struct RootView: View {
         .modifier(SettingsEvents(dependencies: dependencies) { closeBrowser(at: $0) })
         .task {
             FlavourIcon.apply()
-            // Focus counters from the previous run must not fire on
-            // this one's first mount.
+            // Previous focus counters must not fire on this first mount.
             finderFocusRequest = 0
             for role in EditorPane.Role.allCases {
                 UserDefaults.standard.set(0, forKey: role.key("finderFocusRequest"))
@@ -182,6 +181,7 @@ struct RootView: View {
             await dependencies.dashboard.poll()
         }
         .task { await watchNetwork() }
+        .task { await dependencies.service.maintainConversations() }
         // A shell command waiting on an editor is stopped until this
         // window shows it the file, so it is watched for separately
         // from the dashboard's own slower poll.

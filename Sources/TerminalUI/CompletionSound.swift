@@ -13,6 +13,9 @@ public enum CompletionSound {
     /// the empty string is silence.
     public static let key = "completionSound"
 
+    /// Private copies shared by playback and the sound picker.
+    public static let files: NotificationSoundStore = .init()
+
     /// The default chime, one of macOS's own sounds.
     public static let defaultPath = "/System/Library/Sounds/Glass.aiff"
 
@@ -57,14 +60,15 @@ public enum CompletionSound {
     /// a sound was handed to the queue.
     @discardableResult
     public static func play(path: String) -> Bool {
-        guard path.isEmpty == false, FileManager.default.isReadableFile(atPath: path),
+        let playbackPath = files.playbackPath(for: path)
+        guard playbackPath.isEmpty == false, FileManager.default.isReadableFile(atPath: playbackPath),
               isSleeping.withLock({ $0 == false })
         else {
             return false
         }
 
         queue.async {
-            guard let sound = NSSound(contentsOfFile: path, byReference: true) else {
+            guard let sound = NSSound(contentsOfFile: playbackPath, byReference: true) else {
                 return
             }
 

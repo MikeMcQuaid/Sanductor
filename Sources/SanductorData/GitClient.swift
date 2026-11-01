@@ -230,7 +230,9 @@ public struct GitClient: Sendable {
             return
         }
 
-        try await git(["fetch", "--prune", "--multiple"] + remotes, in: repositoryPath)
+        for remote in remotes {
+            try await git(["fetch", "--prune", remote], in: repositoryPath, remote: remote)
+        }
     }
 
     /// Hard-resets the checkout to a ref, for main checkouts that
@@ -327,6 +329,7 @@ public struct GitClient: Sendable {
         in directory: String?,
         allowFailure: Bool = false,
         environment: [String: String] = [:],
+        remote: String? = nil,
     ) async throws -> ProcessResult {
         // Only the commands that reach a remote need the network;
         // reading the worktree must go on working without one,
@@ -352,6 +355,9 @@ public struct GitClient: Sendable {
             throw CommandError(command: "git " + arguments.joined(separator: " "), result: result)
         }
 
+        if result.succeeded, let remote, let directory {
+            await repairRemoteRename(remote, in: directory, pushing: arguments.first == "push", result: result)
+        }
         return result
     }
 

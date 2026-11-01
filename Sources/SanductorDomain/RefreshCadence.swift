@@ -9,6 +9,9 @@ import Foundation
 /// every tick that asks herdr is a `sudo` login shell, and a machine
 /// on battery with nothing happening should cost nothing.
 public enum RefreshCadence {
+    /// Age-based expiry has no filesystem event; maintenance runs daily while open.
+    public static let conversationMaintenanceSeconds: TimeInterval = 86_400
+
     /// Credentials have no shared change event; failed GitHub requests allow one recovery check per minute.
     public static let githubAuthenticationSeconds: TimeInterval = 60
 

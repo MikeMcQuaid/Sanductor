@@ -15,9 +15,6 @@ public struct SetupView: View {
     public var body: some View {
         if model.currentIssue != nil {
             wizard
-        } else if model.isReady == false {
-            LaunchProgressView(spinner: "Starting Sanductor…")
-                .frame(minWidth: Self.minimumWidth, minHeight: Self.minimumHeight)
         }
     }
 

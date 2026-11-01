@@ -7,18 +7,15 @@ import SanductorDomain
 /// Transcripts live in the sandbox user's home, which is disposable
 /// by design and was emptied by accident once: the conversations went
 /// with it while the code, which git and GitHub hold, was never at
-/// risk. Only the conversation is copied for that reason. iCloud
-/// Drive carries it off the machine, and a copy is dropped when its
-/// worktree is deleted, so the backups track the work rather than
-/// accumulating behind it.
+/// risk. Only the conversation is copied for that reason. Copies stay
+/// in the host's private app directory and are dropped with their
+/// worktrees.
 struct ConversationBackup {
     // MARK: Lifecycle
 
-    /// Creates a backup store. `directory` overrides where copies go,
-    /// for tests; the default is iCloud Drive when it is set up on
-    /// this Mac and the app's own support directory when it is not.
-    init(paths: WorkspacePaths, directory: String? = nil) {
-        self.directory = directory ?? Self.cloudDirectory ?? paths.appDirectory + "/conversations"
+    /// Keeps automatic backups out of folders requiring privacy permission.
+    init(paths: WorkspacePaths) {
+        directory = paths.appDirectory + "/conversations"
     }
 
     // MARK: Internal
@@ -30,8 +27,9 @@ struct ConversationBackup {
     /// already there: one file per worktree, the one a resume would
     /// continue. Cheap enough to call on every poll, since an
     /// unchanged transcript is not copied again.
-    func store(_ past: TranscriptSession, worktree: Worktree) {
-        let destination = path(worktree: worktree, extension: URL(fileURLWithPath: past.path).pathExtension)
+    @concurrent
+    func store(_ past: TranscriptSession, worktree: Worktree) async {
+        let destination = path(worktree: worktree, extension: URL(fileURLWithPath: past.path).pathExtension) + ".gz"
         let manager = FileManager.default
         guard let source = try? manager.attributesOfItem(atPath: past.path) else {
             return
@@ -48,14 +46,18 @@ struct ConversationBackup {
             atPath: URL(fileURLWithPath: destination).deletingLastPathComponent().path,
             withIntermediateDirectories: true,
         )
-        try? manager.removeItem(atPath: destination)
-        try? manager.copyItem(atPath: past.path, toPath: destination)
-        writeIndex(past, worktree: worktree)
+        do {
+            try await BackupCompression.write(source: past.path, destination: destination)
+            try? manager.removeItem(atPath: URL(filePath: destination).deletingPathExtension().path)
+            writeIndex(past, worktree: worktree)
+        } catch {
+            // Keep the last good copy and retry at the next backup.
+        }
     }
 
     /// Drops a worktree's copy, which deleting the worktree does:
     /// the conversation is being thrown away deliberately, and a
-    /// backup nobody asked to keep is clutter in iCloud.
+    /// backup nobody asked to keep is clutter.
     func forget(worktree: Worktree) {
         let manager = FileManager.default
         let folder = directory + "/" + slug(worktree)
@@ -67,21 +69,6 @@ struct ConversationBackup {
     /// What the copy is called, whatever the agent named it.
     private static let transcriptName = "conversation"
     private static let indexName = "conversation.json"
-
-    /// iCloud Drive's own folder for this app, nil when the user has
-    /// not set iCloud Drive up. No entitlement is involved: it is a
-    /// directory that syncs.
-    private static var cloudDirectory: String? {
-        let container = FileManager.default
-            .url(forUbiquityContainerIdentifier: nil)?
-            .appendingPathComponent("Documents/Sanductor/conversations")
-        guard let container else {
-            return nil
-        }
-
-        try? FileManager.default.createDirectory(at: container, withIntermediateDirectories: true)
-        return container.path
-    }
 
     /// One folder per worktree, named for what it is rather than the
     /// uuid its path carries.

@@ -156,17 +156,11 @@
 
         var body: some View {
             ZStack {
-                if model.isConnected, handedOff == false {
+                if model.isConnected || handedOff {
                     terminal
                 }
                 if handedOff {
-                    VStack {
-                        Text("This terminal is controlled on your Mac.")
-                        Button("Take control") { handedOff = false; ready = false; model.reconnect() }
-                            .buttonStyle(.glassProminent)
-                    }
-                    .padding()
-                    .background(.regularMaterial)
+                    handoffOverlay
                 } else if let error = model.error, model.isConnected == false {
                     VStack {
                         Text(error)
@@ -184,28 +178,61 @@
             }
             .navigationTitle(model.sessions.first { $0.id == session.id }?.branch ?? session.branch)
             .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                Button("Terminal appearance", systemImage: "circle.lefthalf.filled") { dark.toggle() }
+            .onChange(of: model.connectionGeneration) {
+                if handedOff == false {
+                    ready = false
+                }
             }
-            .onChange(of: model.connectionGeneration) { _, _ in ready = false }
         }
 
         // MARK: Private
 
-        @AppStorage("phoneTerminalDark")
-        private var dark = false
+        private static let handoffCorner: CGFloat = 16
+        private static let handoffDimming = 0.7
+
+        @Environment(\.colorScheme)
+        private var colorScheme
         @State private var ready = false
-        @State private var handedOff = false
+        @State private var handoffGeneration: UUID?
+
+        private var handedOff: Bool {
+            handoffGeneration != nil
+        }
+
+        private var handoffOverlay: some View {
+            VStack {
+                Text("This terminal is controlled on another device.")
+                    .multilineTextAlignment(.center)
+                Button("Take control") { handoffGeneration = nil; ready = false; model.reconnect() }
+                    .buttonStyle(.glassProminent)
+                    .tint(.blue)
+            }
+            .padding()
+            .background {
+                if ready {
+                    RoundedRectangle(cornerRadius: Self.handoffCorner)
+                        .fill(.regularMaterial)
+                }
+            }
+            .padding()
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .background {
+                if ready {
+                    Color(uiColor: .systemBackground).opacity(Self.handoffDimming)
+                }
+            }
+        }
 
         private var terminal: some View {
-            MobileTerminal(
+            let generation = handoffGeneration ?? model.connectionGeneration
+            return MobileTerminal(
                 model: model,
                 session: session,
                 onReady: { ready = true },
-                onHandoff: { handedOff = true },
-                dark: dark,
+                onHandoff: { handoffGeneration = generation },
+                dark: colorScheme == .dark,
             )
-            .id(model.connectionGeneration)
+            .id(generation)
             .allowsHitTesting(ready && handedOff == false)
         }
     }

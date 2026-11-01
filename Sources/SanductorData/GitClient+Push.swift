@@ -1,7 +1,7 @@
 extension GitClient {
     /// Captures the lease before rebasing, so later background fetches cannot change it.
     func preparePush(worktreePath: String, branch: String, remote: String) async throws -> String {
-        try await git(["fetch", "--prune", remote], in: worktreePath)
+        try await git(["fetch", "--prune", remote], in: worktreePath, remote: remote)
         guard let tip = await commitHash(of: "refs/remotes/" + remote + "/" + branch, worktreePath: worktreePath) else {
             return ""
         }

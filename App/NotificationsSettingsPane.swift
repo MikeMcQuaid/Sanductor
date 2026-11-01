@@ -90,7 +90,9 @@ private struct SoundPicker: View {
                     Text(sound.name).tag(sound.path)
                 }
                 if isCustom {
-                    Text(URL(filePath: chosen).lastPathComponent).tag(chosen)
+                    Text(URL(filePath: chosen).lastPathComponent)
+                        .tag(chosen)
+                        .hoverHelp(chosen)
                 }
             }
             .hoverHelp("Played on this event whether or not banners may show; None is silence")
@@ -101,14 +103,17 @@ private struct SoundPicker: View {
                     .accessibilityLabel("Play the selected sound")
             }
             .buttonStyle(.borderless)
-            .disabled(chosen.isEmpty)
+            .disabled(chosen.isEmpty || needsImport)
             .hoverHelp("Play the selected sound")
-            Button("Choose File…") { chooseFile() }
-                .hoverHelp("Any audio file playback accepts")
+            Button(needsImport ? "Import Sound…" : "Choose File…") { chooseFile() }
+                .hoverHelp("Copy an audio file into Sanductor for playback without accessing its original folder")
         }
+        .onAppear { needsImport = CompletionSound.files.needsImport(chosen) }
     }
 
     // MARK: Private
+
+    @State private var needsImport = false
 
     /// Redraws after a pick; the truth lives in the defaults key.
     @State private var generation = 0
@@ -127,7 +132,17 @@ private struct SoundPicker: View {
         Binding(
             get: { chosen },
             set: { path in
+                do {
+                    try CompletionSound.files.importFile(at: path)
+                } catch {
+                    ErrorLog.shared.report("Could not import sound: " + error.localizedDescription)
+                    return
+                }
                 UserDefaults.standard.set(path, forKey: event.soundKey)
+                CompletionSound.files.removeUnused(keeping: NotificationPreferences.Event.allCases.map { event in
+                    NotificationPreferences.sound(for: event)
+                })
+                needsImport = false
                 generation += 1
                 CompletionSound.play(path: path)
             },

@@ -1,7 +1,7 @@
 import Foundation
 
 extension SetupChecker {
-    func gitConfiguration() async -> (issues: [SetupIssue], signingConfigured: Bool) {
+    func gitConfiguration(checkSigning: Bool) async -> (issues: [SetupIssue], signingConfigured: Bool) {
         let result = try? await service.git.git(
             [
                 "config", "--global", "--includes", "--get-regexp",
@@ -28,7 +28,7 @@ extension SetupChecker {
                 alternative: "",
             ))
         }
-        return await (issues, requiresSignedCommits ? signingConfigured(values) : true)
+        return await (issues, requiresSignedCommits && checkSigning ? signingConfigured(values) : true)
     }
 
     private func signingConfigured(_ values: [String: String]) async -> Bool {
