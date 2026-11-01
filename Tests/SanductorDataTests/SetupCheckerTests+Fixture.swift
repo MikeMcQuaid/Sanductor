@@ -78,7 +78,7 @@ extension SetupCheckerTests {
             } else if arguments.last?.hasPrefix("command -v ") == true {
                 status = problem == "signing" ? 1 : 0
             } else if arguments.first == "gh" {
-                status = problem == "network" ? 1 : 0
+                status = ["network", "credentials"].contains(problem) ? 1 : 0
             } else if arguments.contains("--list-secret-keys") {
                 output = problem == "signing" ? "" : "sec:-:255:22:test\n"
             } else if arguments.last?.contains("gh auth token") == true {

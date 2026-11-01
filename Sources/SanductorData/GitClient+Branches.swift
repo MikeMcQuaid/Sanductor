@@ -130,6 +130,7 @@ public extension GitClient {
                         sourceCommit.map { $0 + ":refs/heads/" + branch } ?? branch,
                     ],
                 in: worktreePath,
+                remote: remote,
             )
         }
     }
@@ -139,7 +140,7 @@ public extension GitClient {
     /// silently rewritten, and the reason lands in the caller's
     /// error rather than in a merge commit.
     func checkoutAndPullDefault(worktreePath: String, branch: String) async throws {
-        try await git(["fetch", "origin"], in: worktreePath)
+        try await git(["fetch", "origin"], in: worktreePath, remote: "origin")
         try await git(["checkout", branch], in: worktreePath)
         try await git(["pull", "--ff-only", "origin", branch], in: worktreePath)
     }

@@ -24,6 +24,7 @@
                 rows.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -Self.padding),
                 heightAnchor.constraint(equalToConstant: intrinsicContentSize.height),
             ])
+            updateModifiers()
             NotificationCenter.default.addObserver(
                 self,
                 selector: #selector(updateModifiers),
@@ -67,9 +68,7 @@
         private static let keyHeight: CGFloat = 44
         private static let padding: CGFloat = 8
         private static let spacing: CGFloat = 4
-        private static let extraRowCount: CGFloat = 5
-        private static let functionCount = 10
-        private static let functionsPerRow = 5
+        private static let extraRowCount: CGFloat = 4
         private static let repeatDelayMilliseconds = 600
         private static let repeatInterval: Duration = .milliseconds(100)
 
@@ -80,6 +79,29 @@
         private var repeatTask: Task<Void, Never>?
 
         private func accessoryRow() -> UIStackView {
+            row([
+                key("Esc", bytes: EscapeSequences.cmdEsc),
+                key("Tab", bytes: EscapeSequences.cmdTab, image: "arrow.right.to.line.compact"),
+                key("Up", bytes: EscapeSequences.moveUpNormal, image: "arrow.up", repeats: true),
+                key("Down", bytes: EscapeSequences.moveDownNormal, image: "arrow.down", repeats: true),
+                key("Return", bytes: Array("\r".utf8), image: "return"),
+                button("Agent keys", image: "ellipsis") { [weak self] _ in
+                    guard let target = self?.terminal else {
+                        return
+                    }
+
+                    target.inputView = target.inputView == nil ? PhoneKeyboard(terminal: target, expanded: true) : nil
+                    target.reloadInputViews()
+                },
+                button("Hide keyboard", image: "keyboard.chevron.compact.down") { [weak self] _ in
+                    self?.repeatTask?.cancel()
+                    self?.terminal?.resetModifiers()
+                    _ = self?.terminal?.resignFirstResponder()
+                },
+            ])
+        }
+
+        private func extraRows() -> [UIStackView] {
             let control = button("Ctrl", image: "control") { [weak self] _ in
                 self?.terminal?.controlModifier.toggle()
                 self?.updateModifiers()
@@ -90,43 +112,30 @@
                 self?.updateModifiers()
             }
             shiftButton = shift
-            return row([
-                key("Esc", bytes: EscapeSequences.cmdEsc), control, shift,
-                key("Tab", bytes: EscapeSequences.cmdTab, image: "arrow.right.to.line.compact"),
-                key("Left", bytes: EscapeSequences.moveLeftNormal, image: "arrow.left", repeats: true),
-                key("Down", bytes: EscapeSequences.moveDownNormal, image: "arrow.down", repeats: true),
-                key("Up", bytes: EscapeSequences.moveUpNormal, image: "arrow.up", repeats: true),
-                key("Right", bytes: EscapeSequences.moveRightNormal, image: "arrow.right", repeats: true),
-                button("Extra keys", image: "keyboard") { [weak self] _ in
-                    guard let target = self?.terminal else {
-                        return
-                    }
-
-                    target.inputView = target.inputView == nil ? PhoneKeyboard(terminal: target, expanded: true) : nil
-                    target.reloadInputViews()
-                },
-            ])
-        }
-
-        private func extraRows() -> [UIStackView] {
-            let functions = (0 ..< Self.functionCount).map { index in
-                key("F" + String(index + 1), bytes: EscapeSequences.cmdF[index])
-            }
-            let symbols = ["[]{}<>&", "+-*=%`\\"].map { text in
-                text.map { character in
-                    button(String(character)) { [weak self] _ in self?.terminal?.insertText(String(character)) }
-                }
+            var actions = [UIButton]()
+            if let agent = terminal?.agent {
+                actions = [
+                    key("Queue", bytes: agent.queueInput, modifiers: false),
+                    key("Send now", bytes: agent.sendInputNow, modifiers: false),
+                ]
             }
             return [
-                row(Array(functions.prefix(Self.functionsPerRow))),
-                row(Array(functions.suffix(Self.functionsPerRow))),
-                row(symbols[0] + [key("Ins", bytes: EscapeSequences.cmdInsert)]),
-                row(symbols[1] + [key("Delete", bytes: EscapeSequences.cmdDelKey, image: "delete.forward")]),
                 row([
-                    key("Home", bytes: EscapeSequences.moveHomeNormal),
-                    key("End", bytes: EscapeSequences.moveEndNormal),
-                    key("PgUp", bytes: EscapeSequences.cmdPageUp),
-                    key("PgDn", bytes: EscapeSequences.cmdPageDown),
+                    key("Line start", bytes: Array("\u{01}".utf8), image: "arrow.left.to.line"),
+                    key("Left", bytes: EscapeSequences.moveLeftNormal, image: "arrow.left", repeats: true),
+                    key("Right", bytes: EscapeSequences.moveRightNormal, image: "arrow.right", repeats: true),
+                    key("Line end", bytes: Array("\u{05}".utf8), image: "arrow.right.to.line"),
+                ]),
+                row([
+                    key("Clear line", bytes: Array("\u{01}\u{0B}".utf8)),
+                    key("Cut ←", bytes: Array("\u{15}".utf8)),
+                    key("Word ⌫", bytes: Array("\u{17}".utf8)),
+                    key("Paste cut", bytes: Array("\u{19}".utf8)),
+                ]),
+                row(actions + [key("New line", bytes: Array("\n".utf8))]),
+                row([
+                    control, shift, key("Space", bytes: Array(" ".utf8)),
+                    key("History", bytes: Array("\u{12}".utf8)),
                 ]),
             ]
         }
@@ -167,16 +176,18 @@
             return button
         }
 
-        private func key(_ title: String, bytes: [UInt8], image: String? = nil, repeats: Bool = false) -> UIButton {
+        private func key(
+            _ title: String, bytes: [UInt8], image: String? = nil, repeats: Bool = false, modifiers: Bool = true,
+        ) -> UIButton {
             let button = button(title, image: image) { [weak self] held in
                 guard let self, let terminal else {
                     return
                 }
 
                 repeatTask?.cancel()
-                let modified = MobileTerminalKeys.modified(
+                let modified = modifiers ? MobileTerminalKeys.modified(
                     bytes, shift: terminal.shiftModifier, control: terminal.controlModifier,
-                )
+                ) : bytes
                 terminal.send(modified)
                 terminal.resetModifiers()
                 if repeats, held {

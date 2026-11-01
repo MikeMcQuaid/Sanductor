@@ -10,10 +10,12 @@ struct ConversationBackupTests {
     // MARK: Internal
 
     @Test
-    func `the newest conversation is copied, refreshed and forgotten`() throws {
+    func `the newest conversation is copied, refreshed and forgotten`() async throws {
         let root = try TestSupport.temporaryDirectory("backup")
         defer { try? FileManager.default.removeItem(atPath: root) }
-        let backup = ConversationBackup(paths: paths(root: root), directory: root + "/cloud")
+        let backup = ConversationBackup(paths: paths(root: root))
+        #expect(backup.directory == root + "/app/conversations")
+        #expect(FileManager.default.fileExists(atPath: backup.directory) == false)
         let worktree = Worktree(
             repositoryName: "platform",
             repositoryPath: root + "/platform",
@@ -31,9 +33,9 @@ struct ConversationBackupTests {
             resumeID: "019ff168",
         )
 
-        backup.store(past, worktree: worktree)
-        let copied = root + "/cloud/platform-zendesk-sla-alignment/conversation.jsonl"
-        #expect(try String(contentsOfFile: copied, encoding: .utf8) == "first\n")
+        await backup.store(past, worktree: worktree)
+        let copied = root + "/app/conversations/platform-zendesk-sla-alignment/conversation.jsonl.gz"
+        #expect(try await contents(copied) == "first\n")
 
         // A conversation that has moved on replaces its copy, so what
         // is kept is what a resume would continue.
@@ -42,12 +44,12 @@ struct ConversationBackupTests {
             [.modificationDate: Date().addingTimeInterval(Self.laterSeconds)],
             ofItemAtPath: transcript,
         )
-        backup.store(past, worktree: worktree)
-        #expect(try String(contentsOfFile: copied, encoding: .utf8) == "first\nsecond\n")
+        await backup.store(past, worktree: worktree)
+        #expect(try await contents(copied) == "first\nsecond\n")
 
         // What it belongs to travels with it, since a conversation
         // file alone cannot say which worktree or agent it came from.
-        let index = root + "/cloud/platform-zendesk-sla-alignment/conversation.json"
+        let index = root + "/app/conversations/platform-zendesk-sla-alignment/conversation.json"
         let described = try #require(try? String(contentsOfFile: index, encoding: .utf8))
         #expect(described.contains("zendesk-sla-alignment"))
         #expect(described.contains("019ff168"))
@@ -61,6 +63,14 @@ struct ConversationBackupTests {
 
     /// Far enough ahead that the copy is unambiguously older.
     private static let laterSeconds = 60.0
+
+    private func contents(_ path: String) async throws -> String {
+        let result = try await FoundationProcessRunner().run(
+            ["/usr/bin/gzip", "-cd", path], workingDirectory: nil, environment: [:],
+        )
+        #expect(result.succeeded)
+        return result.standardOutput
+    }
 
     private func paths(root: String) -> WorkspacePaths {
         WorkspacePaths(

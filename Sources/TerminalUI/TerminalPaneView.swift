@@ -1,4 +1,3 @@
-import SanductorDomain
 import SwiftTerm
 import SwiftUI
 
@@ -29,7 +28,6 @@ public struct TerminalPaneView: View {
         command: [String],
         reflowsCopies: Bool = false,
         isActive: Bool = true,
-        fixedAppearance: TerminalAppearance? = nil,
         onPasteFiles: (([URL]) -> Bool)? = nil,
         onCopyAllOutput: (() async -> String?)? = nil,
         onProcessTerminated: (@MainActor () -> Void)? = nil,
@@ -38,7 +36,6 @@ public struct TerminalPaneView: View {
         transport = .control(command: command)
         self.reflowsCopies = reflowsCopies
         self.isActive = isActive
-        self.fixedAppearance = fixedAppearance
         self.onPasteFiles = onPasteFiles
         self.onCopyAllOutput = onCopyAllOutput
         self.onProcessTerminated = onProcessTerminated
@@ -59,7 +56,6 @@ public struct TerminalPaneView: View {
         transport = .shell(directory: directory, environment: environment)
         reflowsCopies = false
         self.isActive = isActive
-        fixedAppearance = nil
         onPasteFiles = nil
         onCopyAllOutput = nil
         self.onProcessTerminated = onProcessTerminated
@@ -74,7 +70,6 @@ public struct TerminalPaneView: View {
                 transport: transport,
                 reflowsCopies: reflowsCopies,
                 isActive: isActive,
-                fixedAppearance: fixedAppearance,
                 onPasteFiles: onPasteFiles,
                 onCopyAllOutput: onCopyAllOutput,
                 clearRequest: clearShellRequest,
@@ -107,12 +102,6 @@ public struct TerminalPaneView: View {
     private let reflowsCopies: Bool
     private let isActive: Bool
 
-    /// The palette the pane is pinned to, appearance regardless:
-    /// agent TUIs read the terminal's colours once at startup and
-    /// style themselves for them forever, so a pane that re-themed
-    /// on a macOS appearance switch left the agent white on white.
-    private let fixedAppearance: TerminalAppearance?
-
     /// Where a paste of files or an image goes, for agent panes.
     private let onPasteFiles: (([URL]) -> Bool)?
 
@@ -141,10 +130,6 @@ struct TerminalRepresentable: NSViewRepresentable {
     let transport: TerminalTransport
     let reflowsCopies: Bool
     let isActive: Bool
-
-    /// A palette to hold whatever the appearance does; nil follows
-    /// the appearance, which only shell panes do.
-    let fixedAppearance: TerminalAppearance?
 
     let onPasteFiles: (([URL]) -> Bool)?
     let onCopyAllOutput: (() async -> String?)?
@@ -236,11 +221,9 @@ struct TerminalRepresentable: NSViewRepresentable {
     /// Black on white in light mode, white on black in dark mode; the
     /// app's one terminal look.
     private func applyTheme(to view: PaneTerminalView, context: Context) {
-        // A pinned pane keeps the palette its agent read at launch:
-        // the TUI styles itself for those colours once and forever,
-        // and following an appearance switch left it unreadable.
-        let scheme = fixedAppearance.map { $0 == .dark ? ColorScheme.dark : .light }
-            ?? context.environment.colorScheme
+        // Live changes were user-verified with current herdr. Older TUIs that
+        // cache startup colours may need restarting; palette pinning is intentionally absent.
+        let scheme = context.environment.colorScheme
         guard context.coordinator.appliedScheme != scheme else {
             return
         }

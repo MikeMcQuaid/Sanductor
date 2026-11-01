@@ -1,3 +1,4 @@
+import Foundation
 @testable import TerminalUI
 import Testing
 
@@ -27,6 +28,36 @@ struct CompletionSoundTests {
         #expect(CompletionSound.isPlayable("notes.txt") == false)
         #expect(CompletionSound.isPlayable("movie.mov") == false)
         #expect(CompletionSound.isPlayable("no-extension") == false)
+    }
+
+    @Test
+    func `custom sounds are never opened during background playback`() throws {
+        let path = URL(filePath: FileManager.default.currentDirectoryPath)
+            .appendingPathComponent(".test-scratch/sound-" + UUID().uuidString + ".aiff")
+        defer { try? FileManager.default.removeItem(at: path) }
+        try FileManager.default.copyItem(atPath: CompletionSound.defaultPath, toPath: path.path)
+        #expect(CompletionSound.play(path: path.path) == false)
+    }
+
+    @Test
+    func `an imported sound survives source removal and unused copies are pruned`() throws {
+        let root = URL(filePath: FileManager.default.currentDirectoryPath)
+            .appendingPathComponent(".test-scratch/sounds-" + UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: root) }
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        let source = root.appendingPathComponent("original.aiff")
+        try FileManager.default.copyItem(atPath: CompletionSound.defaultPath, toPath: source.path)
+        let store = NotificationSoundStore(directory: root.appendingPathComponent("imported"))
+        #expect(store.needsImport(source.path))
+        try store.importFile(at: source.path)
+        try FileManager.default.removeItem(at: source)
+        let cached = URL(filePath: store.playbackPath(for: source.path))
+        #expect(try Data(contentsOf: cached) == Data(contentsOf: URL(filePath: CompletionSound.defaultPath)))
+        #expect(store.needsImport(source.path) == false)
+        store.removeUnused(keeping: [source.path])
+        #expect(FileManager.default.fileExists(atPath: cached.path))
+        store.removeUnused(keeping: [])
+        #expect(FileManager.default.fileExists(atPath: cached.path) == false)
     }
 
     @Test

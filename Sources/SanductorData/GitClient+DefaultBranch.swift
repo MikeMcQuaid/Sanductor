@@ -33,7 +33,7 @@ public extension GitClient {
     /// was asked for has already happened.
     func followDefaultBranch(of repository: Repository) async throws -> DefaultBranchMove? {
         let before = await defaultBaseRef(of: repository).map { Self.branchName(of: $0) }
-        try await git(["fetch", "origin"], in: repository.path)
+        try await git(["fetch", "origin"], in: repository.path, remote: "origin")
         let asked = try await git(["remote", "set-head", "origin", "--auto"], in: repository.path, allowFailure: true)
         guard asked.succeeded else {
             return nil

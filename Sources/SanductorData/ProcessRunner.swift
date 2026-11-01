@@ -230,10 +230,9 @@ public struct FoundationProcessRunner: ProcessRunner {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
         process.arguments = arguments
-        if let workingDirectory {
-            process.currentDirectoryURL = URL(fileURLWithPath: workingDirectory)
-        }
+        process.currentDirectoryURL = URL(fileURLWithPath: workingDirectory ?? "/")
         process.environment = ProcessEnvironment.scrubbed(merging: extraEnvironment)
+        process.environment?["PWD"] = process.currentDirectoryURL?.path
         process.standardInput = FileHandle.nullDevice
         if let outputLimit {
             return try await BoundedProcessOutput(limit: outputLimit).run(process)

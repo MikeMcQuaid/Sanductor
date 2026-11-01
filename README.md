@@ -17,12 +17,12 @@ No account, subscription or hosted relay is required.
 - Reviews diffs with comments and a second agent, Copilot or CodeRabbit.
 - Fixes reviews and selected CI failures as they arrive, handles upstream conflicts locally and resumes watching after relaunch.
 - Opens pull requests with commit signing, rebasing, stack pushes, automerge and merge cleanup.
-- Keeps agents running when the app closes and conversations browsable and resumable after worktree deletion.
+- Keeps agents running after quitting, with compressed private backups and 30-day retention that preserves ongoing work.
 - Starts from prompts, issues, PRs or unpublished security advisories.
 - Schedules repository prompts daily, weekly or monthly while open.
 - Tracks agents, PRs and blockers by repository or status, with bulk worktree actions and notifications.
 - Edits code with highlighting and search alongside worktree shell tabs.
-- Starts tasks and checks blockers through Shortcuts and Siri, with an [iPhone companion](#-iphone-companion).
+- Starts tasks and checks blockers through Shortcuts and Siri, with an [iPhone companion](#-iphone-companion) and agent shortcut keys.
 
 ## 📋 Requirements
 
@@ -71,7 +71,7 @@ Settings (Cmd-,):
 - **Schedules**: Manage recurring jobs with masked token previews or start them now.
 - **Sessions**: Inspect and stop agents and browser pages.
 - **Review**: Choose reviewers, models, effort and review or fix prompts.
-- **Notifications**: Choose finished-turn and input notifications, sounds and a Dock badge for agents waiting for input.
+- **Notifications**: Choose finished-turn and input alerts, privately imported sounds and a Dock badge for agents waiting for input.
 - **Fonts**: Customise fonts and sizes.
 - **Editor**: Choose the external editor opened with Cmd-click.
 - **Advanced**: Set paths, refresh intervals, idle sleep and logging.

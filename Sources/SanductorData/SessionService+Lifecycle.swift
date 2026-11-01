@@ -11,7 +11,7 @@ public extension SessionService {
     /// how the conversation stays attributed to the repository.
     func deleteWorktree(item: WorktreeItem) async throws {
         // The conversation is being thrown away deliberately, so its
-        // copy goes too rather than lingering in iCloud.
+        // copy goes too rather than lingering in the host’s app directory.
         ConversationBackup(paths: paths).forget(worktree: item.worktree)
         let worktree = item.worktree
         guard worktree.path != worktree.repositoryPath else {

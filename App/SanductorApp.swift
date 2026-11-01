@@ -21,6 +21,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     // MARK: Internal
 
+    let launch: ApplicationLaunch = .init()
+
+    func applicationDidFinishLaunching(_: Notification) {
+        launch.didFinishLaunching()
+    }
+
     func applicationShouldTerminateAfterLastWindowClosed(_: NSApplication) -> Bool {
         true
     }
@@ -67,7 +73,14 @@ struct SanductorApp: App {
     var delegate
 
     var body: some Scene {
-        WindowGroup {
+        // Register before any scene exists; scene builders need a declaration here.
+        // swiftlint:disable:next redundant_discardable_let
+        let _ = delegate.launch.whenReady {
+            Task {
+                await launch()
+            }
+        }
+        WindowGroup(id: "workspace") {
             Group {
                 if let dependencies {
                     if dependencies.setup.isReady {
@@ -77,8 +90,10 @@ struct SanductorApp: App {
                                     dependencies.dashboard.availableAgents = dependencies.setup.agents
                                 }
                             }
-                    } else {
+                    } else if dependencies.setup.currentIssue != nil {
                         SetupView(model: dependencies.setup)
+                    } else {
+                        opening
                     }
                 } else {
                     opening
@@ -86,9 +101,9 @@ struct SanductorApp: App {
             }
             .environment(\.openURL, LinkOpener.action)
             .interfaceFont(.body)
-            .task { await prepare() }
         }
-
+        .defaultLaunchBehavior(.suppressed)
+        .restorationBehavior(.disabled)
         // Content over chrome: no title bar, compact toolbar.
         .windowStyle(.hiddenTitleBar)
         .windowToolbarStyle(.unifiedCompact)
@@ -103,8 +118,10 @@ struct SanductorApp: App {
                 if let dependencies {
                     if dependencies.setup.isReady {
                         SettingsView(dependencies: dependencies)
-                    } else {
+                    } else if dependencies.setup.currentIssue != nil {
                         SetupView(model: dependencies.setup)
+                    } else {
+                        opening
                     }
                 } else {
                     opening
@@ -120,8 +137,13 @@ struct SanductorApp: App {
     private static let migrationAttempts = 2
     private static let terminationAttempts = 50
     private static let terminationPause: Duration = .milliseconds(100)
+    private static let openingDelaySeconds = 0.5
+
+    @Environment(\.openWindow)
+    private var openWindow
 
     @State private var dependencies: AppDependencies?
+    @State private var hasOpenedWindow = false
     @State private var isPreparing = false
     @State private var openingError: String?
     @State private var progress: LaunchProgress = .init()
@@ -138,6 +160,34 @@ struct SanductorApp: App {
         }
         .interfaceFont(.body)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    private func launch() async {
+        guard hasOpenedWindow == false, isPreparing == false else {
+            return
+        }
+
+        if dependencies?.setup.isReady == true {
+            showWindow()
+        }
+        let delayedOpening = Task {
+            try? await Task.sleep(for: .seconds(Self.openingDelaySeconds))
+            if Task.isCancelled == false {
+                showWindow()
+            }
+        }
+        defer { delayedOpening.cancel() }
+        await prepare()
+        showWindow()
+    }
+
+    private func showWindow() {
+        guard hasOpenedWindow == false else {
+            return
+        }
+
+        hasOpenedWindow = true
+        openWindow(id: "workspace")
     }
 
     private func prepare() async {

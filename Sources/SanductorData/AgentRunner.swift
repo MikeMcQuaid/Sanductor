@@ -27,6 +27,9 @@ public protocol AgentRunner: Sendable {
     /// nil when the agent has no discoverable transcripts.
     func transcriptDirectory(workingDirectory: String, sandboxHome: String) -> String?
 
+    /// Transcript and recovery files mapped to their recorded working directory.
+    func conversationFiles(sandboxHome: String) -> [String: String]
+
     /// Whether `transcriptDirectory` is unique per working directory;
     /// only then can its listing be shown as one worktree's past
     /// sessions.
@@ -83,6 +86,11 @@ public protocol AgentRunner: Sendable {
 }
 
 extension AgentRunner {
+    /// Runners without recognised storage have nothing to expire.
+    public func conversationFiles(sandboxHome _: String) -> [String: String] {
+        [:]
+    }
+
     /// The version out of a `--version` answer: the CLIs wrap it in
     /// their own names and notes ("2.1.238 (Claude Code)",
     /// "codex-cli 0.149.0"), so the first token that looks like a

@@ -71,7 +71,7 @@ public extension GitClient {
                 try await git(["config", "--local", "remote." + name + ".sanductor-created-url", url], in: worktreePath)
             }
 
-            try await git(["fetch", "--quiet", name, branch], in: worktreePath)
+            try await git(["fetch", "--quiet", name, branch], in: worktreePath, remote: name)
             try await git(
                 ["branch", "--set-upstream-to", name + "/" + branch, branch],
                 in: worktreePath,

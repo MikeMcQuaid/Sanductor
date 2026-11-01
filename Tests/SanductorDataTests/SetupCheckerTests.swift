@@ -119,7 +119,7 @@ struct SetupCheckerTests {
         let fixture = try Fixture()
         defer { fixture.close() }
         fixture.runner.failure.withLock { $0 = configured ? "" : "signing" }
-        let result = await fixture.checker.check(verifyOnline: false)
+        let result = await fixture.checker.check(verifyOnline: true)
         #expect(result.issues.isEmpty)
         #expect(result.signingConfigured == configured)
     }
@@ -170,7 +170,7 @@ struct SetupCheckerTests {
             try Data().write(to: URL(filePath: key))
         }
         fixture.runner.failure.withLock { $0 = state == "missing-signer" ? "signing" : "" }
-        let result = await fixture.checker.check(verifyOnline: false)
+        let result = await fixture.checker.check(verifyOnline: true)
         #expect(result.issues.isEmpty)
         #expect(result.signingConfigured == (state == "ready"))
     }

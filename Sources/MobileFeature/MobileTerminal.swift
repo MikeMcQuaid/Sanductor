@@ -16,6 +16,13 @@
                 self.model = model
                 self.onReady = onReady
                 self.onHandoff = onHandoff
+                super.init()
+                NotificationCenter.default.addObserver(
+                    self,
+                    selector: #selector(stopScrolling),
+                    name: UIApplication.willResignActiveNotification,
+                    object: nil,
+                )
             }
 
             deinit { /* The representable stops the stream. */ }
@@ -23,6 +30,12 @@
             // MARK: Internal
 
             weak var view: PhoneTerminalView?
+            var scrolling: MobileTerminalScroll = .init()
+            var scrollDisplayLink: CADisplayLink?
+            var scrollTimestamp: CFTimeInterval?
+            var scrollPoint: CGPoint = .zero
+
+            var stream: SSHCommand?
 
             func start(session: MobileSession, view: PhoneTerminalView) {
                 guard task == nil, view.bounds.width > 1, view.bounds.height > 1 else {
@@ -35,6 +48,7 @@
             }
 
             func stop() {
+                stopScrolling()
                 task?.cancel()
                 task = nil
                 stream?.close()
@@ -42,6 +56,7 @@
             }
 
             func sendBytes(_ bytes: [UInt8]) {
+                stopScrolling()
                 stream?.send(Data((HerdrTerminal.inputCommand(bytes: bytes) + "\n").utf8))
             }
 
@@ -58,28 +73,6 @@
 
                 sentSize = (newCols, newRows)
                 stream?.send(Data((HerdrTerminal.resizeCommand(columns: newCols, rows: newRows) + "\n").utf8))
-            }
-
-            @objc
-            func scroll(_ gesture: UIPanGestureRecognizer) {
-                guard let view, gesture.state == .changed else {
-                    return
-                }
-
-                let distance = gesture.translation(in: view).y
-                let lines = Int(abs(distance) / view.font.lineHeight)
-                guard lines > 0 else {
-                    return
-                }
-
-                let point = gesture.location(in: view)
-                let size = view.terminalDimensions
-                let fraction = point.x / max(1, view.bounds.width)
-                let column = min(max(0, Int(fraction * CGFloat(size.cols))), max(0, size.cols - 1))
-                let row = min(max(0, Int(point.y / view.font.lineHeight)), max(0, size.rows - 1))
-                let command = HerdrTerminal.scrollCommand(upwards: distance > 0, lines: lines, column: column, row: row)
-                stream?.send(Data((command + "\n").utf8))
-                gesture.setTranslation(.zero, in: view)
             }
 
             func setTerminalTitle(source _: TerminalView, title _: String) {
@@ -115,7 +108,6 @@
             private let model: MobileModel
             private let onReady: () -> Void
             private let onHandoff: () -> Void
-            private var stream: SSHCommand?
             private var task: Task<Void, Never>?
             private var hasFrame = false
             private var handedOff = false
@@ -136,7 +128,7 @@
                             attached.close()
                         }
                     }
-                    defer { deadline.cancel(); attached.close(); stream = nil }
+                    defer { deadline.cancel(); stopScrolling(); attached.close(); stream = nil }
                     let dimensions = view.terminalDimensions
                     sizeChanged(source: view, newCols: dimensions.cols, newRows: dimensions.rows)
                     var lines = RemoteLines()
@@ -168,6 +160,10 @@
                 case let .closed(reason):
                     if reason == HerdrTerminal.takeoverReason {
                         handedOff = true
+                        stopScrolling()
+                        stream?.close()
+                        stream = nil
+                        _ = view?.resignFirstResponder()
                         onHandoff()
                     }
 
@@ -196,8 +192,12 @@
             let view = PhoneTerminalView(frame: .zero, font: style.uiKitFont)
             applyAppearance(to: view)
             view.changeScrollback(nil)
+            view.agent = session.agent
             view.inputAccessoryView = PhoneKeyboard(terminal: view)
             view.terminalDelegate = context.coordinator
+            view.onScrollStop = { [weak coordinator = context.coordinator] in
+                coordinator?.stopScrolling()
+            }
             view.onPaste = { [weak coordinator = context.coordinator] text in
                 coordinator?.sendBytes(HerdrTerminal.pasteBytes(text))
             }
@@ -218,6 +218,7 @@
 
         func updateUIView(_ view: PhoneTerminalView, context _: Context) {
             applyAppearance(to: view)
+            view.agent = session.agent
             if view.font != style.uiKitFont {
                 view.font = style.uiKitFont
             }
@@ -248,14 +249,33 @@
 
         var onPaste: ((String) -> Void)?
         var onSize: (() -> Void)?
+        var onScrollStop: (() -> Void)?
         var shiftModifier = false
+
+        var agent: AgentKind? {
+            didSet {
+                guard oldValue != agent, inputView != nil else {
+                    return
+                }
+
+                inputView = PhoneKeyboard(terminal: self, expanded: true)
+                reloadInputViews()
+            }
+        }
 
         override func didMoveToWindow() {
             super.didMoveToWindow()
             if window != nil {
                 // SwiftTerm retains Core Graphics if Metal cannot start.
                 try? setUseMetal(true)
+            } else {
+                onScrollStop?()
             }
+        }
+
+        override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent?) {
+            onScrollStop?()
+            super.touchesBegan(touches, with: event)
         }
 
         override func insertText(_ text: String) {
@@ -278,6 +298,7 @@
             controlModifier = false
             shiftModifier = false
             (inputAccessoryView as? PhoneKeyboard)?.updateModifiers()
+            (inputView as? PhoneKeyboard)?.updateModifiers()
         }
     }
 #endif

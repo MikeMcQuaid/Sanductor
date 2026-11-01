@@ -10,7 +10,7 @@ import TerminalUI
 extension RootView {
     /// The agent terminal: copies are prose, so multi-line copies
     /// reflow for pasting into chat and pull request bodies.
-    func agentTerminal(for session: AgentSession, at worktreePath: String, isActive: Bool) -> some View {
+    func agentTerminal(for session: AgentSession, isActive: Bool) -> some View {
         // A pasted file or screenshot reaches the agent the way a
         // dropped one does. Bound first: as the call's last argument
         // the formatter would make it trailing, which fights SwiftLint.
@@ -23,7 +23,6 @@ extension RootView {
             command: session.paneID.map(dependencies.service.attachCommand(paneID:)) ?? [],
             reflowsCopies: true,
             isActive: isActive,
-            fixedAppearance: dependencies.service.launchAppearance(worktreePath: worktreePath),
             onPasteFiles: pasteFiles,
             onCopyAllOutput: readAll,
             reattachRequest: dependencies.dashboard.reattachRequests[session.name] ?? 0,

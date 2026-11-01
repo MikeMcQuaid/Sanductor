@@ -50,11 +50,7 @@ public extension SessionService {
         command: String,
         probed version: String? = nil,
     ) async throws {
-        // The agent about to start reads the terminal's colours once
-        // and trusts them forever; remember which appearance it is
-        // being born into, so the pane can keep its word.
         let agent = agentKind(of: sessionName)
-        rememberTerminalScheme(worktreePath: directory)
         await progress("Closing any previous session")
         await killSession(name: sessionName)
         if let agent {
@@ -180,7 +176,7 @@ public extension SessionService {
     func closeSession(sessionName: String, worktree: Worktree) async {
         // The conversation is copied before the session goes, since
         // a close is one of the two moments it is worth keeping.
-        backUpConversation(of: worktree)
+        await backUpConversation(of: worktree)
         let worktreePath = worktree.path
         rememberResumeID(sessionName: sessionName, worktreePath: worktreePath)
         store.update { metadata in

@@ -131,12 +131,6 @@ public struct AppMetadata: Codable, Equatable, Sendable {
     /// finish, and stops being asked about every half minute.
     public var pendingSince: [String: Date] = [:]
 
-    /// "dark" or "light" per worktree path: the appearance its agent
-    /// was launched under. Agent TUIs read the terminal's colours
-    /// once at startup and never again, so the pane must keep the
-    /// palette the agent believes in for the session's whole life.
-    public var terminalSchemes: [String: String] = [:]
-
     /// When each repository's remotes were last fetched, by
     /// repository path. Rebasing wants a current remote and fetching
     /// takes seconds on a large repository, so a rebase within the
@@ -311,7 +305,6 @@ public struct AppMetadata: Codable, Equatable, Sendable {
             etags = try container.decodeIfPresent([String: String].self, forKey: .etags) ?? [:]
             pendingChecks = try container.decodeIfPresent([String: String].self, forKey: .pendingChecks) ?? [:]
             pendingSince = try container.decodeIfPresent([String: Date].self, forKey: .pendingSince) ?? [:]
-            terminalSchemes = try container.decodeIfPresent([String: String].self, forKey: .terminalSchemes) ?? [:]
             gitFetchedAt = try container.decodeIfPresent([String: Date].self, forKey: .gitFetchedAt) ?? [:]
             requiredChecksCache = try container
                 .decodeIfPresent([String: [String]].self, forKey: .requiredChecksCache) ?? [:]
@@ -332,7 +325,6 @@ public struct AppMetadata: Codable, Equatable, Sendable {
         var etags: [String: String] = [:]
         var pendingChecks: [String: String] = [:]
         var pendingSince: [String: Date] = [:]
-        var terminalSchemes: [String: String] = [:]
         var gitFetchedAt: [String: Date] = [:]
         var requiredChecksCache: [String: [String]] = [:]
         var labelsCache: [String: [String]] = [:]
@@ -377,7 +369,6 @@ public struct AppMetadata: Codable, Equatable, Sendable {
         pendingChecks = ledgers.pendingChecks
         gitFetchedAt = ledgers.gitFetchedAt
         pendingSince = ledgers.pendingSince
-        terminalSchemes = ledgers.terminalSchemes
         requiredChecksCache = ledgers.requiredChecksCache
         labelsCache = ledgers.labelsCache
         stackFacts = ledgers.stackFacts
