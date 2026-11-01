@@ -56,7 +56,7 @@ public extension SessionService {
                 : "No current feedback to copy. Run Review first.")
         }
 
-        let prompt = try await github.autofixPrompt(
+        let prompt = await github.autofixPrompt(
             candidate, summary: read.summary, repositoryPath: initial.repositoryPath,
         )
         let checked = try await readFeedback(initial, fresh: true)
@@ -119,7 +119,7 @@ public extension SessionService {
             }
         state.feedbackWorktreePath = worktree?.path
         state.autofixLocalReviews = state.autofixLocalReviews && worktree != nil
-        state.autofixCI = state.autofixCI && matches && summary.autofixChecks?.isComplete == true
+        state.autofixCI = state.autofixCI && matches
         state.autofixReviews = state.autofixReviews && matches
         state.autofixBots = state.autofixBots && matches
         var driver = automationDriver(groups: [])

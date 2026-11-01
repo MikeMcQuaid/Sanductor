@@ -15,7 +15,7 @@ struct AutofixCoordinatorTests {
     }
 
     @Test
-    func `one batch waits for the existing turn and persists before delivery`() async throws {
+    func `one batch joins the existing turn and persists before delivery`() async throws {
         let fixture = try AutofixFixture()
         fixture.store.update { $0.pullRequestAutomation[AutofixFixture.key]?.isAutomatic = true }
         let store = fixture.store
@@ -24,7 +24,7 @@ struct AutofixCoordinatorTests {
         let driver = await fixture.driver()
         await fixture.update { $0.activity = .working }
         await coordinator.refresh(store: store, driver: driver)
-        #expect(await fixture.state.deliveries.isEmpty)
+        #expect(await fixture.state.deliveries.count == 1)
         await fixture.update { $0.activity = .done }
         await coordinator.refresh(store: store, driver: driver)
         #expect(await fixture.state.deliveries.count == 1)
@@ -44,13 +44,13 @@ struct AutofixCoordinatorTests {
     }
 
     @Test(arguments: [AgentActivity.blocked, .working])
-    func `busy agents do not receive prompts`(activity: AgentActivity) async throws {
+    func `working agents accept feedback but blocked agents wait`(activity: AgentActivity) async throws {
         let fixture = try AutofixFixture()
         fixture.store.update { $0.pullRequestAutomation[AutofixFixture.key]?.isAutomatic = true }
         fixture.store.update { $0.pullRequestAutomation[AutofixFixture.key]?.autofixCI = true }
         await fixture.update { $0.activity = activity }
         await AutofixCoordinator().refresh(store: fixture.store, driver: fixture.driver())
-        #expect(await fixture.state.deliveries.isEmpty)
+        #expect(await fixture.state.deliveries.count == (activity == .working ? 1 : 0))
     }
 
     @Test

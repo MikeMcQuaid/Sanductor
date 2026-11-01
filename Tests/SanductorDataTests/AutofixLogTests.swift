@@ -17,8 +17,8 @@ struct AutofixLogTests {
         let summary = summary()
         var state = PullRequestAutomation(repositoryPath: "/repo", number: 1, url: summary.url)
         state.autofixCI = true
-        let candidate = try #require(AutofixCandidate.checks(summary: summary, state: state))
-        let prompt = try await GitHubClient(runner: runner).autofixPrompt(
+        let candidate = try #require(AutofixCandidate.checks(summary: summary, state: state, includeOptional: true))
+        let prompt = await GitHubClient(runner: runner).autofixPrompt(
             candidate, summary: summary, repositoryPath: "/repo",
         )
         #expect(prompt.contains("Sources/A.swift:1:1: error: Unused import"))
@@ -46,8 +46,8 @@ struct AutofixLogTests {
         let summary = summary()
         var state = PullRequestAutomation(repositoryPath: "/repo", number: 1, url: summary.url)
         state.autofixCI = true
-        let candidate = try #require(AutofixCandidate.checks(summary: summary, state: state))
-        let prompt = try await GitHubClient(runner: runner).autofixPrompt(
+        let candidate = try #require(AutofixCandidate.checks(summary: summary, state: state, includeOptional: true))
+        let prompt = await GitHubClient(runner: runner).autofixPrompt(
             candidate, summary: summary, repositoryPath: "/repo",
         )
         #expect(prompt.contains(log))
@@ -64,8 +64,8 @@ struct AutofixLogTests {
         let summary = summary(requiredJobs: 10)
         var state = PullRequestAutomation(repositoryPath: "/repo", number: 1, url: summary.url)
         state.autofixCI = true
-        let candidate = try #require(AutofixCandidate.checks(summary: summary, state: state))
-        let prompt = try await GitHubClient(runner: runner).autofixPrompt(
+        let candidate = try #require(AutofixCandidate.checks(summary: summary, state: state, includeOptional: true))
+        let prompt = await GitHubClient(runner: runner).autofixPrompt(
             candidate, summary: summary, repositoryPath: "/repo",
         )
         #expect(prompt.contains(log))

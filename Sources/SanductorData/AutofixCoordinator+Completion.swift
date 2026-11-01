@@ -57,6 +57,19 @@ extension AutofixCoordinator {
         let store = context.store
         let driver = context.driver
         try markLocalAddressed(attempt, result: result, context: context)
+        try store.updatePersisting { metadata in
+            guard metadata.pullRequestAutomation[key]?.attempt?.id == attempt.id else {
+                return
+            }
+
+            for (id, mark) in attempt.threads where result.addressedThreadIDs.contains(id) == false {
+                if let pending = metadata.pullRequestAutomation[key]?.resolutions[id],
+                   pending.autofixAttemptID != nil, pending.commentID == mark.commentID
+                {
+                    metadata.pullRequestAutomation[key]?.resolutions[id] = nil
+                }
+            }
+        }
         guard result.addressedThreadIDs.subtracting(attempt.localThreadIDs).isEmpty == false else {
             return true
         }
@@ -78,8 +91,8 @@ extension AutofixCoordinator {
             }
 
             for id in result.addressedThreadIDs {
-                guard metadata.pullRequestAutomation[key]?.resolutions[id] == nil,
-                      let mark = attempt.threads[id],
+                guard let mark = attempt.threads[id],
+                      metadata.pullRequestAutomation[key]?.resolutions[id]?.commentID == mark.commentID,
                       let thread = threads.first(where: { $0.resolveID == id }),
                       thread.isResolved == false, thread.comments.last?.id == mark.commentID
                 else {

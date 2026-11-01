@@ -1,3 +1,4 @@
+import Foundation
 @testable import SanductorData
 import Testing
 
@@ -26,16 +27,17 @@ struct AgentRunnerTests {
     }
 
     @Test
-    func `launch commands embed the prompt file shell-quoted`() {
-        let command = ClaudeCodeRunner().launchCommand(
-            extraArguments: "--model fable",
-            promptFile: "/tmp/it's a prompt.md",
+    func `launch consumes a quoted prompt exactly and deletes its temporary file`() async throws {
+        let directory = try TestSupport.temporaryDirectory("launch-prompt")
+        let file = directory + "/it's a prompt.md"
+        let prompt = "Literal $(printf bad) and `printf bad`\nSecond line"
+        try prompt.write(toFile: file, atomically: true, encoding: .utf8)
+        let command = CodexRunner().command("printf '%s\\n'", "", promptFile: file)
+        let result = try await FoundationProcessRunner().run(
+            ["/bin/zsh", "-c", "rm() { printf noisy; }; " + command], workingDirectory: directory, environment: [:],
         )
-        // The single quotes close, escape the apostrophe and reopen,
-        // so a quote in the path cannot break out of the quoting;
-        // `--` keeps a prompt that opens with a dash from being read
-        // as an option.
-        #expect(command.hasSuffix("claude --model fable -- \"$(cat '/tmp/it'\\''s a prompt.md')\""))
+        #expect(result.standardOutput == "--\n" + prompt + "\n")
+        #expect(FileManager.default.fileExists(atPath: file) == false)
     }
 
     @Test

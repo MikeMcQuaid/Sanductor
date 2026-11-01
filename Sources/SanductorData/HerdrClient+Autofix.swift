@@ -2,10 +2,10 @@ import SanductorDomain
 
 extension HerdrClient {
     /// Pins the pane and checks the live agent immediately before submitting.
-    func sendAutofix(_ text: String, sessionName: String, paneID: String) async throws {
+    func sendAutofix(_ text: String, sessionName: String, paneID: String, allowWorking: Bool = false) async throws {
         guard let row = try await snapshotRows().first(where: { $0.paneID == paneID }),
               row.sessionName == sessionName, row.agent != nil,
-              row.activity == .done || row.activity == .idle
+              row.activity == .done || row.activity == .idle || (allowWorking && row.activity == .working)
         else {
             throw SessionServiceError("The autofix target is no longer a ready, running agent")
         }

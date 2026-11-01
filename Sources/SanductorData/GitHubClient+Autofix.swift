@@ -2,12 +2,12 @@ import Foundation
 import SanductorDomain
 
 extension GitHubClient {
-    /// Complete logs for every failed job, including optional checks.
+    /// Available complete logs for the selected failed jobs.
     func autofixPrompt(
         _ candidate: AutofixCandidate,
         summary: PullRequestSummary,
         repositoryPath: String,
-    ) async throws -> String {
+    ) async -> String {
         guard candidate.sources.contains(.checks) else {
             return candidate.text
         }
@@ -33,7 +33,8 @@ extension GitHubClient {
                 steps: nil,
             )
             guard let log = await jobLog(job, repositoryPath: repositoryPath, complete: true) else {
-                throw SessionServiceError("Waiting for the job log: " + failure.name)
+                sections.append("CI · " + failure.name + ": job log not available yet.")
+                continue
             }
 
             sections.append("CI · " + failure.name + "\n" + log)

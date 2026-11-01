@@ -1,12 +1,26 @@
 import AppKit
 import SanductorData
 import SanductorDomain
+import TerminalUI
 
-/// Copying the head and tail of every failing Actions run's log,
-/// the raw material a fix prompt needs, condensed so no token is
-/// spent on what `gh` repeats per line. Split from the actions for
-/// length.
+/// Copies complete failed-job diagnostics through the shared paste-size limit.
 extension PullRequestsModel {
+    func includesOptionalLogs(for summary: PullRequestSummary) -> Bool {
+        _ = checkCopyGeneration
+        return store.load().includeOptionalCheckLogs[AppMetadata.threadsKey(
+            repositoryPath: repository.path, number: summary.number,
+        )] ?? false
+    }
+
+    func setIncludesOptionalLogs(_ include: Bool, for summary: PullRequestSummary) {
+        store.update { metadata in
+            metadata.includeOptionalCheckLogs[AppMetadata.threadsKey(
+                repositoryPath: repository.path, number: summary.number,
+            )] = include
+        }
+        checkCopyGeneration += 1
+    }
+
     /// The Actions run ids among a pull request's failing checks,
     /// each once, in order; checks from elsewhere have no log here.
     static func runIDs(in links: [String]) -> [Int] {
@@ -22,26 +36,45 @@ extension PullRequestsModel {
         .filter { seen.insert($0).inserted }
     }
 
-    static func copyableFailingChecks(in summary: PullRequestSummary) -> [PullRequestCheck] {
-        (summary.checkDetails ?? []).filter { $0.canReadLog && summary.failingCheckLinks.contains($0.link) }
+    static func copyableFailingChecks(
+        in summary: PullRequestSummary, includeOptional: Bool = false,
+    ) -> [PullRequestCheck] {
+        (summary.checkDetails ?? []).filter { check in
+            check.canReadLog && (includeOptional
+                ? ["FAILURE", "ERROR", "TIMED_OUT", "STARTUP_FAILURE", "ACTION_REQUIRED", "CANCELLED"]
+                .contains(check.conclusion)
+                : summary.failingCheckLinks.contains(check.link))
+        }
     }
 
-    /// Every failing run's condensed log under a heading naming the
-    /// run and, when it has only one job and step, those too.
+    /// Every selected failing job's complete log under its heading.
     func failingLogs(for summary: PullRequestSummary) async throws -> String {
         if summary.checkDetails != nil {
             var logs = [String]()
             var unreadable: any Error?
-            for check in Self.copyableFailingChecks(in: summary) {
+            for check in Self.copyableFailingChecks(in: summary, includeOptional: includesOptionalLogs(for: summary)) {
                 guard let jobID = check.jobID else {
                     continue
                 }
 
                 do {
-                    try await logs.append(CheckLog.format(log: fetchCheckLog(jobID), heading: check.name))
+                    try await logs.append("## " + check.name + "\n" + fetchCheckLog(jobID))
                 } catch {
-                    unreadable = unreadable ?? error
+                    if check.conclusion != "CANCELLED" || error is GitHubClient.JobLogUnavailable == false {
+                        unreadable = unreadable ?? error
+                    }
                 }
+            }
+            let selected = (summary.checkDetails ?? []).filter { check in
+                includesOptionalLogs(for: summary) || summary.failingCheckLinks.contains(check.link)
+            }
+            if logs.isEmpty, unreadable == nil, selected.isEmpty == false,
+               selected.allSatisfy({ check in
+                   check.isComplete && ["CANCELLED", "SKIPPED", "SUCCESS", "NEUTRAL"].contains(check.conclusion)
+               }),
+               selected.contains(where: { ["CANCELLED", "SKIPPED"].contains($0.conclusion) })
+            {
+                return "Cancelled or skipped checks produced no logs."
             }
             guard logs.isEmpty == false else {
                 throw unreadable ?? GitHubClient.RunLogsUnavailable(
@@ -66,7 +99,7 @@ extension PullRequestsModel {
                 continue
             }
 
-            runs.append(CheckLog.format(log: log, heading: "Run " + String(runID)))
+            runs.append("## Run " + String(runID) + "\n" + log)
         }
         guard runs.isEmpty == false else {
             throw unreadable ?? GitHubClient.RunLogsUnavailable(failedJobs: 0)
@@ -80,7 +113,9 @@ extension PullRequestsModel {
     /// not Actions runs has nothing to copy.
     func copyFailingLogs(_ summary: PullRequestSummary, pasteboard: NSPasteboard = .general) async -> Bool {
         pasteboard.clearContents()
-        let runs = Self.runIDs(in: summary.failingCheckLinks)
+        let links = includesOptionalLogs(for: summary)
+            ? (summary.checkDetails ?? []).map(\.link) : summary.failingCheckLinks
+        let runs = Self.runIDs(in: links)
         guard runs.isEmpty == false else {
             report("None of #" + String(summary.number) + "'s failing checks is an Actions run; open them instead.")
             return false
@@ -88,7 +123,10 @@ extension PullRequestsModel {
 
         do {
             let text = try await failingLogs(for: summary)
-            pasteboard.setString(text, forType: .string)
+            guard PromptClipboard.copy(text, to: pasteboard, prepare: preparePrompt) else {
+                return false
+            }
+
             note("Copied the available failing check logs from #" + String(summary.number) + ".")
             return true
         } catch let error as GitHubClient.RunLogsUnavailable {

@@ -114,7 +114,8 @@ struct SessionServiceIntegrationTests {
             let received = try? String(contentsOfFile: worktreePath + "/agent-prompt.txt", encoding: .utf8)
             return received == prompt
         }
-        #expect(delivered)
+        #expect(delivered, Comment(rawValue:
+            (try? String(contentsOfFile: worktreePath + "/agent-prompt.txt", encoding: .utf8)) ?? "No prompt file"))
         let arguments = try String(contentsOfFile: worktreePath + "/agent-arguments.txt", encoding: .utf8)
         #expect(arguments == "--model fable --effort max")
 

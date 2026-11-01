@@ -1,6 +1,6 @@
-import AppKit
 import SanductorInterface
 import SwiftUI
+import TerminalUI
 
 struct LocalReviewPromptView: View {
     // MARK: Internal
@@ -23,9 +23,9 @@ struct LocalReviewPromptView: View {
                     .keyboardShortcut(.cancelAction)
                 Spacer()
                 Button("Copy prompt") {
-                    NSPasteboard.general.clearContents()
-                    NSPasteboard.general.setString(model.prompt, forType: .string)
-                    dismiss()
+                    if PromptClipboard.copy(model.prompt) {
+                        dismiss()
+                    }
                 }
                 .buttonStyle(.glassProminent)
                 .keyboardShortcut(.return, modifiers: .command)

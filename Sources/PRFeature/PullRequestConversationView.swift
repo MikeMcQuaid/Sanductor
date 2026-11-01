@@ -245,6 +245,14 @@ struct PullRequestConversationView: View {
             Spacer()
             if showsChecks {
                 PullRequestCheckFilterView(filter: $checkFilter)
+                Toggle("Optional Checks", isOn: Binding(
+                    get: { model.includesOptionalLogs(for: summary) },
+                    set: { model.setIncludesOptionalLogs($0, for: summary) },
+                ))
+                .toggleStyle(.button)
+                .buttonStyle(.glass)
+                .controlSize(.small)
+                .hoverHelp("Include optional failures in copied logs and Autofix for this pull request")
             } else {
                 CopyReviewConversationsButton(threads: threads + (localReview?.threads ?? []))
             }

@@ -57,7 +57,7 @@ struct AutofixRecoveryTests {
     }
 
     @Test(arguments: ["review", "ci"])
-    func `the last delivery snapshot must still have completed feedback`(change: String) async throws {
+    func `new pending work does not invalidate captured ready feedback`(change: String) async throws {
         let fixture = try AutofixFixture()
         fixture.store.update { metadata in
             metadata.pullRequestAutomation[AutofixFixture.key]?.autofixCI = true
@@ -78,7 +78,7 @@ struct AutofixRecoveryTests {
             return []
         }
         await AutofixCoordinator().refresh(store: fixture.store, driver: driver)
-        #expect(await fixture.state.deliveries.isEmpty)
+        #expect(await fixture.state.deliveries.count == 1)
     }
 
     @Test(arguments: [true, false])
@@ -105,7 +105,7 @@ struct AutofixRecoveryTests {
     }
 
     @Test
-    func `newly pending bot feedback cannot fall back to committing dirty work`() async throws {
+    func `pending bot feedback allows existing dirty work to be committed`() async throws {
         let fixture = try AutofixFixture()
         fixture.store.update { metadata in
             metadata.pullRequestAutomation[AutofixFixture.key]?.autofixBots = true
@@ -118,7 +118,7 @@ struct AutofixRecoveryTests {
             return candidate.text
         }
         await AutofixCoordinator().refresh(store: fixture.store, driver: driver)
-        #expect(await fixture.state.deliveries.isEmpty)
+        #expect(await fixture.state.deliveries.first?.sources == [.existingWork])
     }
 
     @Test

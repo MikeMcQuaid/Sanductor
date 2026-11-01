@@ -35,6 +35,7 @@ actor AutofixFixture {
         var containsRemoteHead = true
         var checksComplete = true
         var optionalComplete = true
+        var optionalConclusion = "SUCCESS"
         var checkConclusion = "FAILURE"
         var comments: [ReviewThread] = []
         // Nil reuses the initial snapshot; empty explicitly removes its comments.
@@ -177,7 +178,7 @@ actor AutofixFixture {
                 AutofixCheck(
                     name: "optional",
                     status: state.optionalComplete ? "COMPLETED" : "IN_PROGRESS",
-                    conclusion: state.optionalComplete ? "SUCCESS" : "",
+                    conclusion: state.optionalComplete ? state.optionalConclusion : "",
                     runID: "run:2",
                     link: "optional",
                 ),
@@ -232,7 +233,9 @@ actor AutofixFixture {
         if state.isDirty, target.allowsUncommitted == false {
             return "Waiting for a clean worktree before accepting the fix"
         }
-        if state.localHead == head, [.done, .idle].contains(state.activity), state.hasSession {
+        if state.localHead == head, state.hasSession,
+           [.done, .idle].contains(state.activity) || (target.allowsWorking && state.activity == .working)
+        {
             return nil
         }
         return "Your agent is working on something else. Autofix will wait until it finishes."

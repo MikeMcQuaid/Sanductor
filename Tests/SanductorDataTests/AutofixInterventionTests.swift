@@ -72,7 +72,7 @@ struct AutofixInterventionTests {
     }
 
     @Test(arguments: [false, true])
-    func `manual changes between rounds are checked before gathering feedback`(
+    func `remote feedback can join manual changes without discarding them`(
         dirty: Bool,
     ) async throws {
         let fixture = try AutofixFixture()
@@ -83,7 +83,7 @@ struct AutofixInterventionTests {
         }
         await fixture.update { $0.localHead = dirty ? "head" : "manual-commit"; $0.isDirty = dirty }
         await AutofixCoordinator().refresh(store: fixture.store, driver: fixture.driver())
-        #expect(fixture.store.load().pullRequestAutomation[AutofixFixture.key]?.isPreparingExistingWork
-            == dirty)
+        #expect(await fixture.state.deliveries.count == 1)
+        #expect(await fixture.state.isDirty == dirty)
     }
 }
