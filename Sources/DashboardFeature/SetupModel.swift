@@ -54,7 +54,7 @@ public final class SetupModel {
         }
     }
 
-    /// Dismissal and Skip both keep the tour from appearing on later launches.
+    /// Dismissing or completing the tour keeps it from appearing again.
     public func finishTutorial() {
         tutorialStep = nil
         defaults.set(false, forKey: Self.tutorialKey)

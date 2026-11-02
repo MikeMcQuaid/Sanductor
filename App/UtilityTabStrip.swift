@@ -1,3 +1,4 @@
+import Foundation
 import SwiftUI
 import TerminalUI
 
@@ -44,7 +45,7 @@ struct UtilityTabStrip: View {
                 .padding(.vertical, TabCapsule.verticalPadding)
                 .contentShape(Rectangle())
         }
-        .hoverHelp("Open another shell in this worktree", shortcut: "⇧⌘T")
+        .hoverHelp("Open another shell as \(NSUserName()) in this worktree", shortcut: "⇧⌘T")
         if let onCloseShells, utilityTab == UtilityTab.shell.rawValue {
             Button(action: onCloseShells) {
                 Image(systemName: "xmark")

@@ -33,7 +33,7 @@ extension SessionNavigationTests {
         ]
         await fixture.model.performBatch(.cleanUp, items: [dirty, unmerged])
         let commands = await runner.commands
-        #expect(commands.count == 3)
+        #expect(commands.count == 4)
         #expect(commands.filter { $0.arguments.contains("status") }.map(\.path) == [dirty.id, unmerged.id])
         #expect(commands.last?.arguments.contains("merge-base") == true)
         #expect(commands.contains { $0.arguments.contains("remove") || $0.arguments.contains("--force") } == false)
@@ -60,6 +60,9 @@ private actor BatchRunner: ProcessRunner {
                 standardOutput: workingDirectory?.hasSuffix("/dirty") == true ? "? file\u{0}" : "",
                 standardError: "",
             )
+        }
+        if arguments.contains("rev-parse") {
+            return ProcessResult(status: 0, standardOutput: "tip\n", standardError: "")
         }
         return ProcessResult(status: 1, standardOutput: "", standardError: "Unavailable")
     }

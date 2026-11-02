@@ -1,3 +1,4 @@
+import Foundation
 import SanductorDomain
 import SwiftUI
 import TerminalUI
@@ -182,7 +183,7 @@ struct WorktreeRowView: View {
             // Sized and coloured as the branch and state icons are,
             // so every row's text starts at the same place.
             Octicon("laptopcomputer", colour: .green)
-                .hoverHelp("On your Mac, outside the sandbox")
+                .hoverHelp("On your Mac as \(NSUserName()), outside the sandbox")
         } else if let failure {
             Octicon("exclamationmark.triangle.fill", colour: .red)
                 .hoverHelp("The agent did not start: " + failure.message)

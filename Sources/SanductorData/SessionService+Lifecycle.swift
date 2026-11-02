@@ -187,7 +187,11 @@ public extension SessionService {
     /// branch lacks, so nothing this path does can lose work; the
     /// force delete is a separate, confirmed action. Returns the
     /// refusal, nil when the worktree was removed.
-    func cleanUpMergedWorktree(item: WorktreeItem, baseRef: String) async throws -> CleanupRefusal? {
+    func cleanUpMergedWorktree(
+        item: WorktreeItem,
+        baseRef: String,
+        reportFailure: @Sendable (String) async -> Void = { PerformanceLog.recordMessage($0, isError: true) },
+    ) async throws -> CleanupRefusal? {
         // A merged worktree is about to go; its conversation copy is
         // dropped only once the removal itself succeeds, below.
         let backup = ConversationBackup(paths: paths)
@@ -195,27 +199,33 @@ public extension SessionService {
         guard await git.isDirty(worktreePath: worktree.path) == false else {
             return .dirty
         }
-        guard await git.isMerged(worktreePath: worktree.path, branch: worktree.branch, into: baseRef) else {
+        guard let tip = await git.tip(of: "refs/heads/" + worktree.branch, worktreePath: worktree.path),
+              await git.isMerged(worktreePath: worktree.path, branch: tip, into: baseRef)
+        else {
             return .unmerged
         }
 
-        // Merge-safe git as well as merge-safe checks: `git worktree
-        // remove` without `--force` and `git branch -d` refuse dirty
-        // or unmerged work themselves, so a wrong or raced check
-        // above cannot destroy anything.
         let repository = Repository(name: worktree.repositoryName, path: worktree.repositoryPath)
         let sessionName = item.session?.name
             ?? SessionName.make(repository: worktree.repositoryName, branch: worktree.branch, agent: .claudeCode)
         rememberResumeID(sessionName: sessionName, worktreePath: worktree.path)
         await killSession(name: sessionName)
-        try await git.removeMergedWorktree(
-            repository: repository,
-            worktreePath: worktree.path,
-            branch: worktree.branch,
-        )
+        try await git.removeMergedWorktree(repository: repository, worktreePath: worktree.path)
         removeFriendlySymlink(worktree: worktree)
         backup.forget(worktree: worktree)
-        try await git.removeUnusedForkRemotes(repositoryPath: repository.path)
+        do {
+            let cleanup = try await git.deleteMergedBranches(worktreePath: repository.path, into: baseRef)
+            for failure in cleanup.failures {
+                await reportFailure(failure)
+            }
+        } catch {
+            await reportFailure("Deleting merged branches failed: " + error.localizedDescription)
+        }
+        do {
+            try await git.removeUnusedForkRemotes(repositoryPath: repository.path)
+        } catch {
+            await reportFailure("Removing unused fork remotes failed: " + error.localizedDescription)
+        }
         return nil
     }
 

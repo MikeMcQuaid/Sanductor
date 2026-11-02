@@ -208,30 +208,36 @@ extension RootView {
                 parkedUtilityToggle
             }
             .padding(Self.stripSpacing)
-            .hoverHelp("A directory of your own: this shell runs as you, and no agent runs here")
+            .hoverHelp("A directory of your own: this shell runs as \(NSUserName()), and no agent runs here")
             Divider()
         } else if let session = item.session {
-            // The agent's mark at the left (colour while connected,
-            // greyscale once ended), the herdr workspace name
-            // centred, the close button at the pane's far edge;
-            // each part explains itself on hover.
-            ZStack {
-                HStack(spacing: Self.stripSpacing) {
-                    agentMark(for: session)
-                        .padding(.leading, Self.tabHorizontalPadding)
-                    stateGlyph(for: session)
-                    Spacer(minLength: 0)
-                    closeSessionButton(session, in: item)
-                        .padding(.trailing, Self.tabHorizontalPadding)
-                    parkedUtilityToggle
-                }
+            HStack(spacing: Self.stripSpacing) {
+                agentMark(for: session)
+                    .padding(.leading, Self.tabHorizontalPadding)
+                stateGlyph(for: session)
                 Text(session.name)
                     // Monospaced: it is the workspace label herdr
                     // shows, matched by eye against terminal output.
                     .interfaceFont(.callout, monospaced: true)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                    .frame(maxWidth: .infinity)
                     .padding(.vertical, Self.tabVerticalPadding)
                     .hoverHelp("The herdr workspace name; `script/attach " + session.name
                         + "` joins this session from a terminal")
+                HStack(spacing: Self.stripSpacing) {
+                    Text("running as")
+                    Text(dependencies.service.sandboxUser)
+                        .interfaceFont(.caption, monospaced: true)
+                }
+                .interfaceFont(.caption)
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+                .layoutPriority(1)
+                .accessibilityElement(children: .combine)
+                closeSessionButton(session, in: item)
+                    .padding(.trailing, Self.tabHorizontalPadding)
+                parkedUtilityToggle
             }
             .padding(Self.stripSpacing)
             // The strip's own Reattach: the pane's menu offers it too,

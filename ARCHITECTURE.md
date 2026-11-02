@@ -129,7 +129,11 @@ while they finish, never the checks screen.
 Completed setups use their saved pass immediately, without waiting for
 subprocesses or network access before opening the workspace.
 New users see three native popovers anchored to the repository, agent and
-tools panes, explaining their roles and the host/sandbox trust boundary.
+tools panes, naming the host and sandbox accounts and explaining their
+roles and the host/sandbox trust boundary.
+Usernames and paths use monospaced interface text within ordinary prose.
+Each step has one button: Next on the first two, Get started on the last.
+Escape or clicking outside dismisses the tour.
 A pending marker is saved only when first-time setup succeeds, so existing
 users skip the tour and an interrupted tour resumes on relaunch. Dismissing
 or finishing it clears the marker. `script/tutorial [app-path]` sets only
@@ -278,6 +282,16 @@ build.
   herdr that really has gone still shows as gone.
 
 ### Terminals
+
+The centre pane's session row shows "running as" and the monospaced
+sandbox username on the right beside Close, including when an agent
+exits to its shell prompt. The session name truncates rather than
+overlapping the account or controls as the pane narrows.
+The identity comes from `SessionService`'s existing `SandvaultLauncher`,
+without spawning a process or reading files during rendering.
+Shell and host-directory tooltips name the local process's macOS user
+through `NSUserName()`, matching the account their local PTYs inherit.
+Tooltips keep AppKit's native plain-text presentation.
 
 Agent panes attach to herdr as terminal controllers (`herdr terminal
 session control <pane> --takeover`, newline-delimited JSON over pipes)
@@ -2011,11 +2025,23 @@ steps.
   job's id, from `--json url,jobs`).
 - **Cleanup after merge** runs from the context menu and the poll
   (only on an observed open-to-merged transition, never a
-  missing pull request) through one path: `git branch -d` refuses
-  unmerged, a dirty worktree is refused, the main checkout is brought
-  level with origin (reset when it carries nothing local, signed rebase
-  when it does) and every merged branch deleted. Only Delete worktree
-  forces, after a dialog naming what is lost. A repository is deleted
+  missing pull request) through one path: dirty worktrees and branches
+  with commits absent from the base are refused. The main checkout is
+  brought level with origin (reset when it carries nothing local,
+  signed rebase when it does). Each cleanup also sweeps merged local
+  branches, excluding `main`, `master`, `trunk`, the base and branches
+  checked out in any worktree. Conditional `git update-ref -d` deletes
+  only the verified tip, so concurrent commits survive and stale
+  upstream refs cannot block deletion. Worktree ownership and ancestry
+  against the current base are rechecked before deletion. Deletion and
+  branch configuration removal share the repository's remote-operation
+  queue with fork adoption and worktree creation. Changed tips and held
+  branches are skipped silently; ref and config write failures are
+  reported. External Git commands can still race the final checks.
+  Optional branch and remote cleanup failures are reported separately
+  and do not undo a successful worktree removal or its sidebar refresh.
+  Only Delete worktree discards unmerged work, after a dialog naming
+  what is lost. A repository is deleted
   from its header's context menu only when
   `RepositoryGroup.deletionBlocker` names nothing: no extra worktrees,
   running agent, uncommitted files or commits absent from origin's

@@ -69,6 +69,38 @@ struct ForkRemoteConcurrencyTests {
         try await git.removeUnusedForkRemotes(repositoryPath: path)
         #expect(await git.remoteURL(named: "contributor", worktreePath: path) == nil)
     }
+
+    @Test
+    func `branch recreation waits until deletion has removed old configuration`() async throws {
+        let root = try TestSupport.temporaryDirectory("branch-config-race")
+        defer { try? FileManager.default.removeItem(atPath: root) }
+        let path = root + "/repo"
+        let linked = root + "/linked"
+        try await TestSupport.makeRepository(at: path)
+        try await TestSupport.runGit(["worktree", "add", "-b", "held", linked, "main"], in: path)
+        try await TestSupport.runGit(["branch", "topic", "main"], in: path)
+        try await TestSupport.runGit(["config", "branch.topic.pushremote", "old"], in: path)
+        let paused = PausedRemoteRunner(adoptionDelay: .zero, pauseDeletion: true)
+        let git = GitClient(runner: FoundationProcessRunner())
+        let cleanup = Task {
+            try await GitClient(runner: paused).deleteMergedBranches(worktreePath: path, into: "main")
+        }
+        #expect(await TestSupport.poll { await paused.isPaused })
+        let recreation = Task {
+            try await git.withRemoteOperation(worktreePath: linked) {
+                try await TestSupport.runGit(["branch", "topic", "main"], in: linked)
+                try await TestSupport.runGit(["config", "branch.topic.pushremote", "new"], in: linked)
+            }
+        }
+        let overlapped = await TestSupport.poll(timeout: 1) {
+            await git.refExists(worktreePath: path, ref: "refs/heads/topic")
+        }
+        #expect(overlapped == false)
+        await paused.resume()
+        _ = try await cleanup.value
+        try await recreation.value
+        #expect(try await TestSupport.runGit(["config", "branch.topic.pushremote"], in: path).standardOutput == "new\n")
+    }
 }
 
 // MARK: - PausedRemoteRunner
@@ -76,8 +108,9 @@ struct ForkRemoteConcurrencyTests {
 private actor PausedRemoteRunner: ProcessRunner {
     // MARK: Lifecycle
 
-    init(adoptionDelay: Duration) {
+    init(adoptionDelay: Duration, pauseDeletion: Bool = false) {
         self.adoptionDelay = adoptionDelay
+        self.pauseDeletion = pauseDeletion
     }
 
     // MARK: Internal
@@ -97,7 +130,10 @@ private actor PausedRemoteRunner: ProcessRunner {
         let result = try await FoundationProcessRunner().run(
             arguments, workingDirectory: workingDirectory, environment: environment, outputLimit: outputLimit,
         )
-        if arguments.last == #"^(branch\..*\.(remote|pushremote)|remote\.pushdefault)$"# {
+        if pauseDeletion
+            ? arguments.contains("update-ref") && arguments.contains("-d")
+            : arguments.last == #"^(branch\..*\.(remote|pushremote)|remote\.pushdefault)$"#
+        {
             await withCheckedContinuation { continuation = $0 }
         }
         if arguments.contains(where: { $0.hasSuffix(".pushremote") }), arguments.last == "contributor",
@@ -120,4 +156,5 @@ private actor PausedRemoteRunner: ProcessRunner {
 
     private var continuation: CheckedContinuation<Void, Never>?
     private let adoptionDelay: Duration
+    private let pauseDeletion: Bool
 }
