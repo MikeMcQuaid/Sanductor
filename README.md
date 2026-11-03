@@ -108,7 +108,7 @@ For iOS 26+, run `script/bootstrap` and `script/install` in a source checkout an
    ```
 
 3. Enter your Mac's address and username; `sandvault-` is added.
-   Use port `22` on your local network or VPN; for public internet access, use a different port and key-only authentication.
+   Use port `22` locally or via VPN; for public access, forward another external router port to Mac port `22` with key-only authentication.
    Select `sanductor` (installed app) or `sanductor-dev` (development).
    Choose **Connect** and verify the host key against `ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub` on your Mac.
    A changed key must be explicitly replaced in Settings.
