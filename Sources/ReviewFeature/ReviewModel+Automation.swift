@@ -7,12 +7,39 @@ extension ReviewModel {
     /// refreshes the inline listing.
     func toggleResolved(_ thread: ReviewThread) async {
         do {
-            try await setThreadResolved(thread.resolveID, thread.isResolved == false)
-            threads = await fetchThreads()
+            let number = threadPullRequestNumber
+            try await setThreadResolved(thread, thread.isResolved == false, number)
+            if thread.outsideDiffReviewID != nil {
+                if threadPullRequestNumber == number, let index = threads.firstIndex(where: { $0.id == thread.id }) {
+                    threads[index].isResolved = thread.isResolved == false
+                }
+                UtilityTabTarget.resolutionMarksChanged()
+            } else {
+                await reloadThreads()
+            }
         } catch {
             report(error.localizedDescription)
         }
         hasLoaded = true
+    }
+
+    func reloadThreads() async {
+        let loaded = await fetchThreads()
+        guard Task.isCancelled == false else {
+            return
+        }
+
+        (threadPullRequestNumber, threads) = loaded
+    }
+
+    func reapplyOutsideDiffResolutions(pullRequests: PullRequestStore, repositoryPath: String) {
+        guard let number = threadPullRequestNumber else {
+            return
+        }
+
+        threads = pullRequests.applyingOutsideDiffResolutions(
+            to: threads, repositoryPath: repositoryPath, number: number,
+        )
     }
 
     func toggleResolveOnPush(_ thread: ReviewThread) {

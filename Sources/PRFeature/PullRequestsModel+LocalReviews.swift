@@ -37,7 +37,12 @@ extension PullRequestsModel {
     }
 
     func reviewCount(for summary: PullRequestSummary) -> Int {
-        summary.unresolvedComments + (localReview(for: summary)?.review.remaining ?? 0)
+        _ = botAsks
+        let conversation = pullRequests.cachedConversation(repositoryPath: repository.path, number: summary.number)
+        return summary.unresolvedComments + conversation.reviewThreads.count { thread in
+            thread.outsideDiffReviewID != nil && thread.isResolved == false
+        }
+            + (localReview(for: summary)?.review.remaining ?? 0)
     }
 
     func restoreLocalReview(for summary: PullRequestSummary) async {

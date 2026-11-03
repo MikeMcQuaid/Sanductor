@@ -7,6 +7,35 @@ import Testing
 
 extension ReviewModelTests {
     @Test
+    func `outside diff resolution updates the mounted review without fetching threads`() async {
+        var resolved = false
+        let thread = ReviewThread(
+            id: "out", path: "file", line: 1, isResolved: false, comments: [], resolveID: "", outsideDiffReviewID: 7,
+        )
+        let model = ReviewModel(
+            worktreePath: "/worktree",
+            repositoryName: "repo",
+            git: GitClient(runner: ResolutionRunner()),
+            fetchThreads: { Issue.record("Local resolution must not refresh GitHub"); return (nil, []) },
+            setThreadResolved: { finding, value, number in
+                #expect(finding.id == thread.id)
+                #expect(number == 7)
+                resolved = value
+            },
+        )
+        model.threads = [thread]
+        model.threadPullRequestNumber = 7
+        await model.toggleResolved(thread)
+        #expect(resolved)
+        #expect(model.threads.first?.isResolved == true)
+        if let current = model.threads.first {
+            await model.toggleResolved(current)
+        }
+        #expect(resolved == false)
+        #expect(model.threads.first?.isResolved == false)
+    }
+
+    @Test
     func `marking a displayed review updates local state without requesting a GitHub refresh`() {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString).path
         defer { try? FileManager.default.removeItem(atPath: root) }

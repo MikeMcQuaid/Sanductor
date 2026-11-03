@@ -5,6 +5,15 @@ import Testing
 
 /// Exercises the metadata file round trip.
 struct MetadataStoreTests {
+    @Test(arguments: [#""invalid""#, #"{"repo#7":[4]}"#])
+    func `malformed outside diff resolutions preserve other metadata`(_ value: String) throws {
+        let source = "{\"prompts\":{\"session\":\"keep me\"},\"resolvedOutsideDiff\":" + value + "}"
+        let metadata = try JSONDecoder().decode(AppMetadata.self, from: Data(source.utf8))
+        #expect(metadata.prompts["session"] == "keep me")
+        #expect(metadata.resolvedOutsideDiff.isEmpty)
+        #expect(try JSONDecoder().decode(AppMetadata.self, from: JSONEncoder().encode(metadata)) == metadata)
+    }
+
     @Test
     func `round trips every field and tolerates a missing file`() throws {
         let root = try TestSupport.temporaryDirectory("store")

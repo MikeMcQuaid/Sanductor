@@ -24,48 +24,7 @@ public struct ReviewView: View {
         worktreePath = worktree.path
         self.worktree = worktree
         self.service = service
-        let pullRequests = service.pullRequestReads
-        let fetchThreads: () async -> [ReviewThread] = {
-            let branch = await git.currentBranch(worktreePath: worktree.path) ?? worktree.branch
-            let listed = try? await pullRequests.listing(
-                repositoryPath: worktree.repositoryPath,
-                scope: .branch(branch),
-            )
-            guard let number = listed?.first(where: { $0.state == "OPEN" })?.number else {
-                return []
-            }
-
-            let answer = try? await pullRequests.conversation(
-                repositoryPath: worktree.repositoryPath,
-                number: number,
-                seededBody: nil,
-            )
-            if let failure = answer?.graphQLFailure {
-                PerformanceLog.recordMessage(
-                    "Conversations fell back to REST (no resolve buttons): " + failure,
-                    isError: false,
-                )
-            }
-            return answer?.threads ?? []
-        }
-        let setThreadResolved: (String, Bool) async throws -> Void = { threadID, resolved in
-            try await github.setThreadResolved(
-                repositoryPath: worktree.repositoryPath,
-                threadID: threadID,
-                resolved: resolved,
-            )
-        }
-        makeModel = {
-            ReviewModel(
-                worktreePath: worktree.path,
-                repositoryName: worktree.repositoryName,
-                git: git,
-                baseRefProvider: { await service.reviewBase(for: worktree) },
-                draftMessage: { await service.draftCommitMessage(worktreePath: worktree.path) },
-                fetchThreads: fetchThreads,
-                setThreadResolved: setThreadResolved,
-            )
-        }
+        makeModel = { Self.reviewModel(worktree: worktree, git: git, github: github, service: service) }
         _model = State(initialValue: makeModel())
         makeLocalReview = { localReviews.model(worktreePath: worktree.path) }
         _localReview = State(initialValue: makeLocalReview())
@@ -131,10 +90,15 @@ public struct ReviewView: View {
                     localReview.refreshAutomation()
                 }
                 Task { [model] in
-                    model.threads = await model.fetchThreads()
+                    await model.reloadThreads()
                 }
             }
             .onChange(of: model.files) { localReview.update(files: model.files) }
+            .onChange(of: resolutionGeneration) {
+                model.reapplyOutsideDiffResolutions(
+                    pullRequests: service.pullRequestReads, repositoryPath: worktree.repositoryPath,
+                )
+            }
             .onChange(of: localReview.review) {
                 localReview.update(files: model.files)
                 automationGeneration += 1
@@ -172,6 +136,8 @@ public struct ReviewView: View {
     @State private var showsLocalReview = false
     @AppStorage(UtilityTabTarget.pullRequestCacheKey)
     private var automationGeneration = 0
+    @AppStorage(UtilityTabTarget.resolutionMarksKey)
+    private var resolutionGeneration = 0
 
     /// The stack the worktree's branch belongs to, and which entry
     /// of it this pane is showing. A stack of one is every branch

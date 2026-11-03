@@ -32,8 +32,8 @@ extension PullRequestFooterView {
         .buttonStyle(.glass)
         .accessibilityLabel(Self.copyTitle("Reviews", count: count))
         .disabled(count == 0)
-        .hoverHelp("Copy unresolved local AI and GitHub conversations; Cmd-click opens GitHub reviews "
-            + "in your browser, Shift-click in the Browser tab; dimmed while none is unresolved")
+        .hoverHelp("Copy unresolved local AI and GitHub conversations and outside-diff findings; "
+            + "Cmd-click opens GitHub reviews in your browser, Shift-click in the Browser tab")
         let checks = PullRequestsModel.copyableFailingChecks(
             in: selected, includeOptional: model.includesOptionalLogs(for: selected),
         )
@@ -90,6 +90,7 @@ extension PullRequestFooterView {
 
     private func reviewCount(for summary: PullRequestSummary) -> Int {
         _ = reviewGeneration
+        _ = resolutionGeneration
         return model.reviewCount(for: summary)
     }
 

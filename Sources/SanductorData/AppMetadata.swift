@@ -73,6 +73,9 @@ public struct AppMetadata: Codable, Equatable, Sendable {
     /// Local findings and human decisions, inaccessible to sandboxed agents.
     public var localReviews: [String: LocalReview] = [:]
 
+    /// Durable local resolutions, keyed by repository and PR rather than display caches.
+    public var resolvedOutsideDiff: [String: Set<String>] = [:]
+
     /// Feedback preferences, attempt claims and pending thread resolutions.
     public var pullRequestAutomation: [String: PullRequestAutomation] = [:]
 
@@ -316,6 +319,8 @@ public struct AppMetadata: Codable, Equatable, Sendable {
                             .compactMapValues(\.state) ?? [:]
             repositoryFeedbackDefaults = try container
                 .decodeIfPresent([String: RepositoryFeedbackDefaults].self, forKey: .repositoryFeedbackDefaults) ?? [:]
+            resolvedOutsideDiff = (try? container
+                .decodeIfPresent([String: Set<String>].self, forKey: .resolvedOutsideDiff)) ?? [:]
         }
 
         // MARK: Internal
@@ -332,6 +337,7 @@ public struct AppMetadata: Codable, Equatable, Sendable {
         var scheduledPrompts: [ScheduledPrompt] = []
         var pullRequestAutomation: [String: PullRequestAutomation] = [:]
         var repositoryFeedbackDefaults: [String: RepositoryFeedbackDefaults] = [:]
+        var resolvedOutsideDiff: [String: Set<String>] = [:]
     }
 
     private struct AutomationEntry: Decodable {
@@ -375,5 +381,6 @@ public struct AppMetadata: Codable, Equatable, Sendable {
         scheduledPrompts = ledgers.scheduledPrompts
         pullRequestAutomation = ledgers.pullRequestAutomation
         repositoryFeedbackDefaults = ledgers.repositoryFeedbackDefaults
+        resolvedOutsideDiff = ledgers.resolvedOutsideDiff
     }
 }

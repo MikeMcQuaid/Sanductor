@@ -1,10 +1,64 @@
 import AppKit
+import Observation
 @testable import PRFeature
 @testable import SanductorData
 import SanductorDomain
+import Synchronization
 import Testing
 
 extension PullRequestsModelTests {
+    @Test
+    func `reviews copy includes outside diff findings without unresolved GitHub threads`() throws {
+        let model = makeModel()
+        let selected = summary(7, head: "feature")
+        let body = "<details><summary>⚠️ Outside diff range comments (1)</summary>\n\n"
+            + "**src/config.py:42-45**: Validate the configuration.\n\n</details>"
+        model.store.update { metadata in
+            metadata.conversationCache[PullRequestStore.conversationKey(repositoryPath: "/repo", number: 7)] = .init(
+                events: [
+                    ReviewComment(
+                        id: 17, author: "coderabbitai[bot]", body: body, kind: "COMMENTED", authorType: "Bot",
+                    ),
+                ],
+            )
+        }
+        #expect(model.reviewCount(for: selected) == 1)
+        #expect(model.withCachedUnresolved(selected).unresolvedComments == 0)
+        model.copyUnresolvedComments(selected)
+        let copied = NSPasteboard.general.string(forType: .string)
+        #expect(copied?.contains("src/config.py\n:42 coderabbitai[bot]:") == true)
+        #expect(copied?.contains("Validate the configuration.") == true)
+        let finding = try #require(model.pullRequests
+            .cachedConversation(
+                repositoryPath: "/repo", number: 7,
+            )
+            .reviewThreads
+            .first)
+        try model.pullRequests.setOutsideDiffResolved(finding, resolved: true, repositoryPath: "/repo", number: 7)
+        #expect(model.reviewCount(for: selected) == 0)
+        model.copyUnresolvedComments(selected)
+        #expect(NSPasteboard.general.string(forType: .string)?.isEmpty == true)
+        try model.pullRequests.setOutsideDiffResolved(finding, resolved: false, repositoryPath: "/repo", number: 7)
+        let changed = Mutex(false)
+        withObservationTracking {
+            #expect(model.reviewCount(for: selected) == 1)
+        } onChange: {
+            changed.withLock { $0 = true }
+        }
+        model.store.update { metadata in
+            metadata.conversationCache[PullRequestStore.conversationKey(repositoryPath: "/repo", number: 7)] = .init(
+                events: [
+                    ReviewComment(id: 18, author: "coderabbitai[bot]", body: "", kind: "COMMENTED", authorType: "Bot"),
+                ],
+            )
+        }
+        model.botAsks += 1
+        #expect(changed.withLock { $0 })
+        #expect(model.reviewCount(for: selected) == 0)
+        model.copyUnresolvedComments(selected)
+        #expect(NSPasteboard.general.string(forType: .string)?.isEmpty == true)
+    }
+
     @Test
     func `conversation copies include local findings without enabling autofix`() {
         let path = worktreesPath + "/feature"

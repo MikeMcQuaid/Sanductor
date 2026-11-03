@@ -1,6 +1,6 @@
 # 🪪 Sanductor
 
-Sanductor (formerly AgentIDE) is a free, native macOS workspace for running coding agents in parallel, reviewing their work and shipping pull requests.
+Sanductor (formerly AgentIDE) is a free, native macOS workspace for parallel coding agents, reviews and pull requests.
 [sandvault](https://github.com/webcoyote/sandvault) runs all agents under a separate non-admin macOS user with a clean environment, keeping your home directory, GitHub credentials and inherited secrets out of reach even in YOLO mode.
 
 ## 💡 Motivation
@@ -14,7 +14,7 @@ No account, subscription or hosted relay is required.
 ## ✨ Features
 
 - Runs Claude Code or Codex CLI in parallel worktrees, directly on macOS without containers or virtual machines.
-- Reviews diffs with comments and a second agent, Copilot or CodeRabbit.
+- Reviews with agents, Copilot or CodeRabbit and resolves CodeRabbit findings outside the diff.
 - Fixes reviews and selected CI failures as they arrive, handles upstream conflicts locally and resumes watching after relaunch.
 - Opens pull requests with commit signing, rebasing, stack pushes, automerge and merge cleanup.
 - Keeps agents running after quitting, with compressed private backups and 30-day retention that preserves ongoing work.
