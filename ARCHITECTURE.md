@@ -1732,7 +1732,11 @@ steps.
   fetched tip so background fetches cannot weaken the lease. Push
   fetches its destination and rebases onto remote work never integrated
   locally; the branch's reflog distinguishes it from an amend's stale
-  twin. An automatic rebase conflict aborts and leaves the branch and
+  twin. When an unknown remote tip lacks the local branch's current
+  parent, Push stops without rewriting either branch. The user must
+  integrate the remote changes or explicitly replace that history.
+  A stack uses its preceding branch as that parent.
+  An automatic rebase conflict aborts and leaves the branch and
   remote unchanged. An explicit Rebase can still set a conflicting
   version aside (`OverwriteTips`), with Push leasing that exact tip.
   Never add `--force` or `--force-if-includes`.
