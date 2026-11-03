@@ -1,3 +1,4 @@
+import Foundation
 import SanductorDomain
 import SwiftUI
 import TerminalUI
@@ -92,7 +93,7 @@ private struct StartShellButton: View {
         }
         .buttonStyle(.glass)
         .controlSize(.large)
-        .hoverHelp("Open a host-user shell here; it runs until you close it or the app quits")
+        .hoverHelp("Open a shell as \(NSUserName()) here; it runs until you close it or the app quits")
     }
 
     // MARK: Private

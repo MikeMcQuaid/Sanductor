@@ -1,3 +1,5 @@
+import Foundation
+
 /// The tabs of the utility pane beside the agent. The raw values
 /// are the persisted selection and the cross-module signal values,
 /// so reordering cases can never repoint a saved tab the way the
@@ -42,7 +44,7 @@ enum UtilityTab: String, CaseIterable {
     var help: String {
         switch self {
         case .shell:
-            "A host-user shell in this worktree; it survives tab switches and lives and dies with the app"
+            "A shell running as \(NSUserName()) in this worktree; it survives tab switches and closes with the app"
 
         case .review:
             "The worktree's diff with per-line rejection and commit message editing"

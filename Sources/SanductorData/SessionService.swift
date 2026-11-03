@@ -69,6 +69,11 @@ public struct SessionService: Sendable {
         UserDefaults.standard.string(forKey: selectedWorktreeKey)
     }
 
+    /// The non-admin account that runs agents and their shells.
+    public var sandboxUser: String {
+        launcher.sandboxUser
+    }
+
     /// The repositories in the shared workspace.
     public func repositories() -> [Repository] {
         git.repositories(under: paths.repositoriesDirectory)

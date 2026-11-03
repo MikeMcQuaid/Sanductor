@@ -47,12 +47,12 @@ Run `brew install sandvault`, then `sv build` and authorise setup.
 This creates the non-admin account `sandvault-<you>` and shared workspace `/Users/Shared/sv-<you>`; `<you>` is your macOS username.
 Run `gh auth login` as yourself, then `sv claude` or `sv codex` to sign in to your chosen agent inside the sandbox; quit the agent and click Recheck.
 `sv` runs commands as the sandbox account; its agent login is separate from yours.
-A short tour explains the three panes after setup succeeds.
+After setup, a short tour names both accounts and explains the panes.
 
 Use the left sidebar to add a repository and start an agent in a worktree, a separate checkout for its branch.
 Choose repository paths inside the workspace in Settings → Advanced.
 Symlinks can point your usual path here, but cannot grant access outside the workspace.
-The centre terminal runs as `sandvault-<you>`; the right-hand Shell pane runs as you, with your normal permissions.
+The centre terminal labels its non-admin `sandvault-<you>` account; the right-hand Shell pane runs as you, naming your account on hover.
 Run the repository's bootstrap command (e.g. `script/bootstrap`) in its main checkout from Shell to install shared dependencies.
 Agents can prepare worktrees but cannot `brew install`; repeat host bootstrapping when shared dependencies change.
 Agents survive quitting through herdr, the background session manager; Shell tabs close with the app.

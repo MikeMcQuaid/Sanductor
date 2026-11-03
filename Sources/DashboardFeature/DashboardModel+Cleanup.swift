@@ -45,12 +45,12 @@ public extension DashboardModel {
 
     /// Tidies a worktree whose pull request has merged, merge-safely:
     /// a real worktree is removed only when it is clean and its branch
-    /// is fully on the base branch (git's `-d` rule), otherwise the
-    /// refusal comes back for the caller to show; the main checkout is
+    /// is fully on the base branch, otherwise the refusal comes back
+    /// for the caller to show; the main checkout is
     /// returned to the default branch with the merged branch safely
     /// deleted. The one path behind the context menu and the poll's
     /// own merge detection: nothing here can lose
-    /// work, and only the explicit, confirmed Delete worktree forces.
+    /// work, and only the explicit, confirmed Delete worktree discards it.
     @discardableResult
     func cleanUp(item: WorktreeItem) async -> SessionService.CleanupRefusal? {
         if item.worktree.path == item.worktree.repositoryPath {
@@ -78,7 +78,9 @@ public extension DashboardModel {
         deletingPaths.insert(item.worktree.path)
         defer { deletingPaths.remove(item.worktree.path) }
         do {
-            let refusal = try await service.cleanUpMergedWorktree(item: item, baseRef: baseRef)
+            let refusal = try await service.cleanUpMergedWorktree(item: item, baseRef: baseRef) { message in
+                await ErrorLog.shared.report(message)
+            }
             if refusal == nil {
                 if selection?.id == item.id {
                     selection = nil

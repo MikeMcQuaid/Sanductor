@@ -151,7 +151,7 @@ struct RootView: View {
                 .frame(width: sidebarWidth)
                 .frame(maxHeight: .infinity)
                 .background(SidebarMaterial())
-                .modifier(WorkspaceTutorial(model: dependencies.setup, step: .repositories))
+                .modifier(tutorial(.repositories))
                 .ignoresSafeArea(.container, edges: .top)
             sidebarDivider
             detail

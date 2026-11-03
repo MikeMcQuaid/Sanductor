@@ -36,7 +36,7 @@ extension RootView {
                     unselectedColumn
                 }
             }
-            .modifier(WorkspaceTutorial(model: dependencies.setup, step: .agent))
+            .modifier(tutorial(.agent))
             if showsUtility {
                 PaneDivider(width: $utilityPaneWidth, range: PaneLayout.utilityRange, controlsLeadingPane: false) {
                     utilityPaneWidth = PaneLayout.defaultUtilityWidth(in: currentWindowWidth, sidebar: sidebarWidth)
@@ -46,10 +46,14 @@ extension RootView {
             RetainedPane(isExpanded: showsUtility, width: utilityPaneWidth) {
                 utilityPane(for: dependencies.dashboard.selection)
             }
-            .modifier(WorkspaceTutorial(model: dependencies.setup, step: .tools))
+            .modifier(tutorial(.tools))
             .ignoresSafeArea(.container, edges: .top)
         }
         .ignoresSafeArea(.container, edges: .top)
+    }
+
+    func tutorial(_ step: SetupTourStep) -> WorkspaceTutorial {
+        WorkspaceTutorial(model: dependencies.setup, step: step, sandboxUser: dependencies.service.sandboxUser)
     }
 
     @ViewBuilder var coveringPage: some View {

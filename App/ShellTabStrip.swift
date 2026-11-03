@@ -1,3 +1,4 @@
+import Foundation
 import SanductorDomain
 import SwiftUI
 import TerminalUI
@@ -57,7 +58,7 @@ struct ShellTabStrip: View {
             }
             .buttonStyle(.plain)
             .accessibilityAddTraits(shell.id == selected ? .isSelected : [])
-            .hoverHelp("Show this shell in the pane")
+            .hoverHelp("Show this shell, running as \(NSUserName())")
             Button {
                 onClose(shell.id)
             } label: {

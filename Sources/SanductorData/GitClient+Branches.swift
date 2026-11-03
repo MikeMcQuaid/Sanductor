@@ -301,35 +301,6 @@ public extension GitClient {
         try await git(["reset", "--hard", ref], in: worktreePath)
     }
 
-    /// Deletes a branch with `-d`, so an unmerged branch survives.
-    func deleteMergedBranch(worktreePath: String, branch: String) async {
-        _ = try? await git(["branch", "-d", branch], in: worktreePath, allowFailure: true)
-    }
-
-    /// Every local branch already merged into a ref, excluding the
-    /// ref itself and the checked-out branch: exactly the branches
-    /// `git branch -d` would accept.
-    func mergedBranches(worktreePath: String, into ref: String) async -> [String] {
-        let result = try? await git(
-            ["branch", "--merged", ref, "--format=%(refname:short)"],
-            in: worktreePath,
-            allowFailure: true,
-        )
-        guard let result, result.succeeded else {
-            return []
-        }
-
-        let current = await currentBranch(worktreePath: worktreePath)
-        let base = Self.branchName(fromRef: ref)
-        return result.standardOutput
-            .split(separator: "\n")
-            .map { $0.trimmingCharacters(in: .whitespaces) }
-            .filter { name in
-                name.isEmpty == false && name != current && name != base
-                    && name.hasPrefix("(") == false
-            }
-    }
-
     /// The bare branch name of a possibly qualified ref.
     static func branchName(fromRef ref: String) -> String {
         for prefix in ["refs/remotes/origin/", "refs/heads/", "origin/"] where ref.hasPrefix(prefix) {

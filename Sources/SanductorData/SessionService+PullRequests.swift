@@ -277,9 +277,8 @@ public extension SessionService {
 
     /// After merging from the main checkout: return to the default
     /// branch, reset it to origin when it carries nothing of its
-    /// own, and delete the merged branch with `-d` so an unmerged
-    /// branch survives. Dirty checkouts and worktrees other than
-    /// the main checkout are left untouched.
+    /// own, and sweep merged branches. Dirty checkouts and worktrees
+    /// other than the main checkout are left untouched.
     func cleanUpAfterMerge(worktree: Worktree, mergedBranch _: String) async -> MergeCleanupReport {
         var report = MergeCleanupReport()
         guard worktree.path == worktree.repositoryPath else {
@@ -315,7 +314,17 @@ public extension SessionService {
             }
         }
         await catchUp(worktreePath: worktree.path, branch: branch, into: &report)
-        await deleteMerged(worktreePath: worktree.path, branch: branch, into: &report)
+        do {
+            let cleanup = try await git.deleteMergedBranches(worktreePath: worktree.path, into: branch)
+            report.failures += cleanup.failures
+            let deleted = cleanup.deleted
+            if deleted.isEmpty == false {
+                report.notes.append("Deleted merged \(deleted.count == 1 ? "branch" : "branches"): "
+                    + deleted.lazy.map { "`" + $0 + "`" }.joined(separator: ", ") + ".")
+            }
+        } catch {
+            report.failures.append("Deleting merged branches failed: " + error.localizedDescription)
+        }
         return report
     }
 
@@ -340,25 +349,6 @@ public extension SessionService {
             }
         } catch {
             report.failures.append("Updating `\(branch)` failed: " + error.localizedDescription)
-        }
-    }
-
-    /// Deletes every branch already merged into the default branch,
-    /// not just the one that prompted the cleanup; `-d` refuses
-    /// anything unmerged, so this cannot lose work.
-    private func deleteMerged(worktreePath: String, branch: String, into report: inout MergeCleanupReport) async {
-        let merged = await git.mergedBranches(worktreePath: worktreePath, into: branch)
-        for name in merged {
-            await git.deleteMergedBranch(worktreePath: worktreePath, branch: name)
-        }
-        let remaining = await git.mergedBranches(worktreePath: worktreePath, into: branch)
-        let deleted = merged.filter { remaining.contains($0) == false }
-        if deleted.isEmpty == false {
-            report.notes.append("Deleted merged \(deleted.count == 1 ? "branch" : "branches"): "
-                + deleted.lazy.map { "`" + $0 + "`" }.joined(separator: ", ") + ".")
-        }
-        for name in remaining {
-            report.failures.append("Deleting merged branch `\(name)` failed; it is still there.")
         }
     }
 }

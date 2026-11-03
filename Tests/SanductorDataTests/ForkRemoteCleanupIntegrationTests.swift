@@ -1,7 +1,10 @@
 import Foundation
 @testable import SanductorData
 import SanductorDomain
+import Synchronization
 import Testing
+
+// MARK: - ForkRemoteCleanupIntegrationTests
 
 struct ForkRemoteCleanupIntegrationTests {
     // MARK: Internal
@@ -68,6 +71,29 @@ struct ForkRemoteCleanupIntegrationTests {
         #expect(await git.remoteURL(named: "contributor", worktreePath: world.repository.path) != nil)
         try await world.service.deleteWorktree(item: other)
         #expect(await git.remoteURL(named: "contributor", worktreePath: world.repository.path) == nil)
+    }
+
+    @Test
+    func `a failed branch sweep still finishes worktree and remote cleanup`() async throws {
+        let world = try await World.make()
+        defer { world.tearDown() }
+        let topic = try await checkout(in: world)
+        try await TestSupport.runGit(["remote", "add", "unused", world.repository.path], in: world.repository.path)
+        try await TestSupport.runGit(
+            ["config", "remote.unused.sanductor-created-url", world.repository.path], in: world.repository.path,
+        )
+        let service = world.service(herdr: world.herdr, git: GitClient(runner: BranchSweepFailureRunner()))
+        let failures = Mutex<[String]>([])
+
+        let refusal = try await service.cleanUpMergedWorktree(item: topic, baseRef: "main") { message in
+            failures.withLock { $0.append(message) }
+        }
+        #expect(refusal == nil)
+        #expect(failures.withLock { $0 }.count == 1)
+        #expect(failures.withLock { $0 }.first?.hasPrefix("Deleting merged branches failed:") == true)
+        #expect(FileManager.default.fileExists(atPath: topic.worktree.path) == false)
+        #expect(await git.remoteURL(named: "unused", worktreePath: world.repository.path) == nil)
+        #expect(await git.remoteURL(named: "contributor", worktreePath: world.repository.path) != nil)
     }
 
     @Test(arguments: ["existing", "changed", "push", "extra", "default", "branch"])
@@ -172,6 +198,21 @@ struct ForkRemoteCleanupIntegrationTests {
             session: nil,
             isDirty: false,
             aheadOfUpstream: 0,
+        )
+    }
+}
+
+// MARK: - BranchSweepFailureRunner
+
+private struct BranchSweepFailureRunner: ProcessRunner {
+    func run(
+        _ arguments: [String], workingDirectory: String?, environment: [String: String], outputLimit: Int?,
+    ) async throws -> ProcessResult {
+        if arguments.contains("--merged") {
+            return ProcessResult(status: 1, standardOutput: "", standardError: "Branch sweep failed")
+        }
+        return try await FoundationProcessRunner().run(
+            arguments, workingDirectory: workingDirectory, environment: environment, outputLimit: outputLimit,
         )
     }
 }
