@@ -5,6 +5,48 @@ import Testing
 @MainActor
 struct MarkdownHTMLTests {
     @Test
+    func `review metadata keeps disclosures inside heading and definition list wrappers`() throws {
+        let source = """
+        <h6><details><summary><strong><picture><img alt=""></picture> Recent review info</strong></summary>
+        <dl><dd>
+        <details><summary><strong>Run configuration</strong></summary><dl><dd>
+
+        - **Source mode**: Auto
+
+        </dd></dl></details>
+        <details><summary>Commits</summary>Reviewed commits.</details>
+
+        Included review availability.
+
+        </dd></dl></details></h6>
+        """
+        let chunks = MarkdownText.parsedChunks(ReviewCommentText(source, author: "coderabbitai").text)
+        #expect(chunks.count == 1)
+        let outer = try #require(chunks.first)
+        #expect(outer.detailsSummary == "Recent review info")
+        let nested = MarkdownText.parsedChunks(outer.text)
+        #expect(nested.compactMap(\.detailsSummary) == ["Run configuration", "Commits"])
+        #expect(nested.last?.text.contains("Included review availability.") == true)
+    }
+
+    @Test(arguments: ["**", "__"])
+    func `omitted icons keep Markdown emphasis and protected code`(marker: String) {
+        let source = marker + "<picture><img src=\"icon.svg\" alt=\"\"></picture> Minor" + marker
+            + " · **Stability & Availability** · **Quick win**"
+        let content = MarkdownText.content(source)
+        #expect(String(content.characters) == "Minor · Stability & Availability · Quick win")
+        #expect(content.runs.contains { run in
+            String(content[run.range].characters) == "Minor"
+                && run.inlinePresentationIntent?.contains(.stronglyEmphasized) == true
+        })
+        let code = "`" + source + "`\n\n```markdown\n" + source + "\n```"
+        #expect(MarkdownText.strippingHTML(code) == code)
+        let withCode = "**<img alt=\"\"> Use `value<T>` and [docs](https://example.com/?a=1&b=2)**"
+        #expect(MarkdownText.strippingHTML(withCode) == " **Use `value<T>` and [docs](https://example.com/?a=1&b=2)**")
+        #expect(MarkdownText.strippingHTML("**Done**<img alt=\"\"> Next") == "**Done** Next")
+    }
+
+    @Test
     func `html lists, code spans and comment markers become markdown`() {
         let body = """
         [//]: # (dependabot-automerge-start)

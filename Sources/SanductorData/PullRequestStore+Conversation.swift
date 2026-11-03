@@ -6,6 +6,8 @@ import SanductorDomain
 /// One pull request's conversation as the pane shows it: its
 /// description, what has been said since, and the review threads.
 public struct PullRequestConversation: Sendable {
+    // MARK: Public
+
     /// The pull request's description.
     public let body: String
 
@@ -18,6 +20,15 @@ public struct PullRequestConversation: Sendable {
     /// Why GraphQL failed, nil when it answered; without it the
     /// missing resolve buttons look like a display bug.
     public let graphQLFailure: String?
+
+    /// Inline threads and the latest CodeRabbit findings for display and copying.
+    public var reviewThreads: [ReviewThread] {
+        threads + outsideDiffThreads
+    }
+
+    // MARK: Internal
+
+    let outsideDiffThreads: [ReviewThread]
 }
 
 /// The conversation half of the shared store: the same timer covers
@@ -38,7 +49,7 @@ public extension PullRequestStore {
         return try await Self.conversationReads.run(key: [store.file, key]) {
             let threadsKey = AppMetadata.threadsKey(repositoryPath: repositoryPath, number: number)
             guard due(key, interval: interval) else {
-                return cachedConversation(key: key, threadsKey: threadsKey, seededBody: seededBody)
+                return cachedConversation(repositoryPath: repositoryPath, number: number, seededBody: seededBody)
             }
 
             let body: String
@@ -64,6 +75,9 @@ public extension PullRequestStore {
                 events: events,
                 threads: answer.threads,
                 graphQLFailure: answer.graphQLFailure,
+                outsideDiffThreads: applyingOutsideDiffResolutions(
+                    to: CodeRabbitOutsideDiff.threads(in: events), repositoryPath: repositoryPath, number: number,
+                ),
             )
         }
     }
@@ -71,21 +85,19 @@ public extension PullRequestStore {
     /// What the app already knows, for painting before anything is
     /// asked and for answering a question asked too soon.
     func cachedConversation(repositoryPath: String, number: Int, seededBody: String? = nil) -> PullRequestConversation {
-        cachedConversation(
-            key: Self.conversationKey(repositoryPath: repositoryPath, number: number),
-            threadsKey: AppMetadata.threadsKey(repositoryPath: repositoryPath, number: number),
-            seededBody: seededBody,
-        )
-    }
-
-    private func cachedConversation(key: String, threadsKey: String, seededBody: String?) -> PullRequestConversation {
         let metadata = store.load()
-        let cached = metadata.conversationCache[key]
+        let cached = metadata.conversationCache[Self.conversationKey(repositoryPath: repositoryPath, number: number)]
         return PullRequestConversation(
             body: seededBody ?? cached?.body ?? "",
             events: cached?.events ?? [],
-            threads: metadata.threadsCache[threadsKey]?.threads ?? [],
+            threads: metadata.threadsCache[AppMetadata.threadsKey(repositoryPath: repositoryPath, number: number)]?
+                .threads ?? [],
             graphQLFailure: nil,
+            outsideDiffThreads: applyingOutsideDiffResolutions(
+                to: CodeRabbitOutsideDiff.threads(in: cached?.events ?? []),
+                repositoryPath: repositoryPath,
+                number: number,
+            ),
         )
     }
 }

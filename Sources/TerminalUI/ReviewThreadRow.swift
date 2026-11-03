@@ -115,7 +115,13 @@ public struct ReviewThreadRow: View {
     }
 
     private var status: String {
-        if thread.isResolved {
+        if thread.outsideDiffReviewID != nil {
+            if thread.isResolved {
+                "Resolved outside diff"
+            } else {
+                "Outside diff"
+            }
+        } else if thread.isResolved {
             "Resolved"
         } else if isPendingResolution {
             "On next push"
@@ -150,6 +156,11 @@ public struct ReviewThreadRow: View {
                 .scaledToFit()
                 .frame(width: Self.iconSize, height: Self.iconSize)
                 .accessibilityLabel(localReviewer.displayName + " local review")
+        } else if thread.outsideDiffReviewID != nil {
+            Image(systemName: "arrow.up.forward.square")
+                .foregroundStyle(thread.isResolved ? AnyShapeStyle(.green) : AnyShapeStyle(.secondary))
+                .accessibilityLabel("Outside diff finding")
+                .hoverHelp("CodeRabbit finding outside the diff; resolution is saved locally")
         } else if isPendingResolution, thread.isResolved == false {
             Image(systemName: "clock.arrow.circlepath")
                 .foregroundStyle(.secondary)
@@ -164,7 +175,7 @@ public struct ReviewThreadRow: View {
 
     @ViewBuilder private var resolveButton: some View {
         // A REST-fallback thread carries no id to resolve.
-        if thread.resolveID.isEmpty == false || localReviewer != nil,
+        if thread.resolveID.isEmpty == false || localReviewer != nil || thread.outsideDiffReviewID != nil,
            isPendingResolution == false || thread.isResolved,
            let onToggleResolved
         {
@@ -177,7 +188,7 @@ public struct ReviewThreadRow: View {
             )
             .controlSize(.small)
             .hoverHelp(
-                localReviewer == nil
+                localReviewer == nil && thread.outsideDiffReviewID == nil
                     ? (thread.isResolved ? "Reopen on GitHub" : "Resolve on GitHub")
                     : (thread.isResolved ? "Reopen this local finding" : "Resolve locally without changing code"),
             )
@@ -222,8 +233,9 @@ public struct ReviewThreadRow: View {
         }
         .buttonStyle(.plain)
         .accessibilityLabel((isExpanded ? "Collapse" : "Expand") + " conversation at " + anchor)
-        .accessibilityValue(thread.isResolved || isPendingResolution ? status : "Unresolved")
-        .hoverHelp(isExpanded ? "Collapse this conversation" : "Expand this conversation to read or reopen it")
+        .accessibilityValue(thread.isResolved || isPendingResolution || thread.outsideDiffReviewID != nil
+            ? status : "Unresolved")
+        .hoverHelp(isExpanded ? "Collapse this conversation" : "Expand this conversation")
     }
 
     /// The disclosure header stays interactive after resolution.

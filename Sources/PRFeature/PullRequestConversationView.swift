@@ -193,12 +193,17 @@ struct PullRequestConversationView: View {
             )
             description = cached.body
             events = cached.events
-            threads = cached.threads
+            threads = cached.reviewThreads
             await refresh()
         }
         .onChange(of: events) { onReviewEventsChanged() }
+        .onChange(of: resolutionGeneration) {
+            threads = pullRequests.applyingOutsideDiffResolutions(
+                to: threads, repositoryPath: repositoryPath, number: number,
+            )
+        }
         .onChange(of: threads) { _, threads in
-            onThreadsChanged(threads.count { $0.isResolved == false })
+            onThreadsChanged(threads.count { $0.isResolved == false && $0.outsideDiffReviewID == nil })
             onReviewEventsChanged()
         }
     }
@@ -326,7 +331,7 @@ struct PullRequestConversationView: View {
             }
             description = answer.body
             events = answer.events
-            threads = answer.threads
+            threads = answer.reviewThreads
             ServiceStatus.shared.recordSuccess(doing: readingWhat)
         } catch {
             // The painted cache stays, and the next refresh is the
@@ -360,6 +365,16 @@ struct PullRequestConversationView: View {
     /// refreshes the listing and the header above.
     private func toggleResolved(_ thread: ReviewThread) async {
         do {
+            if thread.outsideDiffReviewID != nil {
+                try pullRequests.setOutsideDiffResolved(
+                    thread, resolved: thread.isResolved == false, repositoryPath: repositoryPath, number: number,
+                )
+                threads = pullRequests.applyingOutsideDiffResolutions(
+                    to: threads, repositoryPath: repositoryPath, number: number,
+                )
+                UtilityTabTarget.resolutionMarksChanged()
+                return
+            }
             try await github.setThreadResolved(
                 repositoryPath: repositoryPath,
                 threadID: thread.resolveID,

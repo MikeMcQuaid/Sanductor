@@ -4,6 +4,42 @@ import Testing
 
 @MainActor
 struct ReviewCommentTextTests {
+    @Test
+    func `current share and verify promotions disappear without changing examples or other authors`() {
+        let body = """
+        Keep this finding.
+
+        <details><summary><strong>Share</strong></summary><dl><dd>
+
+        - [X](https://example.com/x)
+        - [Mastodon](https://example.com/mastodon)
+        - [Reddit](https://example.com/reddit)
+        - [LinkedIn](https://example.com/linkedin)
+
+        </dd></dl></details>
+
+        <!-- verify_invitation_start -->
+        ### CodeRabbit Verify
+
+        - [ ] <!-- {"checkboxId":"run-qa-agent"} --> Run CodeRabbit Verify to test the changes in this pull request.
+        <!-- verify_invitation_end -->
+
+        <h6><details><summary>Recent review info</summary>Keep this metadata.</details></h6>
+        """
+        let shown = ReviewCommentText(body, author: "coderabbitai").text
+        #expect(shown.contains("Share") == false)
+        #expect(shown.contains("https://example.com/") == false)
+        #expect(shown.contains("CodeRabbit Verify") == false)
+        #expect(shown.contains("Keep this finding."))
+        #expect(shown.contains("Keep this metadata."))
+        #expect(ReviewCommentText(body, author: "human").text == body)
+        #expect(ReviewCommentText(body, author: "copilot").text == body)
+        let example = "```markdown\n" + body + "\n```"
+        #expect(ReviewCommentText(example, author: "coderabbitai").text == example)
+        let literal = "`CodeRabbit Verify` and `Run CodeRabbit Verify to test the changes in this pull request.`"
+        #expect(ReviewCommentText(literal, author: "coderabbitai").text == literal)
+    }
+
     @Test(arguments: ReviewBot.allCases)
     func `bot command clutter is hidden without removing findings`(_ bot: ReviewBot) {
         let body = """
@@ -41,7 +77,7 @@ struct ReviewCommentTextTests {
     }
 
     @Test
-    func `billing callouts and receipts disappear without hiding findings`() {
+    func `billing callouts and receipts collapse without hiding findings`() {
         let notice = """
         > [!NOTE]
         > This review was completed with usage-based billing: files reviewed beyond your plan's included limits \
@@ -68,15 +104,17 @@ struct ReviewCommentTextTests {
         <details><summary>Findings</summary>Keep these details.</details>
         """
         let shown = ReviewCommentText(body, author: "coderabbitai[bot]").text
-        #expect(shown.contains("billing") == false)
-        #expect(shown.contains("receipt") == false)
-        #expect(shown.contains("$0.25") == false)
+        #expect(shown.contains("billing"))
+        #expect(shown.contains("receipt"))
+        #expect(shown.contains("$0.25"))
         #expect(shown.contains("Keep this finding."))
         #expect(shown.contains("> [!NOTE]\n> Keep this note."))
         #expect(MarkdownTestSupport.kinds(MarkdownText.content(shown)).contains(.blockQuote))
         #expect(shown.contains("Keep these details."))
         let details = MarkdownText.parsedChunks(shown).filter { $0.detailsSummary != nil }
-        #expect(details.count == 1)
+        #expect(details.compactMap(\.detailsSummary) == [
+            "Usage-based billing", "Usage-based review receipt", "Usage-based billing", "Findings",
+        ])
         #expect(ReviewCommentText(body, author: "reviewer").text == body)
         let example = "```markdown\n" + body + "\n```"
         #expect(ReviewCommentText(example, author: "coderabbitai").text == example)
@@ -91,11 +129,11 @@ struct ReviewCommentTextTests {
     }
 
     @Test(arguments: ["R&amp;D", "R&#38;D", "R&D"])
-    func `receipts with different entity spellings are removed`(_ receiptText: String) {
+    func `receipts with different entity spellings remain intact inside their disclosure`(_ receiptText: String) {
         let retained = "> Keep R&#38;D and R&D unchanged."
         let body = retained + "\n\n<details><summary>Usage-based review receipt</summary>"
             + receiptText + "</details>\n\n" + retained
-        #expect(ReviewCommentText(body, author: "coderabbitai").text == retained + "\n\n\n\n" + retained)
+        #expect(ReviewCommentText(body, author: "coderabbitai").text == body)
     }
 
     @Test
@@ -128,8 +166,8 @@ struct ReviewCommentTextTests {
         #expect(ReviewCommentText(body, author: "coderabbitai").text == body)
     }
 
-    @Test
-    func `codeRabbit promotions and share disclosures are hidden`() {
+    @Test(arguments: ["❤️ Share", "SHARE"])
+    func `codeRabbit promotions and share disclosures are hidden`(share: String) {
         let promotion = """
         Thanks for using CodeRabbit! It's free for OSS, and your support helps us grow.
         If you like it, consider giving us a shout-out.
@@ -141,9 +179,9 @@ struct ReviewCommentTextTests {
 
         <p>\(promotion)</p>
 
-        [❤️ Share](https://example.com/share)
+        [\(share)](https://example.com/share)
 
-        <details><summary>❤️ Share</summary>
+        <details><summary>\(share)</summary>
         [Share on social media](https://example.com/share)
         </details>
 
@@ -153,6 +191,7 @@ struct ReviewCommentTextTests {
         #expect(shown.contains("Thanks for using") == false)
         #expect(shown.contains("shout-out") == false)
         #expect(shown.contains("Share") == false)
+        #expect(shown.contains(share) == false)
         #expect(shown.contains("Keep this finding."))
         #expect(shown.contains("Keep these details."))
         #expect(ReviewCommentText(body, author: "reviewer").text == body)

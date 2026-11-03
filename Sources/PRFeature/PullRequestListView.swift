@@ -146,6 +146,10 @@ struct PullRequestFooterView: View {
     @AppStorage(UtilityTabTarget.pullRequestCacheKey) // swiftformat:disable:next privateSwiftUIDynamicProperties
     var reviewGeneration = 0
 
+    /// Local resolutions, shared with the footer's extension files.
+    @AppStorage(UtilityTabTarget.resolutionMarksKey) // swiftformat:disable:next privateSwiftUIDynamicProperties
+    var resolutionGeneration = 0
+
     /// The tab signal, shared with the footer's extension files.
     @AppStorage(UtilityTabTarget.key) // swiftformat:disable:next privateSwiftUIDynamicProperties
     var utilityTab = ""

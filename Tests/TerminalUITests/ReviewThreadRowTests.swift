@@ -9,6 +9,37 @@ struct ReviewThreadRowTests {
     // MARK: Internal
 
     @Test
+    func `outside diff findings offer local resolution without resolve on push`() async throws {
+        func finding(resolveID: String, actions: Bool) -> some View {
+            ReviewThreadRow(
+                thread: ReviewThread(
+                    id: "outside",
+                    path: "file.swift",
+                    line: 1,
+                    isResolved: false,
+                    comments: [ReviewThreadComment(author: "coderabbitai[bot]", body: "Check this finding.")],
+                    resolveID: resolveID,
+                    outsideDiffReviewID: resolveID.isEmpty ? 7 : nil,
+                ),
+                onToggleResolved: actions ? { Issue.record("Unexpected button press") } : nil,
+                onToggleResolveOnPush: actions ? { Issue.record("Must not mark a summary finding") } : nil,
+            )
+            .frame(width: 640)
+        }
+        let outside = NSHostingView(rootView: finding(resolveID: "", actions: true))
+        let readOnly = NSHostingView(rootView: finding(resolveID: "", actions: false))
+        let inline = NSHostingView(rootView: finding(resolveID: "thread", actions: true))
+        for _ in 0 ..< 10 {
+            outside.layoutSubtreeIfNeeded()
+            readOnly.layoutSubtreeIfNeeded()
+            inline.layoutSubtreeIfNeeded()
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        #expect(outside.fittingSize.height > readOnly.fittingSize.height)
+        #expect(abs(inline.fittingSize.height - outside.fittingSize.height) < 1)
+    }
+
+    @Test
     func `authors remain selectable outside the conversation toggle`() async throws {
         let host = NSHostingView(rootView: row(resolved: true))
         let window = NSWindow(

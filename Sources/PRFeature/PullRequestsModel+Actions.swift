@@ -76,14 +76,15 @@ extension PullRequestsModel {
     /// clipboard, ready for pasting into an agent or reply.
     func copyUnresolvedComments(_ summary: PullRequestSummary) {
         NSPasteboard.general.clearContents()
-        let remote = pullRequests.cachedConversation(repositoryPath: repository.path, number: summary.number).threads
+        let remote = pullRequests.cachedConversation(repositoryPath: repository.path, number: summary.number)
+            .reviewThreads
         let threads = (remote + (localReview(for: summary)?.review.threads ?? [])).filter { $0.isResolved == false }
         let text = ReviewCopy.digest(of: threads)
         guard PromptClipboard.copy(text, prepare: preparePrompt) else {
             return
         }
 
-        note("copied \(threads.count) unresolved conversations from `#\(summary.number)`")
+        note("copied \(threads.count) review conversations and findings from `#\(summary.number)`")
     }
 
     /// Jumps to the review conversations on the web: the files

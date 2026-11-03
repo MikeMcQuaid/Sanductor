@@ -1186,8 +1186,26 @@ excerpts remain readable and copyable; legacy results without branch
 identity join a PR only when their recorded revision still matches its
 checked-out worktree.
 Copying reviews uses the loaded conversation and local findings without
-waiting for GitHub. Resolve on push records the displayed thread and
-known head locally; the existing push-time checks still require a new
+waiting for GitHub. CodeRabbit's latest submitted review also supplies
+outside-diff findings, parsed from grouped disclosures or individual
+Outside diff badges and source links. Grouped findings can mix direct
+file anchors with file disclosures and nested suggested fixes. These
+share the comment rows in Review and PRs, with an arrow leaving a square
+and an Outside diff label, and join Reviews and Conversations copies
+with their file and line.
+Resolve and Unresolve save outside-diff decisions locally, scoped to the
+repository and PR, and update both panes and copy counts without GitHub.
+The Review model keeps the loaded PR number with its threads, so resolves
+and reapplied marks follow the displayed findings during a refresh.
+These decisions survive restarts and cache expiry. Identical findings
+stay resolved in later reviews; changed file anchors or content reopen
+them. Source-link revisions and generated metadata do not change their
+identity. They have no Resolve on push action and do not count as
+unresolved GitHub threads. Parsing is cached by review content; the
+original timeline remains available. A newer review replaces them even
+when it has no outside-diff findings.
+Resolve on push records the displayed thread and known head locally;
+the existing push-time checks still require a new
 remote head and unchanged comments before resolving anything. A separate
 local mark signal redraws both review panes without starting a refresh.
 The feedback-loop icon is Review's single review toolbar entry point.
@@ -1996,10 +2014,11 @@ steps.
   each carrying the app's copy symbol inline and its count in the run
   the sidebar's arrows use (`Reviews ⎘3` as `Push ↑9`, the symbol the
   same `doc.on.doc` every copy button uses), and nothing to copy is
-  the word alone, greyed out. Reviews copies unresolved review threads grouped per
-  file, dimmed until one is unresolved (the count comes from the
-  threads the conversation pane has read, since no listing query
-  carries it), with Cmd-click opening the pull request's files page,
+  the word alone, greyed out. Reviews copies unresolved conversations
+  and findings from the latest review grouped per file, dimmed when
+  neither is available (the count comes from the cached conversation,
+  since no listing query carries it), with Cmd-click opening the pull
+  request's files page,
   where a review comment is anchored and answered, and Shift-click
   opening it in the Browser tab; Checks is one button for the
   finished failing Actions checks, counting the jobs it will copy,
@@ -2887,14 +2906,21 @@ dated entries chronologically and shows only the latest from each bot,
 adding "Latest of N comments" beside its name when more than one exists;
 inline findings remain separate. Bot bodies hide command help, the
 change-stack link and the Autofix checkbox. CodeRabbit’s billing notices
-and usage receipts, thank-you promotions and Share sections are also
-hidden with their surrounding callout or disclosure, preserving the
-surrounding Markdown source. With pretty printing disabled, SwiftSoup
-2.14.2 reuses original element source without normalising entity
-spellings; notice removal uses these original spans. Bot commit
-references remain as written. Code examples and existing links remain
-unchanged. This is cached presentation filtering; original events remain
-available for review completion detection.
+and usage receipts stay inside collapsed disclosures. Skipped and
+rate-limited reviews collapse under their importance and status, keeping
+their explanation and nested details without a separate alert heading.
+Retry checkboxes, configuration hints, thank-you promotions, Share
+sections and Verify invitations are hidden. Matching is case-insensitive;
+only notice titles, promotional wording and marked retry checkboxes
+qualify, leaving substantive findings and literal code visible.
+CodeRabbit headings stay compact and alert headings become disclosure
+labels, so wording changes still leave a readable layout. Unrelated
+Markdown source stays intact. With pretty printing disabled, SwiftSoup
+2.14.2 reuses original element source without
+normalising entity spellings; notice removal uses these original spans.
+Bot commit references remain as written. Code examples and existing
+links remain unchanged. This is cached presentation filtering; original
+events remain available for review completion detection.
 Copied CodeRabbit feedback omits severity decorations, generated HTML
 and investigation disclosures, preserving the finding, suggested patch
 and follow-up instructions. The shared Markdown/HTML parser protects
@@ -2907,6 +2933,11 @@ details as native disclosures with eight-point gaps. Disclosure labels
 drop redundant bold markers because the label already supplies its
 weight, preserving code spans; thematic breaks use the same 16-point
 margins as paragraphs.
+Heading and definition-list wrappers retain nested disclosures, keeping
+Recent review info collapsed until opened. Findings use a smaller heading
+and bulleted severity rows with a separator before their links.
+Markdown emphasis around HTML icons stays formatted when an icon without
+alternative text is omitted.
 HTML bold, italic and strikethrough keep surrounding whitespace outside
 their Markdown delimiters so expanded review headings render as styled
 text, including when an icon without alternative text is omitted.

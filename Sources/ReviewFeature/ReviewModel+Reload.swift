@@ -58,9 +58,9 @@ extension ReviewModel {
                     }
                     originalMessage = message
                 }
-                let threads = await fetchThreads()
+                let loaded = await fetchThreads()
                 try checkReload(generation)
-                self.threads = threads
+                (threadPullRequestNumber, threads) = loaded
             }
             await recordReload(nil, generation: generation)
         } catch {

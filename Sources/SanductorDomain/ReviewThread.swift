@@ -45,7 +45,7 @@ public struct ReviewThreadComment: Codable, Hashable, Sendable {
 // MARK: - ReviewThread
 
 /// One review conversation thread on a pull request, anchored to a
-/// file and line, resolvable through the API.
+/// file and line, with a resolution ID when the API provides one.
 public struct ReviewThread: Codable, Hashable, Identifiable, Sendable {
     // MARK: Lifecycle
 
@@ -59,6 +59,7 @@ public struct ReviewThread: Codable, Hashable, Identifiable, Sendable {
         comments: [ReviewThreadComment],
         resolveID: String? = nil,
         codeContext: String? = nil,
+        outsideDiffReviewID: Int? = nil,
     ) {
         self.id = id
         self.path = path
@@ -67,6 +68,7 @@ public struct ReviewThread: Codable, Hashable, Identifiable, Sendable {
         self.comments = comments
         self.resolveID = resolveID ?? id
         self.codeContext = codeContext
+        self.outsideDiffReviewID = outsideDiffReviewID
     }
 
     // MARK: Public
@@ -90,6 +92,9 @@ public struct ReviewThread: Codable, Hashable, Identifiable, Sendable {
 
     /// The code captured by a local reviewer, independent of later edits.
     public let codeContext: String?
+
+    /// The review containing an outside-diff finding, which has no resolvable thread.
+    public let outsideDiffReviewID: Int?
 
     /// The thread's comments in order.
     public let comments: [ReviewThreadComment]

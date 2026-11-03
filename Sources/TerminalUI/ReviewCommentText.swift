@@ -51,7 +51,9 @@ public struct ReviewCommentText: View {
 
                 let visible = String(content.characters)
                     .trimmingCharacters(in: CharacterSet(charactersIn: " \t\r\n☐☑•."))
-                if isCodeRabbit, visible == "❤️ Share" {
+                if isCodeRabbit,
+                   visible.range(of: #"(?i)^(?:❤️?\s*)?share$"#, options: .regularExpression) != nil
+                {
                     return false
                 }
                 return visible != "Review in Change Stack →" && ReviewBot.allCases.contains { bot in

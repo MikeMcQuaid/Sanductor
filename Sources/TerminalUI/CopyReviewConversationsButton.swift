@@ -15,12 +15,12 @@ public struct CopyReviewConversationsButton: View {
     public var body: some View {
         PaneIconButton(
             "doc.on.doc",
-            help: "Copy all unresolved local AI and GitHub conversations, with files and lines",
+            help: "Copy unresolved local AI and GitHub conversations and outside-diff findings, with files and lines",
             disabled: open.isEmpty,
         ) {
             PromptClipboard.copy(ReviewCopy.digest(of: open))
         }
-        .accessibilityLabel("Copy " + String(open.count) + " unresolved conversations")
+        .accessibilityLabel("Copy " + String(open.count) + " conversations and findings")
     }
 
     // MARK: Private

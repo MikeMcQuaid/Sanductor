@@ -19,8 +19,8 @@ final class ReviewModel {
         git: GitClient,
         baseRefProvider: @escaping () async -> String? = { nil },
         draftMessage: @escaping () async -> String? = { nil },
-        fetchThreads: @escaping () async -> [ReviewThread] = { [] },
-        setThreadResolved: @escaping (String, Bool) async throws -> Void = { _, _ in
+        fetchThreads: @escaping () async -> (number: Int?, threads: [ReviewThread]) = { (nil, []) },
+        setThreadResolved: @escaping (ReviewThread, Bool, Int?) async throws -> Void = { _, _, _ in
             // Without GitHub wiring resolve toggles are no-ops.
         },
     ) {
@@ -85,6 +85,7 @@ final class ReviewModel {
     /// The branch's open pull request conversations, shown inline
     /// under the files they anchor to.
     var threads: [ReviewThread] = []
+    var threadPullRequestNumber: Int?
 
     /// Whether the checked-out branch has its own origin ref, so
     /// the upstream scope has something to diff against; refreshed
@@ -104,8 +105,8 @@ final class ReviewModel {
     /// Internal, since the edits extension file resets files through it.
     let git: GitClient
 
-    let fetchThreads: () async -> [ReviewThread]
-    let setThreadResolved: (String, Bool) async throws -> Void
+    let fetchThreads: () async -> (number: Int?, threads: [ReviewThread])
+    let setThreadResolved: (ReviewThread, Bool, Int?) async throws -> Void
 
     /// Shared with the reload and status extensions; not display state.
     @ObservationIgnored var reloadGeneration = 0

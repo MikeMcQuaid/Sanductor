@@ -8,7 +8,7 @@ public struct MarkdownHTML {
     /// Parses HTML while keeping embedded Markdown code intact.
     public init(_ source: String, compactReview: Bool = false) throws {
         self.compactReview = compactReview
-        protected = try MarkdownHTMLCode(source)
+        protected = try MarkdownHTMLCode(source, htmlEmphasis: true)
         document = try SwiftSoup.parseBodyFragment(protected.source
             .split(separator: "\n", omittingEmptySubsequences: false)
             .filter { $0.trimmingCharacters(in: .whitespaces).hasPrefix("[//]: #") == false }
@@ -111,7 +111,8 @@ public struct MarkdownHTML {
 
     private func disclosureNodes(_ nodes: [Node]) -> [Node] {
         nodes.flatMap { node in
-            if let element = node as? Element, ["blockquote", "div", "section"].contains(element.tagName()),
+            if let element = node as? Element,
+               ["blockquote", "div", "section", "h6", "dl", "dd"].contains(element.tagName()),
                (try? element.select("details").isEmpty()) == false
             {
                 return disclosureNodes(element.getChildNodes())
