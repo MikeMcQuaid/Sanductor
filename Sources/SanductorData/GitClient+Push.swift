@@ -1,6 +1,10 @@
+import SanductorDomain
+
 extension GitClient {
     /// Captures the lease before rebasing, so later background fetches cannot change it.
-    func preparePush(worktreePath: String, branch: String, remote: String) async throws -> String {
+    func preparePush(
+        worktreePath: String, branch: String, remote: String, parent: String? = nil,
+    ) async throws -> String {
         try await git(["fetch", "--prune", remote], in: worktreePath, remote: remote)
         guard let tip = await commitHash(of: "refs/remotes/" + remote + "/" + branch, worktreePath: worktreePath) else {
             return ""
@@ -9,6 +13,18 @@ extension GitClient {
               await refWasBranchTip(worktreePath: worktreePath, branch: branch, ref: tip) == false
         else {
             return tip
+        }
+
+        let base = await defaultBaseRef(of: Repository(name: "", path: worktreePath))
+        if let currentParent = parent ?? base,
+           await isAncestor(currentParent, of: branch, worktreePath: worktreePath),
+           await isAncestor(currentParent, of: tip, worktreePath: worktreePath) == false
+        {
+            throw SessionServiceError(
+                "Remote branch `\(remote)/\(branch)` has unseen commits "
+                    + "and does not contain `\(currentParent)`.\n"
+                    + "Integrate or explicitly resolve the remote history before pushing.",
+            )
         }
 
         try await rebaseForPush(worktreePath: worktreePath, branch: branch, onto: tip)

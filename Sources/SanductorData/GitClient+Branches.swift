@@ -114,7 +114,9 @@ public extension GitClient {
                 if let expectedTip {
                     expectedTip
                 } else {
-                    try await preparePush(worktreePath: worktreePath, branch: branch, remote: remote)
+                    try await preparePush(
+                        worktreePath: worktreePath, branch: branch, remote: remote, parent: parent?.branch,
+                    )
                 }
             if let parent, await commitHash(of: parent.branch, worktreePath: worktreePath) != parent.previousTip,
                await isAncestor(parent.branch, of: branch, worktreePath: worktreePath) == false
