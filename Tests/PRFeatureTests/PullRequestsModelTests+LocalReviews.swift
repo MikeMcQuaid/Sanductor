@@ -7,12 +7,16 @@ import Synchronization
 import Testing
 
 extension PullRequestsModelTests {
-    @Test
-    func `reviews copy includes outside diff findings without unresolved GitHub threads`() throws {
+    @Test(arguments: [
+        "<details><summary>⚠️ Outside diff range comments (1)</summary>\n\n"
+            + "**src/config.py:42-45**: Validate the configuration.\n\n</details>",
+        "> [!CAUTION]\n>\n> **⚠️ Outside diff range comments (1)**\n>\n"
+            + "> <details><summary>Major</summary>\n>\n> `src/config.py:42-45`\n"
+            + "> Validate the configuration.\n>\n> </details>",
+    ])
+    func `reviews copy includes outside diff findings without unresolved GitHub threads`(body: String) throws {
         let model = makeModel()
         let selected = summary(7, head: "feature")
-        let body = "<details><summary>⚠️ Outside diff range comments (1)</summary>\n\n"
-            + "**src/config.py:42-45**: Validate the configuration.\n\n</details>"
         model.store.update { metadata in
             metadata.conversationCache[PullRequestStore.conversationKey(repositoryPath: "/repo", number: 7)] = .init(
                 events: [

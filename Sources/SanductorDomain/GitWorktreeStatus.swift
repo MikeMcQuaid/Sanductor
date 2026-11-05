@@ -15,6 +15,7 @@ public struct GitWorktreeStatus: Hashable, Sendable {
         var ahead: Int?
         var behind: Int?
         var dirty = false
+        var paths = [String]()
         var records = porcelain.split(separator: "\0").makeIterator()
         while let record = records.next() {
             if record.hasPrefix("# branch.head ") {
@@ -26,12 +27,18 @@ public struct GitWorktreeStatus: Hashable, Sendable {
                 behind = counts.dropFirst().first.flatMap { Int($0.dropFirst()) }
             } else if let kind = record.first, "12u?".contains(kind) {
                 dirty = true
+                let field = Self.pathFields[kind] ?? 1
+                let parts = record.split(separator: " ", maxSplits: field, omittingEmptySubsequences: false)
+                if parts.count == field + 1 {
+                    paths.append(String(parts[field]))
+                }
                 if kind == "2" {
                     _ = records.next()
                 }
             }
         }
         self.init(branch: branchName, isDirty: dirty, aheadOfUpstream: ahead, behindUpstream: behind)
+        changedPaths = paths
     }
 
     // MARK: Public
@@ -43,6 +50,7 @@ public struct GitWorktreeStatus: Hashable, Sendable {
     public let isDirty: Bool
     public let aheadOfUpstream: Int?
     public let behindUpstream: Int?
+    public private(set) var changedPaths: [String] = []
 
     public var summary: String {
         var parts = [String]()
@@ -57,4 +65,9 @@ public struct GitWorktreeStatus: Hashable, Sendable {
         }
         return parts.joined(separator: " ")
     }
+
+    // MARK: Private
+
+    // swiftlint:disable:next no_magic_numbers - Fixed porcelain v2 pathname fields.
+    private static let pathFields: [Character: Int] = ["1": 8, "2": 9, "u": 10, "?": 1]
 }

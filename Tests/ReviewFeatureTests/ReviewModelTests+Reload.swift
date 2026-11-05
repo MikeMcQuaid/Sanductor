@@ -5,6 +5,31 @@ import Testing
 
 extension ReviewModelTests {
     @Test
+    func `refreshing uncommitted edits keeps the draft and excluded files`() async throws {
+        let path = FileManager.default.currentDirectoryPath + "/.test-scratch/review-refresh-" + UUID().uuidString
+        defer { try? FileManager.default.removeItem(atPath: path) }
+        try await makeRepository(at: path)
+        try "first\n".write(toFile: path + "/one.txt", atomically: true, encoding: .utf8)
+        let model = ReviewModel(
+            worktreePath: path, repositoryName: path, git: GitClient(runner: FoundationProcessRunner()),
+        )
+        model.scope = .uncommitted
+        await model.reload()
+        model.commitMessage = "Keep my draft"
+        model.setCommitting(false, path: "one.txt")
+
+        try "other\n".write(toFile: path + "/one.txt", atomically: true, encoding: .utf8)
+        try "new\n".write(toFile: path + "/two.txt", atomically: true, encoding: .utf8)
+        await model.reload()
+
+        #expect(model.files.map(\.path) == ["one.txt", "two.txt"])
+        #expect(model.files.first?.hunks.first?.lines.contains { $0.content == "other" } == true)
+        #expect(model.commitMessage == "Keep my draft")
+        #expect(model.excludedFromCommit == ["one.txt"])
+        #expect(model.pathsToCommit == ["two.txt"])
+    }
+
+    @Test
     func `opening a short commit reference preserves the draft on return`() async throws {
         let path = FileManager.default.currentDirectoryPath + "/.test-scratch/review-link-" + UUID().uuidString
         defer { try? FileManager.default.removeItem(atPath: path) }

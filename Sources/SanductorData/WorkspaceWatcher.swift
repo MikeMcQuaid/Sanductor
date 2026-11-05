@@ -32,6 +32,12 @@ public final class WorkspaceWatcher: Sendable {
         watching.withLock { $0 }
     }
 
+    /// Called after a batch of filesystem changes has been recorded.
+    @preconcurrency
+    public func onChange(_ handler: @escaping @Sendable () -> Void) {
+        box.onChange.withLock { $0 = Handler(call: handler) }
+    }
+
     /// Starts watching; safe to call more than once, and a failed
     /// attempt may be retried, since nothing was left half started.
     public func start() {
@@ -84,6 +90,12 @@ public final class WorkspaceWatcher: Sendable {
 
     // MARK: Internal
 
+    /// A function used directly as the mutex value gains a reabstraction
+    /// wrapper on each inout access, eventually overflowing the stack.
+    struct Handler {
+        let call: @Sendable () -> Void
+    }
+
     /// What the event callback writes into: separate from the
     /// watcher so the never-stopped stream can never point at a
     /// deallocated object.
@@ -102,12 +114,14 @@ public final class WorkspaceWatcher: Sendable {
 
         let roots: [String]
         let changed: Mutex<Set<String>> = .init([])
+        let onChange: Mutex<Handler?> = .init(nil)
 
         /// Records event paths trimmed to their root plus two
         /// components: deep churn inside one worktree collapses to
         /// one entry however busy the agent in it is.
         func record(_ paths: [String]) {
-            changed.withLock { set in
+            let recorded = changed.withLock { set in
+                var recorded = false
                 for path in paths {
                     guard let root = roots.first(where: { candidate in
                         path == candidate || path.hasPrefix(candidate + "/")
@@ -119,7 +133,12 @@ public final class WorkspaceWatcher: Sendable {
                         .split(separator: "/")
                         .prefix(Self.keptComponents)
                     set.insert(suffix.isEmpty ? root : root + "/" + suffix.joined(separator: "/"))
+                    recorded = true
                 }
+                return recorded
+            }
+            if recorded {
+                onChange.withLock { $0 }?.call()
             }
         }
 
@@ -132,8 +151,7 @@ public final class WorkspaceWatcher: Sendable {
 
     // MARK: Private
 
-    /// How long FSEvents may coalesce a burst before delivering it;
-    /// the poll only reads the answers every few seconds anyway.
+    /// How long FSEvents may coalesce a burst before delivering it.
     private static let latencySeconds = 0.5
 
     private static let queue: DispatchQueue = .init(label: "sanductor.workspace-watcher", qos: .utility)

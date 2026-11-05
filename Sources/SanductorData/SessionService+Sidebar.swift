@@ -281,12 +281,12 @@ public extension SessionService {
         // The counts and the date came with the repository's own
         // read; only uncommitted work is the worktree's to answer,
         // and only a detached head has to be asked the rest.
-        async let dirty = git.isDirty(worktreePath: worktree.path)
+        async let state = git.localState(worktreePath: worktree.path)
         var known = facts
         if known == nil {
             known = await detachedFacts(of: worktree, baseRef: baseRef)
         }
-        let isDirty = await dirty
+        let local = await state
         // Work happening right now is `isActive`, never a "now"
         // stamp: stamping the moment in changed every active row on
         // every poll, and an unchanged row is what a tick may skip.
@@ -294,14 +294,14 @@ public extension SessionService {
         return WorktreeItem(
             worktree: worktree,
             session: session,
-            isDirty: isDirty,
+            isDirty: local.isDirty,
             aheadOfUpstream: known?.aheadOfUpstream,
             pastSessions: past,
             aheadOfDefault: known?.ahead,
             behindDefault: known?.behind,
             behindUpstream: known?.behindUpstream,
             lastActivityAt: lastActivity,
-            revision: known?.revision,
+            revision: (known?.revision ?? "") + "\n" + (local.revision ?? ""),
         )
     }
 
