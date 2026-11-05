@@ -5,6 +5,13 @@ import SanductorDomain
 /// Starting an agent from the Pull requests tab, which has no form of
 /// its own; split from the sessions file for length.
 public extension DashboardModel {
+    /// Whether a pull request's launch holds a progress log under its
+    /// placeholder's path.
+    internal func isLaunching(pullRequest number: Int, in repository: Repository) -> Bool {
+        let pending = repository.path + Self.placeholderMarker + "pr-\(number)-"
+        return launchProgresses.keys.contains { $0.hasPrefix(pending) }
+    }
+
     /// Starts an agent on a listed pull request: at once with the last
     /// agent, model and effort, as Shortcuts do, never moving the
     /// selection the list belongs to, or through the new session form.

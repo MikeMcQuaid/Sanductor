@@ -27,6 +27,37 @@ extension RootView {
         return { startingSession = nil }
     }
 
+    /// Whether the worktree's pane stays on its form: a retry launches
+    /// without one, and its progress shows there.
+    func holdsSessionForm(_ item: WorktreeItem) -> Bool {
+        startingSession == item.worktree.path || dependencies.dashboard.launchProgresses[item.worktree.path] != nil
+    }
+
+    /// A worktree's new session form.
+    private func sessionForm(for item: WorktreeItem) -> some View {
+        CreateSessionPane(
+            worktree: item.worktree,
+            model: dependencies.dashboard,
+            canResume: dependencies.service.hasRecordedSession(worktreePath: item.worktree.path),
+            onShowConversations: showConversationsAction(for: item),
+            // The form marker would otherwise outrank the editor
+            // and the click would change nothing on screen.
+            onOpenEditor: {
+                startingSession = nil
+                setCentreEditor(true, at: item.worktree.path)
+            },
+            onResume: { await resumeLatest(in: item) },
+            onStarted: { await sessionStarted(in: item.worktree.path) },
+        )
+        // A retry mounts this pane without the marker, and the
+        // failure it may end in stays here only with it.
+        .onAppear {
+            if dependencies.dashboard.launchProgresses[item.worktree.path] != nil {
+                startingSession = item.worktree.path
+            }
+        }
+    }
+
     /// One conversations UI everywhere: a live session shows its
     /// terminal; anything else shows the conversation list, scoped
     /// to the worktree or covering the whole repository on its page,
@@ -82,25 +113,12 @@ extension RootView {
             // Chosen from the conversations page; the branches above
             // are why a live session can never sit underneath it.
             centreEditor(for: item)
-        } else if item.worktree.path == item.worktree.repositoryPath, startingSession != item.worktree.path {
+        } else if item.worktree.path == item.worktree.repositoryPath, holdsSessionForm(item) == false {
             repositoryConversations(for: item)
-        } else if item.pastSessions.isEmpty == false, startingSession != item.worktree.path {
+        } else if item.pastSessions.isEmpty == false, holdsSessionForm(item) == false {
             worktreeConversations(for: item)
         } else {
-            CreateSessionPane(
-                worktree: item.worktree,
-                model: dependencies.dashboard,
-                canResume: dependencies.service.hasRecordedSession(worktreePath: item.worktree.path),
-                onShowConversations: showConversationsAction(for: item),
-                // The form marker would otherwise outrank the editor
-                // and the click would change nothing on screen.
-                onOpenEditor: {
-                    startingSession = nil
-                    setCentreEditor(true, at: item.worktree.path)
-                },
-                onResume: { await resumeLatest(in: item) },
-                onStarted: { await sessionStarted(in: item.worktree.path) },
-            )
+            sessionForm(for: item)
         }
     }
 

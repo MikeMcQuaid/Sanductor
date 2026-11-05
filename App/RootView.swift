@@ -257,7 +257,7 @@ struct RootView: View {
         // session always wins the centre, so the open file moves to
         // the side editor.
         .onChange(of: runningWorktreePaths) { _, running in
-            displaceCentreEditors(nowRunning: running)
+            runningWorktreesChanged(to: running)
         }
         // Reopening the app resumes the restored worktree's most
         // recent conversation: the default workflow is picking up

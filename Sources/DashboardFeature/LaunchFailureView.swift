@@ -48,8 +48,9 @@ public struct LaunchFailure: Equatable, Sendable {
 
 // MARK: - LaunchFailureView
 
-/// A failed launch in its row's pane: what went wrong, then the way
-/// back to the form with what was typed, or away from it.
+/// A failed launch in its row's pane: what went wrong, then the ways
+/// to run it again, as it was or from the form with what was typed,
+/// or away from it.
 public struct LaunchFailureView: View {
     // MARK: Lifecycle
 
@@ -79,6 +80,7 @@ public struct LaunchFailureView: View {
                         .buttonStyle(.glass)
                         .hoverHelp("Remove this row; nothing was created")
                 }
+                editAndRetryButton.buttonStyle(.glass)
                 if retryIsPrimary {
                     retryButton.buttonStyle(.glassProminent)
                 } else {
@@ -98,6 +100,16 @@ public struct LaunchFailureView: View {
     private let retryIsPrimary: Bool
 
     private var retryButton: some View {
+        Button("Retry") {
+            Task {
+                await model.relaunch(for: worktree)
+            }
+        }
+        .disabled(model.canRelaunch(worktree) == false)
+        .hoverHelp("Start this launch again exactly as it was asked for")
+    }
+
+    private var editAndRetryButton: some View {
         Button("Edit and retry") { model.retryLaunch(for: worktree) }
             .hoverHelp(
                 worktree.isPlaceholder
@@ -155,6 +167,41 @@ public extension DashboardModel {
         }
     }
 
+    /// Whether a failed launch can start again now: a pull request
+    /// allows one launch at a time, so its draft waits on its row
+    /// while another runs.
+    func canRelaunch(_ worktree: Worktree) -> Bool {
+        guard let draft = launchFailures[worktree.path]?.draft, let owner = repository(of: worktree) else {
+            return false
+        }
+        guard draft.source == .pullRequest, let number = draft.number else {
+            return true
+        }
+
+        return isLaunching(pullRequest: number, in: owner) == false
+    }
+
+    /// Starts a failed launch again exactly as it was asked for: a
+    /// placeholder gives way to a fresh row, and a worktree keeps its
+    /// own. Only a selected row takes the screen, so a retry from
+    /// another row's context menu moves nothing.
+    func relaunch(for worktree: Worktree) async {
+        guard canRelaunch(worktree),
+              let draft = launchFailures[worktree.path]?.draft,
+              let owner = repository(of: worktree)
+        else {
+            return
+        }
+
+        let reveals = selection?.worktree.path == worktree.path
+        if worktree.isPlaceholder {
+            dismissLaunchFailure(for: worktree)
+            await createSession(from: draft, in: owner, reveals: reveals)
+        } else {
+            await launchAgent(from: draft, in: worktree, repository: owner, reveals: reveals)
+        }
+    }
+
     /// The log a row's launch narrates into, or the shared one that
     /// resumes use.
     func launchProgress(for item: WorktreeItem) -> LaunchProgress {
@@ -162,6 +209,114 @@ public extension DashboardModel {
     }
 
     private func repository(of worktree: Worktree) -> Repository? {
-        groups.first { $0.repository.path == worktree.repositoryPath }?.repository
+        groups.group(holding: worktree)?.repository
+    }
+
+    private func createSession(from draft: LaunchDraft, in repository: Repository, reveals: Bool) async {
+        switch draft.source {
+        case .prompt:
+            await createSession(
+                repository: repository,
+                prompt: draft.text,
+                agent: draft.agent,
+                options: draft.options,
+                baseBranch: draft.base,
+                reveals: reveals,
+            )
+
+        case .issue:
+            guard let number = draft.number else {
+                return
+            }
+
+            await createSession(
+                fromIssue: number,
+                repository: repository,
+                context: draft.text,
+                agent: draft.agent,
+                options: draft.options,
+                baseBranch: draft.base,
+                reveals: reveals,
+            )
+
+        case .pullRequest:
+            await createSession(fromPullRequestIn: draft, repository: repository, reveals: reveals)
+
+        case .advisory:
+            guard let ghsaID = draft.ghsaID else {
+                return
+            }
+
+            await createSession(
+                fromAdvisory: ghsaID,
+                repository: repository,
+                context: draft.text,
+                agent: draft.agent,
+                options: draft.options,
+                baseBranch: draft.base,
+                reveals: reveals,
+            )
+        }
+    }
+
+    private func launchAgent(
+        from draft: LaunchDraft, in worktree: Worktree, repository: Repository, reveals: Bool,
+    ) async {
+        switch draft.source {
+        case .prompt:
+            await launchAgent(
+                in: worktree, prompt: draft.text, agent: draft.agent, options: draft.options, reveals: reveals,
+            )
+
+        case .issue:
+            guard let number = draft.number else {
+                return
+            }
+
+            await launchAgent(
+                fromIssue: number,
+                in: worktree,
+                context: draft.text,
+                agent: draft.agent,
+                options: draft.options,
+                reveals: reveals,
+            )
+
+        case .pullRequest:
+            await createSession(fromPullRequestIn: draft, repository: repository, reveals: reveals)
+
+        case .advisory:
+            guard let ghsaID = draft.ghsaID else {
+                return
+            }
+
+            await launchAgent(
+                fromAdvisory: ghsaID,
+                in: worktree,
+                context: draft.text,
+                agent: draft.agent,
+                options: draft.options,
+                reveals: reveals,
+            )
+        }
+    }
+
+    /// A pull request's launch always makes its own worktree, whichever
+    /// form asked for it.
+    private func createSession(
+        fromPullRequestIn draft: LaunchDraft, repository: Repository, reveals: Bool,
+    ) async {
+        guard let number = draft.number else {
+            return
+        }
+
+        await createSession(
+            fromPullRequest: number,
+            repository: repository,
+            context: draft.text,
+            agent: draft.agent,
+            options: draft.options,
+            reveals: reveals,
+        )
     }
 }

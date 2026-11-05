@@ -4,9 +4,9 @@ import SanductorDomain
 import SwiftUI
 import TerminalUI
 
-/// A worktree row's own menu: refreshing, copying, git and
-/// the two ways a worktree ends, grouped with separators and the
-/// destructive one last.
+/// A worktree row's own menu: retrying a failed launch, refreshing,
+/// copying, git and the two ways a worktree ends, grouped with
+/// separators and the destructive one last.
 struct WorktreeActions: View {
     let item: WorktreeItem
     let model: DashboardModel
@@ -29,6 +29,16 @@ struct WorktreeActions: View {
     @Binding var pendingBlock: WorktreeBlockSelection?
 
     var body: some View {
+        if model.launchFailure(for: item) != nil {
+            Button("Retry") {
+                Task {
+                    await model.relaunch(for: item.worktree)
+                }
+            }
+            .disabled(model.canRelaunch(item.worktree) == false)
+            .hoverHelp("Start this failed launch again exactly as it was asked for")
+            Divider()
+        }
         Button("Refresh") {
             Task {
                 await model.refreshRepository(path: item.worktree.repositoryPath)

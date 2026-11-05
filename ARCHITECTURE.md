@@ -725,7 +725,17 @@ the default branch. Placeholders and host directories supply no base.
    reference, base branch, agent, model and effort. Edit and retry
    hands it to the form that started it (the new session form or the
    worktree's own), which applies it the moment it shows, and Dismiss
-   drops a placeholder's row. Failures
+   drops a placeholder's row. Retry, in the failure's pane and on the
+   row's context menu, runs the draft again without a form
+   (`relaunch(for:)`): a placeholder gives way to a fresh one and a
+   worktree keeps its row, whose pane holds the form's progress for
+   as long as the launch has a log, conversations or not, and a pane
+   mounted for that progress takes the form marker, so failing again
+   leaves the error on screen until Conversations or Editor leaves
+   it. Only a selected row takes the selection or closes a page, so
+   retrying another row from the sidebar leaves the screen alone. A
+   pull request allows one launch at a time, so its Retry is disabled
+   while another runs and its failed row keeps the draft. Failures
    live in memory only, beside the Messages pane's copy, since the
    sidebar cache never keeps a placeholder.
 2. The branch name summarises the prompt through `FoundationModelClient`
