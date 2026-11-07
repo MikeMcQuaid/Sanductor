@@ -4,6 +4,7 @@ import Foundation
 import SanductorData
 import SanductorDomain
 import SwiftUI
+import TerminalUI
 import Testing
 
 /// A failed launch stays on its own row; split from the suite's
@@ -53,6 +54,30 @@ extension SessionNavigationTests {
         #expect(fixture.model.newSessionBase == (retry ? "part_one" : nil))
         let expected = LaunchRetry(repositoryPath: fixture.repository.path, worktreePath: nil, draft: draft)
         #expect(fixture.model.launchRetry == (retry ? expected : nil))
+    }
+
+    @Test
+    func `a worktree's form stands aside for a retry it did not start`() async throws {
+        let fixture = Fixture()
+        defer { fixture.close() }
+        let worktree = fixture.model.groups[0].items[0].worktree
+        let form = AgentSessionForm(
+            model: fixture.model,
+            repository: fixture.repository,
+            worktreePath: worktree.path,
+            submitTitle: "Start agent",
+            submitHelp: "Start",
+        ) { _ in await Task.yield() }
+        let host = NSHostingView(rootView: AnyView(form))
+        let window = Fixture.window(hosting: host)
+        defer { window.close() }
+        try await Task.sleep(for: .milliseconds(100))
+        #expect(fixture.textView(in: host) != nil)
+
+        fixture.model.launchProgresses[worktree.path] = LaunchProgress()
+        try await Task.sleep(for: .milliseconds(100))
+
+        #expect(fixture.textView(in: host) == nil)
     }
 
     @Test(arguments: [true, false])

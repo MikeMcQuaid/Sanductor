@@ -165,7 +165,12 @@ public extension [RepositoryGroup] {
     /// repository path covers items from readings these groups have
     /// not caught up with yet.
     func group(holding item: WorktreeItem) -> RepositoryGroup? {
-        first { group in group.items.contains { $0.worktree.path == item.worktree.path } }
-            ?? first { $0.repository.path == item.worktree.repositoryPath }
+        group(holding: item.worktree)
+    }
+
+    /// See `group(holding:)` for an item.
+    func group(holding worktree: Worktree) -> RepositoryGroup? {
+        first { group in group.items.contains { $0.worktree.path == worktree.path } }
+            ?? first { $0.repository.path == worktree.repositoryPath }
     }
 }

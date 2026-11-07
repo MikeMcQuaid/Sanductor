@@ -20,7 +20,7 @@ extension RootView {
                 && resumingWorktree != item.worktree.path
                 && dependencies.dashboard.isAwaitingSession(item) == false
                 && item.session == nil
-                && startingSession != item.worktree.path)
+                && holdsSessionForm(item) == false)
     }
 
     /// Whether the item's centre pane is an editor right now: a

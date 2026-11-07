@@ -46,7 +46,7 @@ struct AgentSessionForm: View {
 
     var body: some View {
         Group {
-            if isStarting {
+            if isStarting || isLaunchingElsewhere {
                 if let progress = model.launchProgresses[worktreePath ?? model.selection?.id ?? ""] {
                     LaunchProgressView("Starting the agent…", progress: progress)
                 } else {
@@ -106,6 +106,12 @@ struct AgentSessionForm: View {
     private var agentModel = ""
     @AppStorage("agentEffort")
     private var agentEffort = ""
+
+    /// A retry starts this worktree's launch without the form; the
+    /// form still has to stand aside for it.
+    private var isLaunchingElsewhere: Bool {
+        worktreePath.map { model.launchProgresses[$0] != nil } ?? false
+    }
 
     private var agent: Binding<AgentKind> {
         Binding(

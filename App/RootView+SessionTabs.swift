@@ -152,6 +152,15 @@ extension RootView {
         startingSession = nil
     }
 
+    /// A retry starts its agent without the form, so nothing else
+    /// clears the marker of the worktree it ran in.
+    func runningWorktreesChanged(to running: Set<String>) {
+        displaceCentreEditors(nowRunning: running)
+        if startingSession.map(running.contains) == true {
+            startingSession = nil
+        }
+    }
+
     /// Worktrees with a running session right now.
     var runningWorktreePaths: Set<String> {
         let items = dependencies.dashboard.visibleGroups.flatMap(\.items)

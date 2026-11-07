@@ -25,7 +25,7 @@ public extension DashboardModel {
 
     /// Creates a session from a typed prompt; public for the App
     /// Intents, which start work from Shortcuts and Siri, and answer
-    /// with the failure when there is one.
+    /// with the failure when there is one. `reveals` as for issues.
     @discardableResult
     func createSession(
         repository: Repository,
@@ -33,9 +33,12 @@ public extension DashboardModel {
         agent: AgentKind,
         options: AgentLaunchOptions = AgentLaunchOptions(),
         baseBranch: String? = nil,
+        reveals: Bool = true,
     ) async -> LaunchFailure? {
         let draft = LaunchDraft(text: prompt, source: .prompt, agent: agent, options: options, base: baseBranch)
-        return await run(draft, in: repository, placeholder: Self.placeholderName(from: prompt)) { service in
+        return await run(
+            draft, in: repository, placeholder: Self.placeholderName(from: prompt), reveals: reveals,
+        ) { service in
             try await service.createSession(
                 repository: repository,
                 prompt: prompt,
@@ -86,8 +89,7 @@ public extension DashboardModel {
         // first's worktree before its agent was running, and killed
         // that agent to start its own. A launch holds a progress log
         // under its placeholder's path until it ends.
-        let pending = repository.path + Self.placeholderMarker + "pr-\(number)-"
-        guard launchProgresses.keys.contains(where: { $0.hasPrefix(pending) }) == false else {
+        guard isLaunching(pullRequest: number, in: repository) == false else {
             return
         }
 
@@ -104,7 +106,7 @@ public extension DashboardModel {
     }
 
     /// Creates a session fixing a security advisory, on a branch that
-    /// names nothing.
+    /// names nothing; `reveals` as for issues.
     func createSession(
         fromAdvisory ghsaID: String,
         repository: Repository,
@@ -112,11 +114,12 @@ public extension DashboardModel {
         agent: AgentKind,
         options: AgentLaunchOptions = AgentLaunchOptions(),
         baseBranch: String? = nil,
+        reveals: Bool = true,
     ) async {
         let draft = LaunchDraft(
             text: context, source: .advisory, agent: agent, options: options, ghsaID: ghsaID, base: baseBranch,
         )
-        await run(draft, in: repository, placeholder: SessionService.advisoryBranch) { service in
+        await run(draft, in: repository, placeholder: SessionService.advisoryBranch, reveals: reveals) { service in
             try await service.createSession(
                 fromAdvisory: ghsaID,
                 repository: repository,
@@ -128,29 +131,33 @@ public extension DashboardModel {
         }
     }
 
-    /// Starts an agent in an existing worktree.
+    /// Starts an agent in an existing worktree; `reveals` as for
+    /// issues.
     func launchAgent(
         in worktree: Worktree,
         prompt: String,
         agent: AgentKind,
         options: AgentLaunchOptions = AgentLaunchOptions(),
+        reveals: Bool = true,
     ) async {
         let draft = LaunchDraft(text: prompt, source: .prompt, agent: agent, options: options)
-        await run(draft, at: worktree.path) { service in
+        await run(draft, at: worktree.path, reveals: reveals) { service in
             try await service.launchAgent(in: worktree, prompt: prompt, agent: agent, options: options)
         }
     }
 
-    /// Starts an agent on an open issue in an existing worktree.
+    /// Starts an agent on an open issue in an existing worktree;
+    /// `reveals` as for issues.
     func launchAgent(
         fromIssue number: Int,
         in worktree: Worktree,
         context: String,
         agent: AgentKind,
         options: AgentLaunchOptions = AgentLaunchOptions(),
+        reveals: Bool = true,
     ) async {
         let draft = LaunchDraft(text: context, source: .issue, agent: agent, options: options, number: number)
-        await run(draft, at: worktree.path) { service in
+        await run(draft, at: worktree.path, reveals: reveals) { service in
             try await service.launchAgent(
                 fromIssue: number,
                 in: worktree,
@@ -161,16 +168,18 @@ public extension DashboardModel {
         }
     }
 
-    /// Starts an agent on a security advisory in an existing worktree.
+    /// Starts an agent on a security advisory in an existing worktree;
+    /// `reveals` as for issues.
     func launchAgent(
         fromAdvisory ghsaID: String,
         in worktree: Worktree,
         context: String,
         agent: AgentKind,
         options: AgentLaunchOptions = AgentLaunchOptions(),
+        reveals: Bool = true,
     ) async {
         let draft = LaunchDraft(text: context, source: .advisory, agent: agent, options: options, ghsaID: ghsaID)
-        await run(draft, at: worktree.path) { service in
+        await run(draft, at: worktree.path, reveals: reveals) { service in
             try await service.launchAgent(
                 fromAdvisory: ghsaID,
                 in: worktree,
@@ -242,9 +251,7 @@ public extension DashboardModel {
             await service.waitForAgentReady(sessionName: sessionName)
             await refreshUntil(narrating: progress) { items in items.contains { $0.session?.name == sessionName } }
             if let created = groups.flatMap(\.items).first(where: { $0.session?.name == sessionName }) {
-                if selection.map({ $0.worktree.path == rowPath }) ?? true,
-                   showsNewSession == false, showsRepositoryFinder == false
-                {
+                if opensPane(ofRowAt: rowPath, reveals: reveals) {
                     progress.report("Listed; opening the pane of `" + sessionName + "`")
                     reveal(created)
                 }
@@ -258,6 +265,14 @@ public extension DashboardModel {
         } catch {
             return fail(with: error, draft: draft, rowPath: rowPath, pending: pending)
         }
+    }
+
+    /// Whether a finished launch opens its pane: its row is still
+    /// selected and no page covers it. With nothing selected, only a
+    /// launch that was meant to reveal itself takes the screen.
+    internal func opensPane(ofRowAt rowPath: String?, reveals: Bool) -> Bool {
+        (selection.map { $0.worktree.path == rowPath } ?? reveals)
+            && showsNewSession == false && showsRepositoryFinder == false
     }
 
     /// Leaves a failed launch on its row, which becomes selectable:
