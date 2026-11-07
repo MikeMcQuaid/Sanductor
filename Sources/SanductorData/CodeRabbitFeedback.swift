@@ -54,13 +54,16 @@ enum CodeRabbitFeedback {
 
     static func findings(_ review: ReviewComment, head: String) -> String? {
         guard review.authorType == "Bot", ReviewBot.codeRabbit.matches(review.author),
-              review.commit == head, ["COMMENTED", "CHANGES_REQUESTED", "APPROVED"].contains(review.kind),
-              let section = review.body.range(
-                  of: #"<summary>[^<]*(Nitpick comments|Outside diff range comments) \([1-9][0-9]*\)</summary>"#,
-                  options: .regularExpression,
-              )
+              review.commit == head, ["COMMENTED", "CHANGES_REQUESTED", "APPROVED"].contains(review.kind)
         else {
             return nil
+        }
+        guard let section = review.body.range(
+            of: #"<summary>[^<]*(Nitpick comments|Outside diff range comments) \([1-9][0-9]*\)</summary>"#,
+            options: .regularExpression,
+        ) else {
+            let threads = CodeRabbitOutsideDiff.threads(in: [review])
+            return threads.isEmpty ? nil : ReviewThread.digest(of: threads)
         }
 
         let end = review.body
@@ -69,6 +72,17 @@ enum CodeRabbitFeedback {
                 options: .regularExpression,
                 range: section.upperBound ..< review.body.endIndex,
             )?.lowerBound ?? review.body.endIndex
-        return String(review.body[section.lowerBound ..< end]).trimmingCharacters(in: .whitespacesAndNewlines)
+        let body = String(review.body[section.lowerBound ..< end]).trimmingCharacters(in: .whitespacesAndNewlines)
+        let included = ReviewComment(
+            id: review.id,
+            author: review.author,
+            // The matched range starts inside its enclosing disclosure.
+            body: "<details>" + body,
+            kind: review.kind,
+            authorType: review.authorType,
+        )
+        let includedIDs = Set(CodeRabbitOutsideDiff.threads(in: [included]).map(\.id))
+        let additional = CodeRabbitOutsideDiff.threads(in: [review]).filter { includedIDs.contains($0.id) == false }
+        return (body + "\n\n" + ReviewThread.digest(of: additional)).trimmingCharacters(in: .whitespacesAndNewlines)
     }
 }

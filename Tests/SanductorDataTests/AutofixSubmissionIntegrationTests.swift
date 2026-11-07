@@ -25,8 +25,11 @@ struct AutofixSubmissionIntegrationTests {
             directory: directory,
             command: "stty raw -echo; printf '\\033[?2004h'; ./codex >submitted",
         )
-        #expect(await TestSupport.poll { FileManager.default.fileExists(atPath: directory + "/submitted") })
         let pane = try #require(try await client.panes().first)
+        try #require(await TestSupport.poll {
+            let process = await client.foreground(paneID: pane.paneID)
+            return process.isShell == false && process.command == "codex"
+        })
         try await client.herdr([
             "pane", "report-agent", pane.paneID, "--source", "test", "--agent", "codex", "--state", activity,
         ])

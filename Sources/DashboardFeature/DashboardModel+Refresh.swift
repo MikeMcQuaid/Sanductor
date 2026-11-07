@@ -13,7 +13,8 @@ public extension DashboardModel {
     /// window is minimised or fully covered, since nobody reads a
     /// hidden window, and on battery, where a tick that finds
     /// nothing should have cost nothing. Notifications still fire,
-    /// one tick later at worst, and events never wait for a tick.
+    /// one tick later at worst; filesystem events wake a reading early
+    /// only while visible on mains power.
     internal static var pollInterval: Int {
         AppSettings.pollInterval
     }
@@ -35,11 +36,16 @@ public extension DashboardModel {
     /// is waiting for it, and each waited on the other until the app
     /// was restarted. Its call returns at once and what it asked for
     /// runs as the next reading, straight after this one.
-    /// `readingPanes` says whether this reading may ask herdr for
-    /// its pane listing: everything but the poll's own tick does,
-    /// since an action or an agent change is what changes it; the
-    /// tick reuses the last listing until its safety interval is up.
-    func refresh(forcing repositoryPath: String? = nil, readingPanes: Bool = true) async {
+    /// `readingPanes` lets actions and agent events ask herdr for its
+    /// pane listing; polls and filesystem events reuse the last one
+    /// until its safety interval is up. Automatic calls also respect
+    /// the power and visibility cadence for git.
+    func refresh(
+        forcing repositoryPath: String? = nil, readingPanes: Bool = true, automatically: Bool = false,
+    ) async {
+        if automatically == false {
+            pendingImmediateGitRead = true
+        }
         if let repositoryPath {
             pendingForces.insert(repositoryPath)
         }
@@ -97,7 +103,7 @@ public extension DashboardModel {
         // lands, where waiting on the sandbox took twenty seconds.
         await discoverModels()
         while Task.isCancelled == false {
-            await refresh(readingPanes: false)
+            await refresh(readingPanes: false, automatically: true)
             let interval = RefreshCadence.pollSeconds(
                 setting: Self.pollInterval,
                 visible: isWindowVisible,
@@ -159,6 +165,8 @@ public extension DashboardModel {
     private func performRefresh() async {
         let forces = pendingForces
         pendingForces = []
+        let readsGitImmediately = pendingImmediateGitRead
+        pendingImmediateGitRead = false
         let readsPanes = pendingPaneRead
             || RefreshCadence.panesDue(lastRead: panesReadAt, now: Date(), onBattery: isOnBattery())
         pendingPaneRead = false
@@ -166,7 +174,7 @@ public extension DashboardModel {
             panesReadAt = Date()
         }
         let overview = await service.overview(
-            scope: gitReadScope(forcing: forces),
+            scope: gitReadScope(forcing: forces, immediately: readsGitImmediately),
             kept: groups,
             readingPanes: readsPanes,
         )

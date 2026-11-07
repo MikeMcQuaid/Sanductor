@@ -3,6 +3,16 @@ import Testing
 
 struct GitWorktreeStatusTests {
     @Test
+    func `changed paths preserve spaces and line breaks and skip old rename paths`() {
+        let status = GitWorktreeStatus(porcelain:
+            "1 .M N... 100644 100644 100644 abc def dir/file name\n.txt\0"
+                + "2 R. N... 100644 100644 100644 abc def R100 renamed.txt\0old name.txt\0"
+                + "u UU N... 100644 100644 100644 100644 abc def ghi conflict.txt\0"
+                + "? nested/new file.txt\0")
+        #expect(status.changedPaths == ["dir/file name\n.txt", "renamed.txt", "conflict.txt", "nested/new file.txt"])
+    }
+
+    @Test
     func `branch spelling and upstream counts are preserved`() {
         let status = GitWorktreeStatus(porcelain:
             "# branch.head Feature/login_fix\0# branch.upstream origin/main\0# branch.ab +12 -3\0? new file\0")
