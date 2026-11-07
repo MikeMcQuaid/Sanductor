@@ -21,9 +21,9 @@ public extension GitClient {
     /// files included as new ones: committing stages everything, so
     /// showing them is what makes them addable. `git diff` never
     /// shows untracked files, so they are marked intent-to-add in a
-    /// private index built from `HEAD`, which makes the reading
-    /// three processes however many there are; one `diff --no-index`
-    /// per file ran thirteen thousand times in a minute on a
+    /// private index built from `HEAD`, or empty before the first commit.
+    /// This normally takes three processes however many there are;
+    /// one `diff --no-index` per file ran thirteen thousand times in a minute on a
     /// worktree an agent had filled. The real index is never touched.
     func uncommittedDiff(
         worktreePath: String,
@@ -36,10 +36,24 @@ public extension GitClient {
         try FileManager.default.createDirectory(at: scratch, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: scratch) }
         let environment = ["GIT_INDEX_FILE": scratch.appendingPathComponent("index").path]
-        try await git(["read-tree", "HEAD"], in: worktreePath, environment: environment)
+        var comparison = comparedTo
+        do {
+            try await git(["read-tree", "HEAD"], in: worktreePath, environment: environment)
+        } catch {
+            guard await commitHash(of: "HEAD", worktreePath: worktreePath) == nil else {
+                throw error
+            }
+
+            try await git(["read-tree", "--empty"], in: worktreePath, environment: environment)
+            if comparison == "HEAD" {
+                comparison = try await git(["hash-object", "-t", "tree", "/dev/null"], in: worktreePath)
+                    .standardOutput
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+            }
+        }
         try await git(["add", "--intent-to-add", "--all"], in: worktreePath, environment: environment)
         return try await git(
-            ["diff"] + diffOptions(ignoringWhitespace: ignoringWhitespace) + [comparedTo],
+            ["diff"] + diffOptions(ignoringWhitespace: ignoringWhitespace) + [comparison],
             in: worktreePath,
             environment: environment,
         ).standardOutput

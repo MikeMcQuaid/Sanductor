@@ -123,6 +123,7 @@ public extension SessionService {
                 session: nil,
                 isDirty: facts?.isDirty ?? false,
                 aheadOfUpstream: facts?.aheadOfUpstream,
+                revision: facts?.revision,
             ))
         }
         return items
@@ -138,9 +139,16 @@ public extension SessionService {
         }
 
         let branch = await git.currentBranch(worktreePath: path) ?? ""
-        let isDirty = await git.isDirty(worktreePath: path)
+        let local = await git.localState(worktreePath: path)
         let ahead = await git.aheadOfUpstream(worktreePath: path)
-        let facts = HostFacts(exists: true, branch: branch, isDirty: isDirty, aheadOfUpstream: ahead)
+        let refs = await git.refFingerprint(worktreePath: path)
+        let facts = HostFacts(
+            exists: true,
+            branch: branch,
+            isDirty: local.isDirty,
+            aheadOfUpstream: ahead,
+            revision: LocalReviewInput.fingerprint((local.revision ?? "") + "\n" + refs),
+        )
         hostFacts.remember(facts, of: path)
         return facts
     }

@@ -34,6 +34,15 @@ public final class DashboardModel {
         restoreDiscoveredModels()
         readModelNames()
         refreshWorkMode()
+        watcher.onChange { [weak self] in
+            Task { @MainActor in
+                guard let self, self.hasLoaded, self.isWindowVisible, self.isOnBattery() == false else {
+                    return
+                }
+
+                await self.refresh(readingPanes: false, automatically: true)
+            }
+        }
     }
 
     deinit {
@@ -357,6 +366,7 @@ public final class DashboardModel {
     var refreshTask: Task<Void, Never>?
     var queuedRefresh: Task<Void, Never>?
     var pendingForces: Set<String> = []
+    @ObservationIgnored var pendingImmediateGitRead = false
 
     /// The identifier of the task running the reading in flight, and whether it asked for another; see `refresh`.
     var readingTaskID: Int?

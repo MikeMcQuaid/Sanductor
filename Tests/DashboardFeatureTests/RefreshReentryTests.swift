@@ -10,6 +10,18 @@ struct RefreshReentryTests {
     // MARK: Internal
 
     @Test
+    func `automatic requests cannot defer an explicit git refresh`() async {
+        let model = makeModel()
+        model.readingTaskID = unsafe withUnsafeCurrentTask { unsafe $0?.hashValue }
+        await model.refresh(automatically: true)
+        #expect(model.pendingImmediateGitRead == false)
+
+        await model.refresh()
+        await model.refresh(automatically: true)
+        #expect(model.pendingImmediateGitRead)
+    }
+
+    @Test
     func `a refresh asked for from inside the reading does not wait on it`() async {
         let model = makeModel()
         // A reading is in flight and will be for a while.

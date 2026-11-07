@@ -73,7 +73,7 @@ enum CodeRabbitOutsideDiff {
     private static let cache: Mutex<[ReviewComment: [ReviewThread]]> = .init([:])
 
     private static func parse(_ review: ReviewComment) throws -> [Finding] {
-        let protected = try MarkdownHTMLCode(review.body)
+        let protected = try MarkdownHTMLCode(review.body + "\n" + calloutDisclosures(review.body))
         let document = try SwiftSoup.parseBodyFragment(protected.source)
         document.outputSettings().prettyPrint(pretty: false)
         var findings = [Finding]()
@@ -90,19 +90,13 @@ enum CodeRabbitOutsideDiff {
                     findings.append(Finding(path: location.path, line: location.line, body: body))
                 }
             } else if try summary.text().range(of: outsideDiffPattern, options: .regularExpression) != nil {
-                let files = try details.select("details").array().filter { file in
-                    try file !== details && file.children()
-                        .first { $0.tagName() == "summary" }?
-                        .text()
-                        .range(of: #" \([0-9]+\)$"#, options: .regularExpression) != nil
-                }
+                let files = try details.select("details").array().filter { $0 !== details }
                 for file in files {
                     let title = try protected.restore(file.children().first()?.text() ?? "")
-                    let path = title.replacingOccurrences(
-                        of: #" \([0-9]+\)$"#, with: "", options: .regularExpression,
-                    )
-                    .trimmingCharacters(in: CharacterSet(charactersIn: "` "))
-                    guard path.range(of: #"^\S+$|[/.]"#, options: .regularExpression) != nil else {
+                    let path = title.range(of: #" \([0-9]+\)$"#, options: .regularExpression).map { range in
+                        String(title[..<range.lowerBound]).trimmingCharacters(in: CharacterSet(charactersIn: "` "))
+                    }
+                    if let path, path.range(of: #"^\S+$|[/.]"#, options: .regularExpression) == nil {
                         continue
                     }
 
@@ -139,6 +133,10 @@ enum CodeRabbitOutsideDiff {
                       let match = text.firstMatch(of: /^\*\*([^*]+):([0-9]+)(?:-[0-9]+)?\*\*:/), let line = Int(match.2)
             {
                 anchor = (String(match.1), line)
+            } else if path == nil,
+                      let match = text.wholeMatch(of: /^`([^`]+):([0-9]+)(?:-[0-9]+)?`$/), let line = Int(match.2)
+            {
+                anchor = (String(match.1), line)
             }
             if let (path, line) = anchor, path.isEmpty == false, line > 0 {
                 findings.append(Finding(path: path, line: line, body: text))
@@ -147,6 +145,28 @@ enum CodeRabbitOutsideDiff {
             }
         }
         return findings
+    }
+
+    private static func calloutDisclosures(_ source: String) -> String {
+        Document(parsing: source)
+            .children
+            .compactMap { node -> String? in
+                guard let quote = node as? BlockQuote, quote.children.contains(where: { child in
+                    guard let paragraph = child as? Paragraph else {
+                        return false
+                    }
+
+                    return paragraph.plainText.range(of: outsideDiffPattern, options: .regularExpression) != nil
+                        && paragraph.plainText.range(of: #"\([1-9][0-9]*\)$"#, options: .regularExpression) != nil
+                }) else {
+                    return nil
+                }
+
+                return "<details><summary>Outside diff</summary>\n"
+                    + quote.children.lazy.map { $0.detachedFromParent.format() }.joined(separator: "\n\n")
+                    + "\n</details>"
+            }
+            .joined(separator: "\n")
     }
 
     private static func sourceLocation(_ node: any Markup) -> (path: String, line: Int)? {

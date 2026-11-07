@@ -45,7 +45,7 @@ extension DashboardModel {
             }
 
             if changed {
-                await refresh()
+                await refresh(automatically: true)
             } else {
                 // A missing pane or unavailable server can refuse immediately.
                 let interval = RefreshCadence.pollSeconds(

@@ -1002,6 +1002,25 @@ shows a different branch from the one checked out.
   status. The batch includes commit identities, so moving the default
   branch or rewriting a tip refreshes the panes even if counts stay
   unchanged. Review refreshes preserve edited commit messages.
+  Uncommitted revisions combine porcelain status with changed files'
+  metadata, including nanosecond modification and change times, so
+  same-size edits and restored modification times refresh the views.
+  These readings normally run only git status; changed submodules also
+  read their HEAD. No patches are built.
+  Detached worktrees include their actual HEAD rather than the branch
+  they will return to.
+  New repositories diff against the empty tree until their first commit.
+  Selected host directories include shared refs in their local revision,
+  so a moved default branch refreshes their default-relative diffs too.
+  Filesystem events wake the coalesced refresh immediately while the
+  window is visible on mains power, reusing herdr's cached pane listing.
+  The watcher stores its callback in a value wrapper and copies it out
+  of the mutex before invoking it, avoiding nested function wrappers
+  across event batches.
+  On battery or while hidden, automatic git readings share the slower
+  poll interval, including refreshes triggered by agent events.
+  Filesystem changes stay queued until a reading is due; agent status
+  and explicit actions still update immediately.
   Review bases read the current checkout even when the pane retains an
   older worktree record, keeping PR and stack bases correct after checkout.
   Session updates preserve these facts. Default-branch names are cached
@@ -1198,8 +1217,10 @@ checked-out worktree.
 Copying reviews uses the loaded conversation and local findings without
 waiting for GitHub. CodeRabbit's latest submitted review also supplies
 outside-diff findings, parsed from grouped disclosures or individual
-Outside diff badges and source links. Grouped findings can mix direct
-file anchors with file disclosures and nested suggested fixes. These
+Outside diff badges and source links. Markdown callouts also supply
+findings through nested disclosures with full file-and-line anchors.
+Grouped findings can mix direct file anchors with file disclosures and
+nested suggested fixes. These
 share the comment rows in Review and PRs, with an arrow leaving a square
 and an Outside diff label, and join Reviews and Conversations copies
 with their file and line.
@@ -1324,13 +1345,14 @@ reads additional source files.
    with `git apply --check -R`, applies with `git apply -R --index` and
    amends. Uncommitted changes skip the amend. Untracked files join
    the uncommitted diff as new files through a private index built
-   from `HEAD` with them marked intent-to-add: three processes
-   however many there are, where one `diff --no-index` per file ran
-   thirteen thousand times in a minute on a worktree an agent had
-   filled, and the real index is never touched. Every file's header
-   opens it in the editor; an uncommitted tracked file can be put back
-   to what HEAD has (`git checkout HEAD -- <path>`, staged changes
-   included) and a never-committed one deleted, each after a prompt.
+   from `HEAD` (empty before the first commit) with them marked
+   intent-to-add: normally three processes however many there are,
+   where one `diff --no-index` per file ran thirteen thousand times
+   in a minute on a worktree an agent had filled, and the real index
+   is never touched. Every file's header opens it in the editor; an
+   uncommitted tracked file can be put back to what HEAD has
+   (`git checkout HEAD -- <path>`, staged changes included) and a
+   never-committed one deleted, each after a prompt.
    Lines once turned into fields on a click, which could not be
    selected across and read as jank, so a diff is now only ever read.
    Each file appears once in the diff.
@@ -1488,8 +1510,9 @@ steps.
   forever.
 - **The tick is a safety net; events do the work.** A file changing
   under a worktree (FSEvents), an agent changing state (`herdr agent
-  wait`) and every action of the app's own each wake a reading. The
-  poll behind them re-reads on Settings' interval while the window
+  wait`) and every action of the app's own each wake a reading;
+  filesystem events wait for the slower tick on battery or while hidden.
+  The poll behind them re-reads on Settings' interval while the window
   shows, a minute while it is covered, and on battery a minute
   showing and five covered (`RefreshCadence`, `PowerSource`). Git safety
   checks share one power-state reading across their repository batch.
@@ -2607,6 +2630,8 @@ reach manual testing live in the seams; test runners strip `HERDR_*`
 from the environment so a teardown can never reach the production
 server. Fixture git commands disable automatic maintenance so a
 background maintenance lock cannot disappear during a local clone.
+The autofix submission fixture waits for its named foreground receiver;
+the shell creates redirected output files before executing the receiver.
 The editor-spool event test delays safety sweeps beyond its
 deadline, so scheduling delays do not count as missed directory events.
 The fork-remote concurrency test awaits unrelated work while cleanup
@@ -3048,7 +3073,9 @@ lookalike accounts never qualify. Unresolved inline threads and actionable
 current-head review summaries join the same prompt as CI and local
 findings. CodeRabbit summaries retain extracted nitpicks and findings
 outside the diff, excluding praise and review information. Copy and
-autofix share the existing CodeRabbit body cleanup. Threads containing
+autofix share the existing CodeRabbit body cleanup. Autofix combines
+callouts and HTML findings sections without repeating findings already
+included in the section. Threads containing
 unverified participants require manual attention. Previously handled
 replies remain context; durable comment and review identifiers prevent
 repeated fixes across refreshes, pushes and restarts.

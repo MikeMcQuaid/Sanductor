@@ -62,7 +62,7 @@ public struct WorktreeItem: Identifiable, Hashable, Sendable {
     /// running session or uncommitted edits. Seconds since 1970.
     public let lastActivityAt: Int
 
-    /// The refs used to read this branch, including the shared default.
+    /// The refs and local changes, including the shared default and detached HEAD.
     public let revision: String?
 
     /// Git state shared by the sidebar, PR pane and Review pane.

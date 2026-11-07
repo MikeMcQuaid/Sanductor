@@ -19,19 +19,29 @@ extension DashboardModel {
     /// The repositories whose git is read this tick: any asked for
     /// by name, any the watcher saw change, and any past its safety
     /// interval. Everything before the first reading lands.
-    func gitReadScope(forcing paths: Set<String>) -> GitReadScope {
+    func gitReadScope(forcing paths: Set<String>, immediately: Bool = false) -> GitReadScope {
+        let now = Date()
         guard hasLoaded else {
             for group in groups {
-                gitReadAt[group.repository.path] = Date()
+                gitReadAt[group.repository.path] = now
             }
             return .all
+        }
+
+        let onBattery = isOnBattery()
+        let minimumInterval = RefreshCadence.pollSeconds(
+            setting: Self.pollInterval, visible: isWindowVisible, onBattery: onBattery,
+        )
+        if immediately == false, paths.isEmpty, onBattery || isWindowVisible == false,
+           let last = gitReadAt.values.max(), now.timeIntervalSince(last) < Double(minimumInterval)
+        {
+            return .only([])
         }
 
         let changed = watcher.consumeChangedPaths()
         let watching = watcher.isWatching
         var due = paths
         let selectedRepository = selection?.worktree.repositoryPath
-        let onBattery = isOnBattery()
         for group in groups {
             let path = group.repository.path
             let isSelected = path == selectedRepository
@@ -62,12 +72,12 @@ extension DashboardModel {
                 }
             }
             let safety = RefreshCadence.slowed(interval, onBattery: onBattery)
-            if touched || Date().timeIntervalSince(last) >= safety {
+            if touched || now.timeIntervalSince(last) >= safety {
                 due.insert(path)
             }
         }
         for repository in due {
-            gitReadAt[repository] = Date()
+            gitReadAt[repository] = now
         }
         return .only(due)
     }
