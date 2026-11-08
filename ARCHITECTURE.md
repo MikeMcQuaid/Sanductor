@@ -1692,6 +1692,8 @@ steps.
   The shared GitHub client names the repository from each check's link
   and resolves individual jobs to their database IDs before rerunning,
   since the displayed link can carry a different check-run ID.
+  Job links match by path, ignoring query strings, before falling back
+  to an unambiguous job name.
   Rerun controls lock during submission, failures name the affected job
   and the shared summary refreshes after every batch, including partial
   success. External checks keep their existing browser actions.

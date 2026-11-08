@@ -35,6 +35,32 @@ extension GitHubClientTests {
         )
     }
 
+    @Test(arguments: ["", "?pr=7"])
+    func `individual reruns distinguish identical job names despite PR queries`(query: String) async throws {
+        let runner = ScriptedGitHubRunner(answers: [
+            "gh run view 9 --repo upstream/repo --json jobs --jq .jobs": .success(
+                #"""
+                [{"databaseId": 88, "name": "build",
+                  "url": "https://github.com/upstream/repo/actions/runs/9/job/22"},
+                 {"databaseId": 99, "name": "build",
+                  "url": "https://github.com/upstream/repo/actions/runs/9/job/11"}]
+                """#,
+            ),
+            "gh run rerun 9 --repo upstream/repo --job 99": .success(""),
+        ])
+        try await GitHubClient(runner: runner) { true }.rerunCheck(
+            repositoryPath: "/fork",
+            check: PullRequestCheck(
+                name: "build",
+                status: "COMPLETED",
+                conclusion: "FAILURE",
+                requirement: .required,
+                link: rerunnableCheck.link + query,
+            ),
+            failedOnly: false,
+        )
+    }
+
     @Test(arguments: [
         "[]",
         #"[{"databaseId": 99, "name": "another job"}]"#,
