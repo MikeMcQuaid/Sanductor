@@ -6,28 +6,54 @@ import SwiftUI
 public struct CopyReviewConversationsButton: View {
     // MARK: Lifecycle
 
-    public init(threads: [ReviewThread]) {
+    public init(
+        threads: [ReviewThread],
+        onResolve: @escaping ([ReviewThread]) async -> Void,
+        pendingResolution: @escaping (ReviewThread) -> Bool,
+    ) {
         self.threads = threads
+        self.onResolve = onResolve
+        self.pendingResolution = pendingResolution
     }
 
     // MARK: Public
 
     public var body: some View {
-        PaneIconButton(
-            "doc.on.doc",
-            help: "Copy unresolved local AI and GitHub conversations and outside-diff findings, with files and lines",
+        BusyButton(
+            "",
+            busy: "",
+            systemImage: "doc.on.doc",
+            accessibilityLabel: "Copy " + String(open.count) + " conversations and findings",
             disabled: open.isEmpty,
-        ) {
-            PromptClipboard.copy(ReviewCopy.digest(of: open))
+        ) { modifiers in
+            await copy(resolve: modifiers.contains(.option))
         }
-        .accessibilityLabel("Copy " + String(open.count) + " conversations and findings")
+        .controlSize(.small)
+        .hoverHelp("Copy unresolved local AI and GitHub conversations and outside-diff findings, with files and lines; "
+            + "exclude those marked Resolve on push. Option-click copies first, then marks GitHub conversations "
+            + "Resolve on push and resolves local and outside-diff findings")
+    }
+
+    // MARK: Internal
+
+    func copy(resolve: Bool, toClipboard: (String) -> Bool = { PromptClipboard.copy($0) }) async {
+        let copied = open
+        guard toClipboard(ReviewCopy.digest(of: copied)) else {
+            return
+        }
+
+        if resolve {
+            await onResolve(copied)
+        }
     }
 
     // MARK: Private
 
     private let threads: [ReviewThread]
+    private let onResolve: ([ReviewThread]) async -> Void
+    private let pendingResolution: (ReviewThread) -> Bool
 
     private var open: [ReviewThread] {
-        threads.filter { $0.isResolved == false }
+        ReviewCopy.copyable(threads, pendingResolution: pendingResolution)
     }
 }

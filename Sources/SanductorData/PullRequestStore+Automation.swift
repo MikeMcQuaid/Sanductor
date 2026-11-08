@@ -24,29 +24,45 @@ public extension PullRequestStore {
     }
 
     /// Records the displayed conversation locally; resolution verifies GitHub after a push.
-    func toggleResolveOnPush(repositoryPath: String, summary: PullRequestSummary, thread: ReviewThread) throws {
+    func toggleResolveOnPush(repositoryPath: String, summary: PullRequestSummary, thread: ReviewThread) async throws {
         let threadID = thread.resolveID
         let key = PullRequestAutomation.key(for: summary.url)
         if store.load().pullRequestAutomation[key]?.resolutions[threadID] != nil {
             try store.updatePersisting { $0.pullRequestAutomation[key]?.resolutions[threadID] = nil }
             return
         }
-        guard summary.state == "OPEN", let head = summary.headCommit, head.isEmpty == false,
+        try await markResolveOnPush(repositoryPath: repositoryPath, summary: summary, thread: thread)
+    }
+
+    /// Marks a thread without cancelling or replacing an existing mark from any checkout.
+    func markResolveOnPush(repositoryPath: String, summary: PullRequestSummary, thread: ReviewThread) async throws {
+        let threadID = thread.resolveID
+        guard store.load()
+            .pullRequestAutomation[PullRequestAutomation.key(for: summary.url)]?
+            .resolutions[threadID] == nil
+        else {
+            return
+        }
+
+        let fresh = try await summaryForResolution(repositoryPath: repositoryPath, summary: summary)
+        guard fresh.state == "OPEN" else {
+            throw SessionServiceError("The pull request is closed. Its conversations cannot be marked Resolve on push.")
+        }
+        guard let head = fresh.headCommit, head.isEmpty == false,
               threadID.isEmpty == false, thread.isResolved == false, let latest = thread.comments.last?.id
         else {
             throw SessionServiceError("The pull request is still loading. Try marking this conversation again shortly.")
         }
 
-        try updateAutomation(repositoryPath: repositoryPath, summary: summary) { state in
-            state.resolutions[threadID] = PendingThreadResolution(head: head, commentID: latest)
+        try updateAutomation(repositoryPath: repositoryPath, summary: fresh) { state in
+            if state.resolutions[threadID] == nil {
+                state.resolutions[threadID] = PendingThreadResolution(head: head, commentID: latest)
+            }
         }
     }
 
     /// Whether this thread has a cancellable mark, including a claimed request.
-    func pendingResolution(repositoryPath: String, threadID: String, number: Int? = nil) -> Bool {
-        store.load().pullRequestAutomation.values.contains { state in
-            state.repositoryPath == repositoryPath && (number == nil || state.number == number)
-                && state.resolutions[threadID] != nil
-        }
+    func pendingResolution(pullRequestURL: String, threadID: String) -> Bool {
+        store.load().pullRequestAutomation[PullRequestAutomation.key(for: pullRequestURL)]?.resolutions[threadID] != nil
     }
 }

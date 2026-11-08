@@ -28,7 +28,15 @@ struct ReviewFileListView: View {
                         HStack {
                             Text("Conversations").interfaceFont(.headline)
                             Spacer()
-                            CopyReviewConversationsButton(threads: conversations)
+                            let review = localReview.review
+                            CopyReviewConversationsButton(
+                                threads: model.threads + (review?.threads ?? []),
+                                onResolve: { copied in
+                                    await model.resolveReviews?(copied, review)
+                                    localReview.refreshAutomation()
+                                },
+                                pendingResolution: pendingResolution,
+                            )
                         }
                     }
                     ForEach(model.files) { file in
@@ -111,7 +119,7 @@ struct ReviewFileListView: View {
             thread: thread,
             onEdit: { FileOpener.open(relativePath: thread.path, line: thread.line, worktreePath: worktreePath) },
             onToggleResolved: { await model.toggleResolved(thread) },
-            onToggleResolveOnPush: { model.toggleResolveOnPush(thread) },
+            onToggleResolveOnPush: { await model.toggleResolveOnPush(thread) },
             isPendingResolution: pendingResolution(thread),
         )
     }

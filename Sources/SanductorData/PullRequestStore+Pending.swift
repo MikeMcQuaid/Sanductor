@@ -36,6 +36,7 @@ public extension PullRequestStore {
                     metadata.enrichedSummaryCache[key] = CachedSummary(
                         summary: cached.summary.awaitingChecks(),
                         savedAt: cached.savedAt,
+                        requiresHeadRefresh: cached.requiresHeadRefresh,
                     )
                 }
             }

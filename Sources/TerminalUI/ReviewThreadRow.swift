@@ -17,7 +17,7 @@ public struct ReviewThreadRow: View {
         localReviewer: AgentKind? = nil,
         onMakeFix: (@MainActor () async -> Void)? = nil,
         onToggleResolved: (@MainActor () async -> Void)? = nil,
-        onToggleResolveOnPush: (@MainActor () -> Void)? = nil,
+        onToggleResolveOnPush: (@MainActor () async -> Void)? = nil,
         isPendingResolution: Bool = false,
         allowsActions: Bool = true,
         allowsFix: Bool = true,
@@ -102,7 +102,7 @@ public struct ReviewThreadRow: View {
     private let allowsActions: Bool
     private let allowsFix: Bool
     private let showsCodeContext: Bool
-    private let onToggleResolveOnPush: (@MainActor () -> Void)?
+    private let onToggleResolveOnPush: (@MainActor () async -> Void)?
     private let isPendingResolution: Bool
     private let onToggleResolved: (@MainActor () async -> Void)?
 
@@ -197,12 +197,15 @@ public struct ReviewThreadRow: View {
 
     @ViewBuilder private var resolveOnPushButton: some View {
         if thread.isResolved == false, thread.resolveID.isEmpty == false, let onToggleResolveOnPush {
-            Button(isPendingResolution ? "Cancel" : "Resolve on push", action: onToggleResolveOnPush)
-                .buttonStyle(.glass)
-                .controlSize(.small)
-                .hoverHelp(isPendingResolution
-                    ? "Cancel resolution on the next push"
-                    : "Resolve this conversation after GitHub confirms the next push")
+            BusyButton(
+                isPendingResolution ? "Cancel" : "Resolve on push",
+                busy: isPendingResolution ? "Cancelling" : "Marking",
+                action: onToggleResolveOnPush,
+            )
+            .controlSize(.small)
+            .hoverHelp(isPendingResolution
+                ? "Cancel resolution on the next push"
+                : "Resolve this conversation after GitHub confirms the next push")
         }
     }
 

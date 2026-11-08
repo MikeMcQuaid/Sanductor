@@ -23,19 +23,7 @@ public struct MetadataStore: Sendable {
     /// The metadata: the in-memory copy, read from disk only the
     /// first time; empty when absent or unreadable.
     public func load() -> AppMetadata {
-        if let remembered = Self.cached.withLock({ $0[file] }) {
-            return remembered
-        }
-
-        let loaded = loadFromDisk()
-        Self.cached.withLock { cache in
-            // Another first load may have landed while this one read
-            // the file; the copy already there is at least as new.
-            if cache[file] == nil {
-                cache[file] = loaded
-            }
-        }
-        return loaded
+        load(read: loadFromDisk)
     }
 
     /// Changes the metadata in one step: loads, changes and saves
@@ -64,6 +52,23 @@ public struct MetadataStore: Sendable {
     // MARK: Internal
 
     let file: String
+
+    func load(read: () -> AppMetadata) -> AppMetadata {
+        if let remembered = Self.cached.withLock({ $0[file] }) {
+            return remembered
+        }
+
+        let loaded = read()
+        return Self.cached.withLock { cache in
+            // Another first load may have landed while this one read
+            // the file; the copy already there is at least as new.
+            if let remembered = cache[file] {
+                return remembered
+            }
+            cache[file] = loaded
+            return loaded
+        }
+    }
 
     // MARK: Private
 

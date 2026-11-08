@@ -1199,7 +1199,13 @@ The Review pane shows local findings beneath their matching hunks alongside
 GitHub conversations. Findings without a matching hunk stay below the file,
 and findings outside the selected diff remain visible below the file list,
 even when that diff is empty. A shared Conversations copy action includes
-all unresolved local and GitHub threads, independently of autofix settings.
+unresolved local and GitHub threads that are not marked Resolve on push,
+independently of autofix settings. Option-clicking Conversations in either
+pane copies first, then marks GitHub threads Resolve on push and resolves
+local and outside-diff findings through the same bulk action as Reviews.
+Failed copies leave findings unchanged.
+Copy buttons capture modifiers before scheduling their async action, so
+releasing Option immediately after a click still copies and resolves.
 The PR conversation and its existing Reviews copy action include the same
 local findings for that PR's repository and branch. Reviews record their
 repository, branch, head repository and known PR URL before running, so
@@ -1235,8 +1241,16 @@ identity. They have no Resolve on push action and do not count as
 unresolved GitHub threads. Parsing is cached by review content; the
 original timeline remains available. A newer review replaces them even
 when it has no outside-diff findings.
-Resolve on push records the displayed thread and known head locally;
-the existing push-time checks still require a new
+Resolve on push records the displayed thread and known head locally.
+Refreshed listings replace stale closed summaries when a PR reopens, so
+individual and bulk marks use the current state.
+These summaries require a fresh head read before accepting a resolution
+mark. Failed refreshes leave GitHub threads unmarked. Resolution buttons
+show progress while that read runs, and a bulk action shares one read.
+Local title and body edits preserve the refresh requirement. An open
+conversation that disagrees with a closed cache also refreshes the head
+and state before accepting marks.
+The existing push-time checks still require a new
 remote head and unchanged comments before resolving anything. A separate
 local mark signal redraws both review panes without starting a refresh.
 The feedback-loop icon is Review's single review toolbar entry point.
@@ -2048,12 +2062,32 @@ steps.
   the sidebar's arrows use (`Reviews ⎘3` as `Push ↑9`, the symbol the
   same `doc.on.doc` every copy button uses), and nothing to copy is
   the word alone, greyed out. Reviews copies unresolved conversations
-  and findings from the latest review grouped per file, dimmed when
-  neither is available (the count comes from the cached conversation,
+  and findings from the latest review grouped per file, excluding threads
+  already marked Resolve on push. Its count follows the same selection,
+  and cancelling a pending mark includes the thread again. It is dimmed
+  when neither is available (the count comes from the cached conversation,
   since no listing query carries it), with Cmd-click opening the pull
   request's files page,
   where a review comment is anchored and answered, and Shift-click
-  opening it in the Browser tab; Checks is one button for the
+  opening it in the Browser tab. Option-click copies the loaded reviews
+  before marking their open GitHub conversations Resolve on push and
+  resolving their local and outside-diff findings immediately. The same
+  copy and resolve action is available in the Reviews context menu.
+  Failed copies leave findings unchanged. Local resolution sets the saved
+  finding to resolved under the metadata lock, checking the review run
+  still matches, so concurrent autofix cannot reopen a finding.
+  Local persistence failures are reported by individual and bulk actions.
+  Legacy reviews receive distinct run IDs when decoded and retain them
+  when saved, so a replacement cannot match a previously copied review.
+  Overlapping initial metadata loads return the winning cached copy,
+  preserving one review identity for every caller.
+  Pending marks and their indicators follow the PR URL across checkouts;
+  existing marks and resolved findings stay unchanged. GitHub threads
+  without a resolution ID stay open and report that conversations need
+  refreshing before retrying. Each distinct failure is reported
+  once per bulk action without preventing the remaining findings from
+  being handled; closed PRs explain why their threads cannot be marked.
+  Checks is one button for the
   finished failing Actions checks, counting the jobs it will copy,
   independently of unfinished jobs in the same run. Each job uses the
   same log reader as the checks view; cached summaries without check

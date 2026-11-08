@@ -29,7 +29,7 @@ struct PullRequestConversationPane: View {
     let reloadToken: Int
 
     let onBack: () -> Void
-    let onCopyComments: @MainActor () -> Void
+    let onCopyComments: @MainActor () async -> Void
     let onOpenChecks: @MainActor () async -> Void
     let onResolvedChanged: @MainActor () async -> Void
 
@@ -258,7 +258,17 @@ struct PullRequestConversationView: View {
                 .controlSize(.small)
                 .hoverHelp("Include optional failures in copied logs and Autofix for this pull request")
             } else {
-                CopyReviewConversationsButton(threads: threads + (localReview?.threads ?? []))
+                CopyReviewConversationsButton(
+                    threads: threads + (localReview?.threads ?? []),
+                    onResolve: { copied in
+                        await model.resolveReviews(
+                            summary,
+                            threads: copied,
+                            local: localWorktreePath.flatMap { path in localReview.map { (path, $0) } },
+                        )
+                    },
+                    pendingResolution: pendingResolution,
+                )
             }
         }
         .padding(Self.padding)
@@ -283,7 +293,7 @@ struct PullRequestConversationView: View {
                     FileOpener.open(relativePath: thread.path, line: thread.line, worktreePath: repositoryPath)
                 },
                 onToggleResolved: { await toggleResolved(thread) },
-                onToggleResolveOnPush: { toggleResolveOnPush(thread) },
+                onToggleResolveOnPush: { await toggleResolveOnPush(thread) },
                 isPendingResolution: pendingResolution(thread),
             )
         }
@@ -343,16 +353,12 @@ struct PullRequestConversationView: View {
     private func pendingResolution(_ thread: ReviewThread) -> Bool {
         _ = automationGeneration
         _ = resolutionGeneration
-        return pullRequests.pendingResolution(
-            repositoryPath: repositoryPath,
-            threadID: thread.resolveID,
-            number: number,
-        )
+        return pullRequests.pendingResolution(pullRequestURL: summary.url, threadID: thread.resolveID)
     }
 
-    private func toggleResolveOnPush(_ thread: ReviewThread) {
+    private func toggleResolveOnPush(_ thread: ReviewThread) async {
         do {
-            try pullRequests.toggleResolveOnPush(
+            try await pullRequests.toggleResolveOnPush(
                 repositoryPath: repositoryPath, summary: summary, thread: thread,
             )
             UtilityTabTarget.resolutionMarksChanged()

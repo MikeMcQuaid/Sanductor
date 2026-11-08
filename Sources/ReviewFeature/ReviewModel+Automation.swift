@@ -42,9 +42,9 @@ extension ReviewModel {
         )
     }
 
-    func toggleResolveOnPush(_ thread: ReviewThread) {
+    func toggleResolveOnPush(_ thread: ReviewThread) async {
         do {
-            try resolveOnPush?(thread)
+            try await resolveOnPush?(thread)
             UtilityTabTarget.resolutionMarksChanged()
         } catch {
             report(error.localizedDescription)
@@ -52,25 +52,56 @@ extension ReviewModel {
     }
 
     func configureResolveOnPush(worktree: Worktree, pullRequests: PullRequestStore) {
-        resolveOnPush = { [weak self] thread in
+        let currentSummary = { [weak self] () -> PullRequestSummary? in
+            if let number = self?.threadPullRequestNumber,
+               let summary = pullRequests.cachedSummary(repositoryPath: worktree.repositoryPath, number: number)
+            {
+                return summary
+            }
             guard let summary = pullRequests.cachedListing(
                 repositoryPath: worktree.repositoryPath, scope: .branch(worktree.branch),
             )?
-                .first(where: { $0.state == "OPEN" })
+                .first(where: { summary in
+                    self?.threadPullRequestNumber.map { $0 == summary.number } ?? (summary.state == "OPEN")
+                })
             else {
+                return nil
+            }
+
+            return pullRequests.cachedSummary(
+                repositoryPath: worktree.repositoryPath, number: summary.number,
+            ) ?? summary
+        }
+        resolveOnPush = { [weak self] thread in
+            guard let summary = currentSummary() else {
                 self?.report("The pull request is still loading. Try marking this conversation again shortly.")
                 return
             }
 
-            try pullRequests.toggleResolveOnPush(
+            try await pullRequests.toggleResolveOnPush(
                 repositoryPath: worktree.repositoryPath,
-                summary: pullRequests.cachedSummary(repositoryPath: worktree.repositoryPath, number: summary.number)
-                    ?? summary,
+                summary: summary,
                 thread: thread,
             )
         }
         pendingResolution = { thread in
-            pullRequests.pendingResolution(repositoryPath: worktree.repositoryPath, threadID: thread.resolveID)
+            currentSummary().map { pullRequests.pendingResolution(pullRequestURL: $0.url, threadID: thread.resolveID) }
+                ?? false
+        }
+        resolveReviews = { [weak self] threads, review in
+            for failure in await pullRequests.resolveReviews(
+                threads,
+                repositoryPath: worktree.repositoryPath,
+                number: self?.threadPullRequestNumber,
+                summary: currentSummary(),
+                local: review.map { (worktree.path, $0) },
+            ) {
+                self?.report(failure)
+            }
+            UtilityTabTarget.resolutionMarksChanged()
+            if review != nil {
+                UtilityTabTarget.pullRequestCacheChanged()
+            }
         }
     }
 }

@@ -2,6 +2,13 @@ import SanductorDomain
 
 /// Compact bot feedback through the same HTML and code protection as the renderer.
 public enum ReviewCopy {
+    /// Unresolved findings that are not already queued for resolution.
+    public static func copyable(
+        _ threads: [ReviewThread], pendingResolution: (ReviewThread) -> Bool,
+    ) -> [ReviewThread] {
+        threads.filter { $0.isResolved == false && pendingResolution($0) == false }
+    }
+
     /// Keeps actionable bot feedback and preserves human comments verbatim.
     public static func text(_ comment: ReviewThreadComment) -> String {
         guard ReviewBot.codeRabbit.matches(comment.author) else {

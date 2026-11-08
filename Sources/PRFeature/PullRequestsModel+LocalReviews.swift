@@ -3,6 +3,20 @@ import SanductorDomain
 import TerminalUI
 
 extension PullRequestsModel {
+    func resolveReviews(
+        _ summary: PullRequestSummary, threads: [ReviewThread], local: (path: String, review: LocalReview)?,
+    ) async {
+        for failure in await pullRequests.resolveReviews(
+            threads, repositoryPath: repository.path, number: summary.number, summary: summary, local: local,
+        ) {
+            report(failure)
+        }
+        UtilityTabTarget.resolutionMarksChanged()
+        if local != nil {
+            UtilityTabTarget.pullRequestCacheChanged()
+        }
+    }
+
     func localReview(for summary: PullRequestSummary) -> (path: String, review: LocalReview)? {
         let metadata = store.load()
         let state = metadata.pullRequestAutomation[PullRequestAutomation.key(for: summary.url)]
@@ -38,11 +52,13 @@ extension PullRequestsModel {
 
     func reviewCount(for summary: PullRequestSummary) -> Int {
         _ = botAsks
-        let conversation = pullRequests.cachedConversation(repositoryPath: repository.path, number: summary.number)
-        return summary.unresolvedComments + conversation.reviewThreads.count { thread in
-            thread.outsideDiffReviewID != nil && thread.isResolved == false
-        }
-            + (localReview(for: summary)?.review.remaining ?? 0)
+        return copyableRemoteReviews(for: summary).count + (localReview(for: summary)?.review.remaining ?? 0)
+    }
+
+    func copyableRemoteReviews(for summary: PullRequestSummary) -> [ReviewThread] {
+        ReviewCopy.copyable(
+            pullRequests.cachedConversation(repositoryPath: repository.path, number: summary.number).reviewThreads,
+        ) { pullRequests.pendingResolution(pullRequestURL: summary.url, threadID: $0.resolveID) }
     }
 
     func restoreLocalReview(for summary: PullRequestSummary) async {
@@ -58,17 +74,12 @@ extension PullRequestsModel {
         }
     }
 
-    func toggleLocalResolved(_ threadID: String, review: LocalReview, path: String) {
-        store.update { metadata in
-            guard var current = metadata.localReviews[path], current.runID == review.runID,
-                  let index = current.threads.firstIndex(where: { $0.id == threadID })
-            else {
-                return
-            }
-
-            current.threads[index].isResolved.toggle()
-            metadata.localReviews[path] = current
+    func setLocalResolved(_ threadID: String, resolved: Bool, review: LocalReview, path: String) {
+        do {
+            try pullRequests.setLocalResolved(threadID, resolved: resolved, review: review, path: path)
+            UtilityTabTarget.pullRequestCacheChanged()
+        } catch {
+            report(error.localizedDescription)
         }
-        UtilityTabTarget.pullRequestCacheChanged()
     }
 }
