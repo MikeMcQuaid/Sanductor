@@ -1,4 +1,5 @@
 @testable import SanductorData
+import SanductorDomain
 import Testing
 
 // MARK: - Run logs
@@ -8,6 +9,70 @@ import Testing
 /// and what is said when none of them can be read yet. Split from
 /// the client's tests for length.
 extension GitHubClientTests {
+    @Test(arguments: [11, 99])
+    func `individual reruns resolve database IDs and name the checks repository`(linkedID: Int) async throws {
+        let runner = ScriptedGitHubRunner(answers: [
+            "gh run view 9 --repo upstream/repo --json jobs --jq .jobs": .success(
+                #"""
+                [{"databaseId": 99, "name": "build",
+                  "url": "https://github.com/upstream/repo/actions/runs/9/job/\#(linkedID)"}]
+                """#,
+            ),
+            "gh run rerun 9 --repo upstream/repo --job 99": .success(""),
+        ])
+        try await GitHubClient(runner: runner) { true }.rerunCheck(
+            repositoryPath: "/fork", check: rerunnableCheck, failedOnly: false,
+        )
+    }
+
+    @Test
+    func `bulk reruns request only failed jobs without resolving individual IDs`() async throws {
+        let runner = ScriptedGitHubRunner(answers: [
+            "gh run rerun 9 --repo upstream/repo --failed": .success(""),
+        ])
+        try await GitHubClient(runner: runner) { true }.rerunCheck(
+            repositoryPath: "/fork", check: rerunnableCheck, failedOnly: true,
+        )
+    }
+
+    @Test(arguments: [
+        "[]",
+        #"[{"databaseId": 99, "name": "another job"}]"#,
+        #"[{"databaseId": 99, "name": "build"}, {"databaseId": 100, "name": "build"}]"#,
+    ])
+    func `a missing or ambiguous job never reruns the whole workflow`(jobs: String) async {
+        let runner = ScriptedGitHubRunner(answers: [
+            "gh run view 9 --repo upstream/repo --json jobs --jq .jobs": .success(jobs),
+        ])
+        await #expect(throws: GitHubClient.CheckRerunUnavailable.self) {
+            try await GitHubClient(runner: runner) { true }.rerunCheck(
+                repositoryPath: "/fork", check: rerunnableCheck, failedOnly: false,
+            )
+        }
+    }
+
+    @Test
+    func `rerun refusals reach the caller`() async {
+        let runner = ScriptedGitHubRunner(answers: [
+            "gh run rerun 9 --repo upstream/repo --failed": .failure("HTTP 403: Forbidden"),
+        ])
+        await #expect(throws: CommandError.self) {
+            try await GitHubClient(runner: runner) { true }.rerunCheck(
+                repositoryPath: "/fork", check: rerunnableCheck, failedOnly: true,
+            )
+        }
+    }
+
+    private var rerunnableCheck: PullRequestCheck {
+        PullRequestCheck(
+            name: "build",
+            status: "COMPLETED",
+            conclusion: "FAILURE",
+            requirement: .required,
+            link: "https://github.com/upstream/repo/actions/runs/9/job/11",
+        )
+    }
+
     @Test(arguments: ["", "HTTP 404: Not Found"])
     func `unpublished job logs have a distinct unavailable result`(response: String) async {
         let runner = ScriptedGitHubRunner(answers: [

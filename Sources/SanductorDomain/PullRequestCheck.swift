@@ -107,4 +107,22 @@ public struct PullRequestCheck: Codable, Hashable, Identifiable, Sendable {
     public var canReadLog: Bool {
         isComplete && jobID != nil && hasNoLog == false
     }
+
+    public var runID: Int? {
+        guard GitHubRemote.fullName(ofURL: link) != nil, let url = URL(string: link),
+              let range = url.path.firstRange(of: "/actions/runs/"),
+              let digits = url.path[range.upperBound...].split(separator: "/").first,
+              let number = Int(digits), number > 0
+        else {
+            return nil
+        }
+
+        return number
+    }
+
+    public var canRerun: Bool {
+        isComplete && runID != nil && jobID != nil
+            && ["FAILURE", "ERROR", "TIMED_OUT", "STARTUP_FAILURE", "ACTION_REQUIRED", "CANCELLED"]
+            .contains(conclusion)
+    }
 }
