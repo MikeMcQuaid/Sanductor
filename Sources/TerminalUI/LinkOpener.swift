@@ -109,8 +109,8 @@ public enum LinkOpener {
     /// the external browser, for the same reason as `action`.
     @preconcurrency
     @MainActor
-    public static func open(_ address: String) {
-        if NSEvent.modifierFlags.contains(.command) {
+    public static func open(_ address: String, inExternalBrowser: Bool = NSEvent.modifierFlags.contains(.command)) {
+        if inExternalBrowser {
             guard let url = URL(string: address), isWeb(url) else {
                 return
             }

@@ -43,15 +43,26 @@ public struct CachedSummary: Codable, Equatable, Sendable {
     // MARK: Lifecycle
 
     /// Creates a cached header stamped now by default.
-    public init(summary: PullRequestSummary, savedAt: Date = Date()) {
+    public init(summary: PullRequestSummary, savedAt: Date = Date(), requiresHeadRefresh: Bool = false) {
         self.summary = summary
         self.savedAt = savedAt
+        self.requiresHeadRefresh = requiresHeadRefresh
+    }
+
+    public init(from decoder: any Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        summary = try container.decode(PullRequestSummary.self, forKey: .summary)
+        savedAt = try container.decode(Date.self, forKey: .savedAt)
+        requiresHeadRefresh = try container.decodeIfPresent(Bool.self, forKey: .requiresHeadRefresh) ?? false
     }
 
     // MARK: Public
 
     /// The enriched summary.
     public let summary: PullRequestSummary
+
+    /// A reopened listing cannot establish the head for a new resolution mark.
+    public let requiresHeadRefresh: Bool
 
     /// When the header was cached.
     public let savedAt: Date

@@ -103,7 +103,7 @@ extension PullRequestStore {
     /// listing, and only open pull requests are enriched, so a
     /// listing is what notices one change state. One it reports
     /// merged or closed replaces a summary still calling it open;
-    /// one it reports open again drops a finished summary's stamp,
+    /// one it reports open again replaces the finished summary and clears its stamp,
     /// so the next enrichment asks rather than repeating the cache.
     static func correctSummaries(
         from listed: [PullRequestSummary],
@@ -118,6 +118,7 @@ extension PullRequestStore {
 
             if summary.state == "OPEN" {
                 if cached.state != "OPEN" {
+                    metadata.enrichedSummaryCache[key] = CachedSummary(summary: summary, requiresHeadRefresh: true)
                     metadata.fetchedAt.removeValue(forKey: key)
                 }
             } else if cached.state == "OPEN" {

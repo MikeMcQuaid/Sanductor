@@ -141,7 +141,8 @@ public struct PullRequestStore: Sendable {
                 requiredChecks: requiredChecksReader(repositoryPath: repositoryPath),
             )
             guard let summary = fetched else {
-                return store.load().enrichedSummaryCache[key]?.summary
+                let fallback = store.load().enrichedSummaryCache[key]
+                return fallback?.requiresHeadRefresh == true ? nil : fallback?.summary
             }
 
             fetched = await withStateChange(summary, previous: cached, repositoryPath: repositoryPath)

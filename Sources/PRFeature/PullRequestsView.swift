@@ -218,13 +218,15 @@ public struct PullRequestsView: View {
             localReview: local?.review,
             localWorktreePath: local?.path,
             onToggleLocalResolved: { id in
-                if let local {
-                    model.toggleLocalResolved(id, review: local.review, path: local.path)
+                if let local, let thread = local.review.threads.first(where: { $0.id == id }) {
+                    model.setLocalResolved(
+                        id, resolved: thread.isResolved == false, review: local.review, path: local.path,
+                    )
                 }
             },
             reloadToken: model.conversationRefreshes,
             onBack: { model.selected = nil },
-            onCopyComments: { model.copyUnresolvedComments(summary) },
+            onCopyComments: { await model.copyUnresolvedComments(summary) },
             onOpenChecks: { model.openFailingChecks(summary) },
             onResolvedChanged: { await model.refreshSummary(summary.number) },
             onThreadsChanged: { model.updateUnresolved($0, number: summary.number) },

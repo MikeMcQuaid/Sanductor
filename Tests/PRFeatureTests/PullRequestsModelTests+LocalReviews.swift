@@ -14,7 +14,7 @@ extension PullRequestsModelTests {
             + "> <details><summary>Major</summary>\n>\n> `src/config.py:42-45`\n"
             + "> Validate the configuration.\n>\n> </details>",
     ])
-    func `reviews copy includes outside diff findings without unresolved GitHub threads`(body: String) throws {
+    func `reviews copy includes outside diff findings without unresolved GitHub threads`(body: String) async throws {
         let model = makeModel()
         let selected = summary(7, head: "feature")
         model.store.update { metadata in
@@ -28,7 +28,7 @@ extension PullRequestsModelTests {
         }
         #expect(model.reviewCount(for: selected) == 1)
         #expect(model.withCachedUnresolved(selected).unresolvedComments == 0)
-        model.copyUnresolvedComments(selected)
+        await model.copyUnresolvedComments(selected)
         let copied = NSPasteboard.general.string(forType: .string)
         #expect(copied?.contains("src/config.py\n:42 coderabbitai[bot]:") == true)
         #expect(copied?.contains("Validate the configuration.") == true)
@@ -40,7 +40,7 @@ extension PullRequestsModelTests {
             .first)
         try model.pullRequests.setOutsideDiffResolved(finding, resolved: true, repositoryPath: "/repo", number: 7)
         #expect(model.reviewCount(for: selected) == 0)
-        model.copyUnresolvedComments(selected)
+        await model.copyUnresolvedComments(selected)
         #expect(NSPasteboard.general.string(forType: .string)?.isEmpty == true)
         try model.pullRequests.setOutsideDiffResolved(finding, resolved: false, repositoryPath: "/repo", number: 7)
         let changed = Mutex(false)
@@ -59,12 +59,12 @@ extension PullRequestsModelTests {
         model.botAsks += 1
         #expect(changed.withLock { $0 })
         #expect(model.reviewCount(for: selected) == 0)
-        model.copyUnresolvedComments(selected)
+        await model.copyUnresolvedComments(selected)
         #expect(NSPasteboard.general.string(forType: .string)?.isEmpty == true)
     }
 
     @Test
-    func `conversation copies include local findings without enabling autofix`() {
+    func `conversation copies include local findings without enabling autofix`() async {
         let path = worktreesPath + "/feature"
         let model = makeModel(items: [item(branch: "feature", ahead: 0)], worktreePath: path)
         let selected = summary(7, head: "feature")
@@ -97,7 +97,7 @@ extension PullRequestsModelTests {
         model.store.update { metadata in
             metadata.threadsCache[AppMetadata.threadsKey(repositoryPath: "/repo", number: 7)] = .init(threads: [remote])
         }
-        model.copyUnresolvedComments(selected)
+        await model.copyUnresolvedComments(selected)
         #expect(NSPasteboard.general.string(forType: .string) == ReviewThread.digest(of: [remote, local]))
     }
 
@@ -133,30 +133,30 @@ extension PullRequestsModelTests {
     }
 
     @Test
-    func `local resolution changes copy counts and cannot change a replacement review`() {
+    func `local resolution changes copy counts and cannot change a replacement review`() async {
         let model = makeModel()
         let review = localReview()
         let path = "/worktrees/feature"
         model.store.update { $0.localReviews[path] = review }
         let selected = summary(7, head: "feature")
         #expect(model.reviewCount(for: selected) == 1)
-        model.toggleLocalResolved("R1", review: review, path: path)
+        model.setLocalResolved("R1", resolved: true, review: review, path: path)
         #expect(model.reviewCount(for: selected) == 0)
         #expect(model.localReview(for: selected)?.review.threads.first?.codeContext == "captured code")
-        model.copyUnresolvedComments(selected)
+        await model.copyUnresolvedComments(selected)
         #expect(NSPasteboard.general.string(forType: .string)?.isEmpty == true)
-        model.toggleLocalResolved("R1", review: review, path: path)
+        model.setLocalResolved("R1", resolved: false, review: review, path: path)
         #expect(model.reviewCount(for: selected) == 1)
-        model.copyUnresolvedComments(selected)
+        await model.copyUnresolvedComments(selected)
         #expect(NSPasteboard.general.string(forType: .string) == ReviewThread.digest(of: review.threads))
         let replacement = localReview()
         model.store.update { $0.localReviews[path] = replacement }
-        model.toggleLocalResolved("R1", review: review, path: path)
+        model.setLocalResolved("R1", resolved: true, review: review, path: path)
         #expect(model.localReview(for: selected)?.review == replacement)
     }
 
     @Test
-    func `copies use local decisions without restoring reviews or fetching GitHub`() {
+    func `copies use local decisions without restoring reviews or fetching GitHub`() async {
         let model = makeModel()
         let review = localReview()
         model.store.update { $0.localReviews["/worktrees/feature"] = review }
@@ -164,7 +164,7 @@ extension PullRequestsModelTests {
             Issue.record("Copy must not restore reviews")
             return false
         }
-        model.copyUnresolvedComments(summary(7, head: "feature"))
+        await model.copyUnresolvedComments(summary(7, head: "feature"))
         #expect(NSPasteboard.general.string(forType: .string) == ReviewThread.digest(of: review.threads))
     }
 

@@ -94,7 +94,8 @@ final class ReviewModel {
 
     let worktreePath: String
 
-    var resolveOnPush: ((ReviewThread) throws -> Void)?
+    var resolveOnPush: ((ReviewThread) async throws -> Void)?
+    var resolveReviews: (([ReviewThread], LocalReview?) async -> Void)?
     var pendingResolution: (ReviewThread) -> Bool = { _ in false }
 
     /// Test seam: whether the worktree's directory still exists,

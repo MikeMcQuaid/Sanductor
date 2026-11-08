@@ -7,7 +7,7 @@ import Testing
 
 struct ResolveOnPushTests {
     @Test
-    func `marking and cancelling a loaded thread never contact GitHub`() throws {
+    func `marking and cancelling a loaded thread never contact GitHub`() async throws {
         let root = try TestSupport.temporaryDirectory("local-resolution")
         defer { try? FileManager.default.removeItem(atPath: root) }
         let store = MetadataStore(file: root + "/state.json")
@@ -30,12 +30,18 @@ struct ResolveOnPushTests {
             isResolved: false,
             comments: [ReviewThreadComment(author: "reviewer", body: "Fix this", id: "comment")],
         )
-        try requests.toggleResolveOnPush(repositoryPath: "/repo", summary: summary, thread: thread)
+        try await requests.toggleResolveOnPush(repositoryPath: "/repo", summary: summary, thread: thread)
         let key = PullRequestAutomation.key(for: summary.url)
         #expect(store.load().pullRequestAutomation[key]?.resolutions["thread"] == PendingThreadResolution(
             head: "reviewed-head", commentID: "comment",
         ))
-        try requests.toggleResolveOnPush(repositoryPath: "/repo", summary: summary, thread: thread)
+        let marked = store.load().pullRequestAutomation[key]
+        try await requests.markResolveOnPush(repositoryPath: "/another-checkout", summary: summary, thread: thread)
+        #expect(store.load().pullRequestAutomation[key] == marked)
+        #expect(requests.pendingResolution(pullRequestURL: summary.url, threadID: thread.id))
+        #expect(requests.pendingResolution(pullRequestURL: summary.url.uppercased(), threadID: thread.id))
+        #expect(requests.pendingResolution(pullRequestURL: summary.url + "0", threadID: thread.id) == false)
+        try await requests.toggleResolveOnPush(repositoryPath: "/repo", summary: summary, thread: thread)
         #expect(store.load().pullRequestAutomation[key]?.resolutions.isEmpty == true)
     }
 }

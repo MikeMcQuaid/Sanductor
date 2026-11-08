@@ -4,6 +4,25 @@ import Testing
 
 struct ReviewCopyTests {
     @Test
+    func `bulk review copies omit resolved and pending threads`() {
+        let open = ReviewThread(id: "open", path: "file", line: 1, isResolved: false, comments: [])
+        let pending = ReviewThread(id: "pending", path: "file", line: 1, isResolved: false, comments: [])
+        let resolved = ReviewThread(id: "resolved", path: "file", line: 1, isResolved: true, comments: [])
+        let local = ReviewThread(id: "local", path: "file", line: 1, isResolved: false, comments: [], resolveID: "")
+        let outside = ReviewThread(
+            id: "outside",
+            path: "file",
+            line: 1,
+            isResolved: false,
+            comments: [],
+            resolveID: "",
+            outsideDiffReviewID: 1,
+        )
+        #expect(ReviewCopy.copyable([open, pending, resolved, local, outside]) { $0.id == "pending" }
+            == [open, local, outside])
+    }
+
+    @Test
     func `copied CodeRabbit comments retain the finding and patch without investigation HTML`() {
         let finding = "**Use a supported setup action.**\n\nThe pinned release cannot install this major version."
         let patch = "```diff\n-old\n+new\n```\n\nApply the same change in the other action."

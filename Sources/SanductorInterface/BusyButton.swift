@@ -1,4 +1,9 @@
 import SwiftUI
+#if os(macOS)
+    import AppKit
+#endif
+
+// MARK: - BusyButton
 
 /// A button for actions that must not run twice: a tap disables it
 /// and swaps the label to its present-tense form instantly, staying
@@ -23,8 +28,8 @@ public struct BusyButton: View {
         accessibilityLabel: String? = nil,
         prominent: Bool = false,
         disabled: Bool = false,
+        action: @escaping @MainActor (EventModifiers) async -> Void,
         keepsTitle: Bool = false,
-        action: @escaping @MainActor () async -> Void,
     ) {
         self.title = title
         richTitle = nil
@@ -35,6 +40,32 @@ public struct BusyButton: View {
         isProminent = prominent
         isDisabled = disabled
         self.action = action
+    }
+
+    /// Actions that do not use click modifiers share the same busy state.
+    @preconcurrency
+    public init(
+        _ title: String,
+        busy: String,
+        systemImage: String? = nil,
+        image: String? = nil,
+        accessibilityLabel: String? = nil,
+        prominent: Bool = false,
+        disabled: Bool = false,
+        keepsTitle: Bool = false,
+        action: @escaping @MainActor () async -> Void,
+    ) {
+        self.init(
+            title,
+            busy: busy,
+            systemImage: systemImage,
+            image: image,
+            accessibilityLabel: accessibilityLabel,
+            prominent: prominent,
+            disabled: disabled,
+            action: { _ in await action() },
+            keepsTitle: keepsTitle,
+        )
     }
 
     /// The same button over a label that is not plain text: a run
@@ -48,7 +79,7 @@ public struct BusyButton: View {
         busy: String,
         prominent: Bool = false,
         disabled: Bool = false,
-        action: @escaping @MainActor () async -> Void,
+        action: @escaping @MainActor (EventModifiers) async -> Void,
     ) {
         title = accessibilityLabel
         richTitle = label
@@ -71,6 +102,24 @@ public struct BusyButton: View {
         }
     }
 
+    // MARK: Internal
+
+    var modifiers: @MainActor () -> EventModifiers = {
+        #if os(macOS)
+            let flags = NSEvent.modifierFlags
+            return [
+                (NSEvent.ModifierFlags.capsLock, EventModifiers.capsLock), (.shift, .shift), (.control, .control),
+                (.option, .option), (.command, .command), (.numericPad, .numericPad),
+            ].reduce(into: EventModifiers()) { result, pair in
+                if flags.contains(pair.0) {
+                    result.insert(pair.1)
+                }
+            }
+        #else
+            return []
+        #endif
+    }
+
     // MARK: Private
 
     private static let iconSpacing: CGFloat = 3
@@ -91,7 +140,7 @@ public struct BusyButton: View {
     private let spokenLabel: String?
     private let isProminent: Bool
     private let isDisabled: Bool
-    private let action: @MainActor () async -> Void
+    private let action: @MainActor (EventModifiers) async -> Void
 
     /// What VoiceOver reads: the visible label when there is one,
     /// the explicit spoken label for icon-only buttons.
@@ -107,10 +156,11 @@ public struct BusyButton: View {
             }
 
             isBusy = true
+            let clickModifiers = modifiers()
             // Explicitly main-actor: the continuation after the
             // await must not write view state from elsewhere.
             Task { @MainActor in
-                await action()
+                await action(clickModifiers)
                 isBusy = false
             }
         } label: {

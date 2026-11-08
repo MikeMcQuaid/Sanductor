@@ -50,11 +50,15 @@ public extension PullRequestStore {
         }
     }
 
-    /// Remembers a summary fetched elsewhere.
-    func rememberSummary(repositoryPath: String, summary: PullRequestSummary) {
+    /// Remembers a summary; local edits preserve any pending head refresh.
+    func rememberSummary(repositoryPath: String, summary: PullRequestSummary, headRefreshed: Bool = true) {
         store.update { metadata in
-            metadata.enrichedSummaryCache[Self.summaryKey(repositoryPath: repositoryPath, number: summary.number)] =
-                CachedSummary(summary: Self.painted(summary, repositoryPath: repositoryPath, in: &metadata))
+            let key = Self.summaryKey(repositoryPath: repositoryPath, number: summary.number)
+            metadata.enrichedSummaryCache[key] = CachedSummary(
+                summary: Self.painted(summary, repositoryPath: repositoryPath, in: &metadata),
+                requiresHeadRefresh: headRefreshed == false
+                    && metadata.enrichedSummaryCache[key]?.requiresHeadRefresh == true,
+            )
         }
     }
 }

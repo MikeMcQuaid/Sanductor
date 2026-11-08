@@ -1,5 +1,4 @@
 import AppKit
-import Foundation
 import SanductorData
 import SanductorDomain
 import TerminalUI
@@ -72,34 +71,39 @@ extension PullRequestsModel {
         ErrorLog.shared.report(message, about: repository.name, branch: actedBranch)
     }
 
-    /// Copies every unresolved review conversation to the
+    /// Copies unresolved review conversations not marked Resolve on push to the
     /// clipboard, ready for pasting into an agent or reply.
-    func copyUnresolvedComments(_ summary: PullRequestSummary) {
-        NSPasteboard.general.clearContents()
-        let remote = pullRequests.cachedConversation(repositoryPath: repository.path, number: summary.number)
-            .reviewThreads
-        let threads = (remote + (localReview(for: summary)?.review.threads ?? [])).filter { $0.isResolved == false }
-        let text = ReviewCopy.digest(of: threads)
-        guard PromptClipboard.copy(text, prepare: preparePrompt) else {
+    func copyUnresolvedComments(_ summary: PullRequestSummary, resolve: Bool = false) async {
+        let remote = copyableRemoteReviews(for: summary)
+        let local = localReview(for: summary)
+        let threads = (remote + (local?.review.threads ?? [])).filter { $0.isResolved == false }
+        guard PromptClipboard.copy(ReviewCopy.digest(of: threads), prepare: preparePrompt) else {
             return
         }
 
         note("copied \(threads.count) review conversations and findings from `#\(summary.number)`")
+        if resolve {
+            await resolveReviews(summary, threads: threads, local: local)
+        }
     }
 
     /// Jumps to the review conversations on the web: the files
     /// page, which is where a review comment is anchored and where
     /// it is answered or resolved.
-    func openReviews(_ summary: PullRequestSummary) {
-        LinkOpener.open(summary.url + "/files")
+    func openReviews(
+        _ summary: PullRequestSummary, inExternalBrowser: Bool = NSEvent.modifierFlags.contains(.command),
+    ) {
+        LinkOpener.open(summary.url + "/files", inExternalBrowser: inExternalBrowser)
     }
 
     /// Jumps to the one failing check, or to the checks page when
     /// several fail or the row has not been enriched with their
     /// links yet; the logs themselves copy from the button beside.
-    func openFailingChecks(_ summary: PullRequestSummary) {
+    func openFailingChecks(
+        _ summary: PullRequestSummary, inExternalBrowser: Bool = NSEvent.modifierFlags.contains(.command),
+    ) {
         let links = summary.failingCheckLinks
-        LinkOpener.open(links.count == 1 ? links[0] : summary.url + "/checks")
+        LinkOpener.open(links.count == 1 ? links[0] : summary.url + "/checks", inExternalBrowser: inExternalBrowser)
     }
 
     /// Opens a conversation with its cached enriched header painted
@@ -155,9 +159,9 @@ extension PullRequestsModel {
 
     /// Caches one enriched summary, so reopening the conversation
     /// or restarting the app paints its header instantly.
-    func cacheEnriched(_ summary: PullRequestSummary) {
+    func cacheEnriched(_ summary: PullRequestSummary, headRefreshed: Bool = true) {
         let before = pullRequests.cachedSummary(repositoryPath: repository.path, number: summary.number)
-        pullRequests.rememberSummary(repositoryPath: repository.path, summary: summary)
+        pullRequests.rememberSummary(repositoryPath: repository.path, summary: summary, headRefreshed: headRefreshed)
         // The sidebar's row reads this same cache; anything that
         // changed in it tells the row to look again now, not on its
         // next poll. Comparing a few fields left the row behind on

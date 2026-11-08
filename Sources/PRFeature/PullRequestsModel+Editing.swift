@@ -105,7 +105,7 @@ extension PullRequestsModel {
         do {
             try await performEdit(number, title, body)
             let edited = selected.retitled(title, body: body)
-            cacheEnriched(edited)
+            cacheEnriched(edited, headRefreshed: false)
             self.selected = edited
             if let index = summaries.firstIndex(where: { $0.number == number }) {
                 summaries[index] = edited

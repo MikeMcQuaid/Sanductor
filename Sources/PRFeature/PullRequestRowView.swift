@@ -14,7 +14,7 @@ struct PullRequestRowView: View {
     let summary: PullRequestSummary
     let stackDepth: Int
     let showsActions: Bool
-    let onCopyComments: @MainActor () -> Void
+    let onCopyComments: @MainActor () async -> Void
     let onOpenChecks: @MainActor () async -> Void
 
     /// Starts an agent on the pull request; nil where the list has
@@ -62,8 +62,8 @@ struct PullRequestRowView: View {
             CopyPullRequestURLButton(summary.url)
             CopyBranchNameButton(summary.headBranch)
             Divider()
-            Button("Copy Unresolved Comments") {
-                onCopyComments()
+            BusyButton("Copy Unresolved Comments", busy: "Copying") {
+                await onCopyComments()
             }
             Button("Open Failing Checks") {
                 Task {

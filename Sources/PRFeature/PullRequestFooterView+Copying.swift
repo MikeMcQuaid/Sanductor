@@ -1,4 +1,3 @@
-import AppKit
 import SanductorDomain
 import SwiftUI
 import TerminalUI
@@ -17,23 +16,33 @@ extension PullRequestFooterView {
         // the count how much there is; none of it dims the button
         // to the word alone, which is the same fact the count
         // would have reported.
-        Button {
+        BusyButton(
+            label: copyLabel("Reviews", count: count),
+            accessibilityLabel: Self.copyTitle("Reviews", count: count),
+            busy: "Copying",
+            disabled: count == 0,
+        ) { modifiers in
             // Both buttons read the modifier at the click, as
             // `LinkOpener` does: Cmd goes to the browser, Shift to
             // the Browser tab, a plain click to the clipboard.
-            if NSEvent.modifierFlags.isDisjoint(with: [.command, .shift]) == false {
-                model.openReviews(selected)
+            if modifiers.isDisjoint(with: [.command, .shift]) == false {
+                model.openReviews(selected, inExternalBrowser: modifiers.contains(.command))
+            } else if modifiers.contains(.option) {
+                await model.copyUnresolvedComments(selected, resolve: true)
             } else {
-                model.copyUnresolvedComments(selected)
+                await model.copyUnresolvedComments(selected)
             }
-        } label: {
-            copyLabel("Reviews", count: count)
         }
-        .buttonStyle(.glass)
-        .accessibilityLabel(Self.copyTitle("Reviews", count: count))
-        .disabled(count == 0)
-        .hoverHelp("Copy unresolved local AI and GitHub conversations and outside-diff findings; "
-            + "Cmd-click opens GitHub reviews in your browser, Shift-click in the Browser tab")
+        .hoverHelp("Copy unresolved local AI and GitHub conversations and outside-diff findings, "
+            + "excluding those marked Resolve on push. "
+            + "Cmd-click opens GitHub reviews in your browser, Shift-click in the Browser tab. "
+            + "Option-click copies first, then marks all GitHub conversations Resolve on push "
+            + "and resolves local and outside-diff findings")
+        .contextMenu {
+            BusyButton("Copy and resolve all reviews on push", busy: "Copying reviews", disabled: count == 0) {
+                await model.copyUnresolvedComments(selected, resolve: true)
+            }
+        }
         let checks = PullRequestsModel.copyableFailingChecks(
             in: selected, includeOptional: model.includesOptionalLogs(for: selected),
         )
@@ -42,9 +51,9 @@ extension PullRequestFooterView {
             accessibilityLabel: Self.copyTitle("Checks", count: checks.count),
             busy: "Copying " + String(checks.count),
             disabled: checks.isEmpty,
-        ) {
-            if NSEvent.modifierFlags.isDisjoint(with: [.command, .shift]) == false {
-                model.openFailingChecks(selected)
+        ) { modifiers in
+            if modifiers.isDisjoint(with: [.command, .shift]) == false {
+                model.openFailingChecks(selected, inExternalBrowser: modifiers.contains(.command))
             } else if await model.copyFailingLogs(selected) == false {
                 utilityTab = UtilityTabTarget.errors
             }
@@ -64,8 +73,8 @@ extension PullRequestFooterView {
     /// Explicit manual copies retain their broader scope beside filtered feedback.
     func rawFeedbackMenu(for selected: PullRequestSummary) -> some View {
         Menu("Copy unfiltered feedback") {
-            Button("All unresolved reviews") {
-                model.copyUnresolvedComments(selected)
+            BusyButton("All unresolved reviews", busy: "Copying reviews") {
+                await model.copyUnresolvedComments(selected)
             }
             .disabled(reviewCount(for: selected) == 0)
             Button("Failing CI logs") {

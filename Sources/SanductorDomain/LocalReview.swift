@@ -11,6 +11,29 @@ public struct LocalReview: Codable, Equatable, Sendable {
         self.threads = threads
     }
 
+    /// Gives legacy reviews an identity that their next save preserves.
+    public init(from decoder: any Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        runID = try container.decodeIfPresent(String.self, forKey: .runID) ?? UUID().uuidString
+        reviewer = try container.decode(AgentKind.self, forKey: .reviewer)
+        snapshot = try container.decode(String.self, forKey: .snapshot)
+        revision = try container.decode(String.self, forKey: .revision)
+        repositoryPath = try container.decodeIfPresent(String.self, forKey: .repositoryPath)
+        branch = try container.decodeIfPresent(String.self, forKey: .branch)
+        pullRequestURL = try container.decodeIfPresent(String.self, forKey: .pullRequestURL)
+        headRepository = try container.decodeIfPresent(String.self, forKey: .headRepository)
+        threads = try container.decode([ReviewThread].self, forKey: .threads)
+        feedback = try container.decode([String: ReviewFeedback].self, forKey: .feedback)
+        commentary = try container.decode(String.self, forKey: .commentary)
+        instructions = try container.decodeIfPresent(String.self, forKey: .instructions)
+        input = try container.decodeIfPresent(String.self, forKey: .input)
+        output = try container.decodeIfPresent(String.self, forKey: .output)
+        diagnostics = try container.decodeIfPresent(String.self, forKey: .diagnostics)
+        failure = try container.decodeIfPresent(String.self, forKey: .failure)
+        model = try container.decodeIfPresent(String.self, forKey: .model)
+        effort = try container.decodeIfPresent(String.self, forKey: .effort)
+    }
+
     // MARK: Public
 
     /// Identifies one review run, including repeated reviews of unchanged code.

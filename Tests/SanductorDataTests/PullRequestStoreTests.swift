@@ -312,6 +312,7 @@ struct PullRequestStoreTests {
         _ = try await store.listing(repositoryPath: "/repo", scope: .branch("work"))
         let before = runner.calls
 
+        #expect(store.cachedSummary(repositoryPath: "/repo", number: 7)?.state == "OPEN")
         let reopened = try await store.summary(repositoryPath: "/repo", number: 7)
         #expect(runner.calls == before + 1)
         #expect(reopened?.state == "OPEN")

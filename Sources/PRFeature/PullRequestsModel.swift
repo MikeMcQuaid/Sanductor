@@ -197,7 +197,7 @@ final class PullRequestsModel {
     /// which is also where the app keeps when it last asked.
     let pullRequests: PullRequestStore
     let store: MetadataStore
-    let preparePrompt: (String) throws -> String
+    var preparePrompt: (String) throws -> String
 
     /// The branch actually checked out in the worktree, refreshed on
     /// reload; agents sometimes switch branches inside a worktree.
