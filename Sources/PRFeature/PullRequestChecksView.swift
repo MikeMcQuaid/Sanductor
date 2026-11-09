@@ -15,32 +15,12 @@ struct PullRequestChecksView: View {
     var body: some View {
         if let checks = summary.checkDetails {
             if let selected = checks.first(where: { $0.id == selectedID }) {
-                CheckLogView(check: selected, fetchLog: model.fetchCheckLog, preparePrompt: model.preparePrompt) {
+                CheckLogView(model: model, summary: summary, check: selected) {
                     selectedID = nil
                 }
                 .id(selected.id)
             } else {
-                ScrollView {
-                    LazyVStack(spacing: 0) {
-                        ForEach(checks.filter(filter.includes)) { check in
-                            Button { selectedID = check.id } label: {
-                                row(check)
-                                    .padding(.horizontal, Self.spacing)
-                                    .padding(.vertical, Self.rowPadding)
-                                    .contentShape(Rectangle())
-                            }
-                            .buttonStyle(.plain)
-                            .hoverHelp("View the log for " + check.displayName)
-                            Divider()
-                        }
-                        if checks.contains(where: filter.includes) == false {
-                            Text(checks.isEmpty ? "No CI checks." : "No matching checks.")
-                                .interfaceFont(.callout)
-                                .foregroundStyle(.secondary)
-                                .padding()
-                        }
-                    }
-                }
+                list(checks)
             }
         } else {
             LaunchProgressView(spinner: "Loading CI checks…")
@@ -56,7 +36,50 @@ struct PullRequestChecksView: View {
 
     @State private var selectedID: String?
 
+    private func list(_ checks: [PullRequestCheck]) -> some View {
+        ScrollView {
+            LazyVStack(spacing: 0) {
+                ForEach(checks.filter(filter.includes)) { check in
+                    row(check)
+                    Divider()
+                }
+                if checks.contains(where: filter.includes) == false {
+                    Text(checks.isEmpty ? "No CI checks." : "No matching checks.")
+                        .interfaceFont(.callout)
+                        .foregroundStyle(.secondary)
+                        .padding()
+                }
+            }
+        }
+    }
+
     private func row(_ check: PullRequestCheck) -> some View {
+        HStack(spacing: Self.spacing) {
+            Button { selectedID = check.id } label: {
+                label(check).contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .hoverHelp("View the log for " + check.displayName)
+            if check.canRerun {
+                RerunChecksButton(model: model, summary: summary, check: check)
+            }
+            Button { selectedID = check.id } label: {
+                HStack(spacing: Self.spacing) {
+                    Text("(" + check.requirement.rawValue + ")")
+                        .interfaceFont(.caption)
+                        .foregroundStyle(.secondary)
+                        .fixedSize()
+                    Image(systemName: "chevron.right").foregroundStyle(.secondary).accessibilityHidden(true)
+                }
+            }
+            .buttonStyle(.plain)
+            .hoverHelp("View the log for " + check.displayName)
+        }
+        .padding(.horizontal, Self.spacing)
+        .padding(.vertical, Self.rowPadding)
+    }
+
+    private func label(_ check: PullRequestCheck) -> some View {
         HStack(alignment: .top, spacing: Self.spacing) {
             Octicon(ChecksStyle.checksOcticonName, colour: ChecksStyle.colour(for: check.conclusion))
                 .padding(.top, Self.dotInset)
@@ -67,11 +90,6 @@ struct PullRequestChecksView: View {
                 CheckStatusView(check: check)
             }
             Spacer(minLength: 0)
-            Text("(" + check.requirement.rawValue + ")")
-                .interfaceFont(.caption)
-                .foregroundStyle(.secondary)
-                .fixedSize()
-            Image(systemName: "chevron.right").foregroundStyle(.secondary).accessibilityHidden(true)
         }
     }
 }

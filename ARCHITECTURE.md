@@ -1685,6 +1685,21 @@ steps.
   every check, including optional checks and required checks that have
   not reported, with requirement, status and timing. Compact rows show
   workflow, job and event names, with requirement labels aligned right.
+  Failed Actions jobs offer a rerun icon before the requirement label
+  in both check rows and individual log headers. A separate rerun icon
+  sits left of the show-only filters and includes required and optional
+  failures regardless of display filters, with its count in hover help.
+  Bulk reruns submit once per workflow run, including cancelled and
+  timed-out jobs. GitHub also reruns dependent jobs.
+  The shared GitHub client names the repository from each check's link
+  and resolves individual jobs to their database IDs before rerunning,
+  since the displayed link can carry a different check-run ID.
+  Job links match by path, ignoring query strings, before falling back
+  to an unambiguous job name. Owner and repository names ignore case;
+  the rest of the path matches exactly.
+  Rerun controls lock during submission, failures name the affected job
+  and the shared summary refreshes after every batch, including partial
+  success. External checks keep their existing browser actions.
   Selected summaries enrich workflow names and event types through
   `gh pr checks`, matching by job name and link while retaining the
   summary's statuses and requirement matching on bare job names.

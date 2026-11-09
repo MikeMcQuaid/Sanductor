@@ -80,6 +80,9 @@ final class PullRequestsModel {
         fetchFailedRunLog = { runID in
             try await github.failedRunLog(repositoryPath: repository.path, runID: runID)
         }
+        performCheckRerun = { check, failedOnly in
+            try await github.rerunCheck(repositoryPath: repository.path, check: check, failedOnly: failedOnly)
+        }
         performLabelChange = { number, add, remove in
             try await github.editLabels(repositoryPath: repository.path, number: number, add: add, remove: remove)
         }
@@ -193,8 +196,7 @@ final class PullRequestsModel {
     /// The conversation pane fetches its own details and caches.
     let github: GitHubClient
 
-    /// Every pull request question the tab asks goes through here,
-    /// which is also where the app keeps when it last asked.
+    /// Shares pull request reads and refresh timing across panes.
     let pullRequests: PullRequestStore
     let store: MetadataStore
     var preparePrompt: (String) throws -> String
@@ -205,14 +207,10 @@ final class PullRequestsModel {
 
     var pushedTip: PushedTip?
 
-    /// What the last branch action finished here, and on which
-    /// branch: its button reads it in the past tense while it stays
-    /// dim, so the work says so where the click was.
+    /// The last branch action's outcome, shown on its disabled button.
     var finished: (outcomes: Set<BranchOutcome>, branch: String)?
 
-    /// What a signed rebase would change right now, refreshed on
-    /// reload; the button dims and names its work from this.
-    /// Set only by the actions extension's fact refresh.
+    /// What a signed rebase would change, refreshed by the actions extension.
     var rebaseNeed: SessionService.RebaseNeed = .nothing
 
     /// The listed entry's own commits: what a push sends and what
@@ -267,6 +265,7 @@ final class PullRequestsModel {
     /// word it holds, greyed, and takes no more until it is over.
     var isOpening = false
     var isBranchActionRunning = false
+    var isRerunningChecks = false
 
     /// Whether the repository has a pull request template; without
     /// one the form shows no template field at all.
@@ -288,9 +287,10 @@ final class PullRequestsModel {
     /// first needs them.
     var fetchLabels: () async -> [String] = { [] }
 
-    /// One job's complete log and one run's failed-step log.
+    /// Check logs and reruns.
     var fetchCheckLog: (Int) async throws -> String = { _ in "" }
     var fetchFailedRunLog: (Int) async throws -> String = { _ in "" }
+    var performCheckRerun: (PullRequestCheck, Bool) async throws -> Void
 
     /// Adds and removes labels on a pull request.
     var performLabelChange: (Int, [String], [String]) async throws -> Void = { _, _, _ in

@@ -8,9 +8,9 @@ import TerminalUI
 struct CheckLogView: View {
     // MARK: Internal
 
+    let model: PullRequestsModel
+    let summary: PullRequestSummary
     let check: PullRequestCheck
-    let fetchLog: (Int) async throws -> String
-    let preparePrompt: (String) throws -> String
     let onBack: () -> Void
 
     var body: some View {
@@ -22,6 +22,9 @@ struct CheckLogView: View {
                     CheckStatusView(check: check)
                 }
                 Spacer()
+                if check.canRerun {
+                    RerunChecksButton(model: model, summary: summary, check: check)
+                }
                 Text("(" + check.requirement.rawValue + ")")
                     .interfaceFont(.caption)
                     .foregroundStyle(.secondary)
@@ -85,7 +88,7 @@ struct CheckLogView: View {
                 help: "Copy this check's complete log, including collapsed groups",
                 disabled: log.isEmpty || isLoading,
             ) {
-                PromptClipboard.copy(document.plainText(showTimestamps: showTimestamps), prepare: preparePrompt)
+                PromptClipboard.copy(document.plainText(showTimestamps: showTimestamps), prepare: model.preparePrompt)
             }
         }
         .padding(Self.controlSpacing)
@@ -122,7 +125,7 @@ struct CheckLogView: View {
         }
 
         do {
-            let fetched = try await fetchLog(jobID)
+            let fetched = try await model.fetchCheckLog(jobID)
             guard Task.isCancelled == false else {
                 return
             }
