@@ -35,15 +35,17 @@ extension GitHubClientTests {
         )
     }
 
-    @Test(arguments: ["", "?pr=7"])
-    func `individual reruns distinguish identical job names despite PR queries`(query: String) async throws {
+    @Test(arguments: ["", "?pr=7"], ["upstream/repo", "Upstream/repo", "upstream/Repo", "UPSTREAM/REPO"])
+    func `individual reruns distinguish identical job names despite link variations`(
+        query: String, repository: String,
+    ) async throws {
         let runner = ScriptedGitHubRunner(answers: [
             "gh run view 9 --repo upstream/repo --json jobs --jq .jobs": .success(
                 #"""
                 [{"databaseId": 88, "name": "build",
-                  "url": "https://github.com/upstream/repo/actions/runs/9/job/22"},
+                  "url": "https://github.com/\#(repository)/actions/runs/9/job/22"},
                  {"databaseId": 99, "name": "build",
-                  "url": "https://github.com/upstream/repo/actions/runs/9/job/11"}]
+                  "url": "https://github.com/\#(repository)/actions/runs/9/job/11"}]
                 """#,
             ),
             "gh run rerun 9 --repo upstream/repo --job 99": .success(""),
@@ -65,6 +67,11 @@ extension GitHubClientTests {
         "[]",
         #"[{"databaseId": 99, "name": "another job"}]"#,
         #"[{"databaseId": 99, "name": "build"}, {"databaseId": 100, "name": "build"}]"#,
+        #"""
+        [{"databaseId": 99, "name": "build",
+          "url": "https://github.com/UPSTREAM/REPO/Actions/runs/9/job/11"},
+         {"databaseId": 100, "name": "build"}]
+        """#,
     ])
     func `a missing or ambiguous job never reruns the whole workflow`(jobs: String) async {
         let runner = ScriptedGitHubRunner(answers: [

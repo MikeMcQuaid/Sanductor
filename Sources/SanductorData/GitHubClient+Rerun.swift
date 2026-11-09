@@ -24,7 +24,16 @@ extension GitHubClient {
                 in: repositoryPath,
             )
             let jobs = try JSONDecoder().decode([RunJob].self, from: Data(result.standardOutput.utf8))
-            let linked = jobs.filter { URL(string: $0.url ?? "")?.path == URL(string: check.link)?.path }
+            let linked = jobs.filter { job in
+                guard let link = job.url, let jobRepository = GitHubRemote.fullName(ofURL: link),
+                      jobRepository.caseInsensitiveCompare(repository) == .orderedSame
+                else {
+                    return false
+                }
+
+                return URL(string: link)?.path.dropFirst(jobRepository.count + 1)
+                    == URL(string: check.link)?.path.dropFirst(repository.count + 1)
+            }
             let matching = linked.isEmpty ? jobs.filter { $0.name == check.name } : linked
             guard matching.count == 1, let job = matching.first else {
                 throw CheckRerunUnavailable()
