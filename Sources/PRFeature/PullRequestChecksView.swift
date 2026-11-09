@@ -15,20 +15,12 @@ struct PullRequestChecksView: View {
     var body: some View {
         if let checks = summary.checkDetails {
             if let selected = checks.first(where: { $0.id == selectedID }) {
-                CheckLogView(check: selected, fetchLog: model.fetchCheckLog, preparePrompt: model.preparePrompt) {
+                CheckLogView(model: model, summary: summary, check: selected) {
                     selectedID = nil
                 }
                 .id(selected.id)
             } else {
-                VStack(spacing: 0) {
-                    HStack {
-                        Spacer()
-                        rerunButton()
-                    }
-                    .padding(Self.spacing)
-                    Divider()
-                    list(checks)
-                }
+                list(checks)
             }
         } else {
             LaunchProgressView(spinner: "Loading CI checks…")
@@ -43,25 +35,12 @@ struct PullRequestChecksView: View {
     private static let rowPadding: CGFloat = 4
 
     @State private var selectedID: String?
-    @AppStorage(UtilityTabTarget.key)
-    private var utilityTab = ""
 
     private func list(_ checks: [PullRequestCheck]) -> some View {
         ScrollView {
             LazyVStack(spacing: 0) {
                 ForEach(checks.filter(filter.includes)) { check in
-                    HStack(spacing: Self.spacing) {
-                        Button { selectedID = check.id } label: {
-                            row(check).contentShape(Rectangle())
-                        }
-                        .buttonStyle(.plain)
-                        .hoverHelp("View the log for " + check.displayName)
-                        if check.canRerun {
-                            rerunButton(check)
-                        }
-                    }
-                    .padding(.horizontal, Self.spacing)
-                    .padding(.vertical, Self.rowPadding)
+                    row(check)
                     Divider()
                 }
                 if checks.contains(where: filter.includes) == false {
@@ -74,24 +53,33 @@ struct PullRequestChecksView: View {
         }
     }
 
-    private func rerunButton(_ check: PullRequestCheck? = nil) -> some View {
-        let count = check == nil ? (summary.checkDetails ?? []).count(where: \.canRerun) : 1
-        return BusyButton(
-            check == nil ? "Rerun failed (" + String(count) + ")" : "",
-            busy: check == nil ? "Requesting reruns" : "",
-            systemImage: "arrow.clockwise",
-            accessibilityLabel: check.map { "Rerun " + $0.displayName } ?? "Rerun failed jobs",
-            disabled: model.isRerunningChecks || count == 0,
-        ) {
-            if await model.rerunChecks(summary, check: check) == false {
-                utilityTab = UtilityTabTarget.errors
+    private func row(_ check: PullRequestCheck) -> some View {
+        HStack(spacing: Self.spacing) {
+            Button { selectedID = check.id } label: {
+                label(check).contentShape(Rectangle())
             }
+            .buttonStyle(.plain)
+            .hoverHelp("View the log for " + check.displayName)
+            if check.canRerun {
+                RerunChecksButton(model: model, summary: summary, check: check)
+            }
+            Button { selectedID = check.id } label: {
+                HStack(spacing: Self.spacing) {
+                    Text("(" + check.requirement.rawValue + ")")
+                        .interfaceFont(.caption)
+                        .foregroundStyle(.secondary)
+                        .fixedSize()
+                    Image(systemName: "chevron.right").foregroundStyle(.secondary).accessibilityHidden(true)
+                }
+            }
+            .buttonStyle(.plain)
+            .hoverHelp("View the log for " + check.displayName)
         }
-        .hoverHelp(check.map { "Rerun " + $0.displayName + " and its dependent jobs" }
-            ?? "Rerun all failed Actions jobs, including optional and hidden checks, and their dependent jobs")
+        .padding(.horizontal, Self.spacing)
+        .padding(.vertical, Self.rowPadding)
     }
 
-    private func row(_ check: PullRequestCheck) -> some View {
+    private func label(_ check: PullRequestCheck) -> some View {
         HStack(alignment: .top, spacing: Self.spacing) {
             Octicon(ChecksStyle.checksOcticonName, colour: ChecksStyle.colour(for: check.conclusion))
                 .padding(.top, Self.dotInset)
@@ -102,11 +90,6 @@ struct PullRequestChecksView: View {
                 CheckStatusView(check: check)
             }
             Spacer(minLength: 0)
-            Text("(" + check.requirement.rawValue + ")")
-                .interfaceFont(.caption)
-                .foregroundStyle(.secondary)
-                .fixedSize()
-            Image(systemName: "chevron.right").foregroundStyle(.secondary).accessibilityHidden(true)
         }
     }
 }

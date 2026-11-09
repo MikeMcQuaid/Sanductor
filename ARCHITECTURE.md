@@ -1685,10 +1685,12 @@ steps.
   every check, including optional checks and required checks that have
   not reported, with requirement, status and timing. Compact rows show
   workflow, job and event names, with requirement labels aligned right.
-  Failed Actions jobs offer a rerun button on the right; Rerun failed
-  above the list includes required and optional failures regardless of
-  display filters. Bulk reruns submit once per workflow run, including
-  cancelled and timed-out jobs. GitHub also reruns dependent jobs.
+  Failed Actions jobs offer a rerun icon before the requirement label
+  in both check rows and individual log headers. A separate rerun icon
+  sits left of the show-only filters and includes required and optional
+  failures regardless of display filters, with its count in hover help.
+  Bulk reruns submit once per workflow run, including cancelled and
+  timed-out jobs. GitHub also reruns dependent jobs.
   The shared GitHub client names the repository from each check's link
   and resolves individual jobs to their database IDs before rerunning,
   since the displayed link can carry a different check-run ID.

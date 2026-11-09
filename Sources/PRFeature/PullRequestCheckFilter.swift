@@ -14,14 +14,35 @@ struct PullRequestCheckFilter: Equatable {
     }
 }
 
-// MARK: - PullRequestCheckFilterView
+// MARK: - PullRequestCheckControlsView
 
-struct PullRequestCheckFilterView: View {
+struct PullRequestCheckControlsView: View {
     // MARK: Internal
+
+    let model: PullRequestsModel
+    let summary: PullRequestSummary
 
     @Binding var filter: PullRequestCheckFilter
 
     var body: some View {
+        HStack {
+            RerunChecksButton(model: model, summary: summary)
+            filters
+            Toggle("Copy Optional", isOn: Binding(
+                get: { model.includesOptionalLogs(for: summary) },
+                set: { model.setIncludesOptionalLogs($0, for: summary) },
+            ))
+            .toggleStyle(.checkbox)
+            .controlSize(.small)
+            .hoverHelp("Include optional failures in copied logs and Autofix for this pull request")
+        }
+    }
+
+    // MARK: Private
+
+    private static let spacing: CGFloat = 4
+
+    private var filters: some View {
         HStack(spacing: Self.spacing) {
             PaneIconButton(
                 "asterisk.circle",
@@ -37,8 +58,4 @@ struct PullRequestCheckFilterView: View {
         .padding(Self.spacing)
         .background(.thinMaterial, in: Capsule())
     }
-
-    // MARK: Private
-
-    private static let spacing: CGFloat = 4
 }
