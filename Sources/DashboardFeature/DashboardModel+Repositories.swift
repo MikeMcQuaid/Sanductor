@@ -74,6 +74,18 @@ public extension DashboardModel {
         )
     }
 
+    /// Open issues past the picker's own list matching its search,
+    /// asked of GitHub and never cached: each answers one query.
+    func searchOpenIssues(repository: Repository, query: String) async -> [IssueSummary] {
+        await service.searchOpenIssues(repository: repository, query: query)
+    }
+
+    /// Open pull requests past the picker's own list matching its
+    /// search, asked of GitHub and never cached.
+    func searchOpenPullRequests(repository: Repository, query: String) async -> [PullRequestSummary] {
+        await service.searchOpenPullRequests(repository: repository, query: query)
+    }
+
     /// Jumps to a repository, cloning it into the workspace first
     /// when it is not there yet.
     func openRepository(fullName: String) async {

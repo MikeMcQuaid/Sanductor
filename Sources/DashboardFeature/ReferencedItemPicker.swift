@@ -12,6 +12,8 @@ import TerminalUI
 /// and Escape closes it. One that `allowsSeveral` still picks one that
 /// way; its rows' checkboxes, Cmd-click and Cmd-Return check several
 /// while the list stays open, and a footer counts and clears them.
+/// Given `lookUp`, a pause in typing also asks GitHub, for what the
+/// list is too short to hold.
 struct ReferencedItemPicker<Item: ReferencedItem>: View {
     // MARK: Lifecycle
 
@@ -28,6 +30,7 @@ struct ReferencedItemPicker<Item: ReferencedItem>: View {
         loadingTitle: String,
         emptyTitle: String,
         isLoading: Bool,
+        lookUp: (@MainActor (String) async -> [Item])? = nil,
     ) {
         self.label = label
         _selection = selection
@@ -38,6 +41,7 @@ struct ReferencedItemPicker<Item: ReferencedItem>: View {
         self.loadingTitle = loadingTitle
         self.emptyTitle = emptyTitle
         self.isLoading = isLoading
+        self.lookUp = lookUp
     }
 
     // MARK: Internal
@@ -52,9 +56,11 @@ struct ReferencedItemPicker<Item: ReferencedItem>: View {
     let loadingTitle: String
     let emptyTitle: String
     let isLoading: Bool
+    let lookUp: (@MainActor (String) async -> [Item])?
 
     var body: some View {
-        let picked = items.filter { selection.contains($0.id) }
+        let listed = Set(items.map(\.id))
+        let picked = (items + found.filter { listed.contains($0.id) == false }).filter { selection.contains($0.id) }
         Button {
             isPresented = true
         } label: {
@@ -87,10 +93,34 @@ struct ReferencedItemPicker<Item: ReferencedItem>: View {
     @State private var query = ""
     @State private var highlighted = 0
     @FocusState private var fieldFocused: Bool
+    /// GitHub's answer for `lookedUpQuery`, shown only while that is
+    /// still the query.
+    @State private var lookedUp: [Item] = []
+    @State private var lookedUpQuery = ""
+    /// Everything a lookup has answered, so a pick from one still
+    /// names itself on the button once the search has moved on.
+    @State private var found: [Item] = []
+    @State private var isLookingUp = false
 
-    /// Ranked once per render, since the body reads it several times.
+    /// Ranked once per render, since the body reads it several times:
+    /// the list's own matches, then GitHub's that are not among them.
     private var results: [Item] {
-        ReferencedItemSearch.rank(items, query: query)
+        let local = ReferencedItemSearch.rank(items, query: query)
+        let shown = Set(local.map(\.id))
+        return lookedUpQuery == query ? local + lookedUp.filter { shown.contains($0.id) == false } : local
+    }
+
+    /// Whether the query asks for more than the list holds: any text,
+    /// or a number with no exact match in it.
+    private var needsLookUp: Bool {
+        guard lookUp != nil, ReferencedItemSearch.searched(query).isEmpty == false else {
+            return false
+        }
+        guard let number = ReferencedItemSearch.number(in: query) else {
+            return true
+        }
+
+        return items.contains { $0.reference == "#" + String(number) } == false
     }
 
     private var search: some View {
@@ -106,17 +136,12 @@ struct ReferencedItemPicker<Item: ReferencedItem>: View {
                         .onKeyPress(.return, phases: .down) { press in check(ranked, at: highlighted, on: press) }
                         .highlightNavigation($highlighted, count: ranked.count)
                     if ranked.isEmpty {
-                        Group {
-                            if items.isEmpty, isLoading {
-                                ProgressView(loadingTitle)
-                            } else {
-                                Text(items.isEmpty ? emptyTitle : "Nothing matches")
-                                    .foregroundStyle(.secondary)
-                            }
-                        }
-                        .frame(maxWidth: .infinity, alignment: .leading)
+                        noResults
                     } else {
                         resultsList(ranked)
+                        if isLookingUp {
+                            lookingUpForMore
+                        }
                     }
                     if allowsSeveral, items.isEmpty == false {
                         Divider()
@@ -132,9 +157,38 @@ struct ReferencedItemPicker<Item: ReferencedItem>: View {
             highlighted = ranked.firstIndex { selection.contains($0.id) } ?? 0
             fieldFocused = true
         }
+        .task(id: query) { await lookUpQuery() }
         // Clearing on close rather than open: the query's onChange
         // would otherwise reset the highlight just set to the pick.
-        .onDisappear { query = "" }
+        .onDisappear {
+            query = ""
+            isLookingUp = false
+        }
+    }
+
+    /// Nothing to list yet, or proven to be nothing: an empty state
+    /// waits for the listing and for GitHub's answer.
+    private var noResults: some View {
+        Group {
+            if items.isEmpty, isLoading {
+                ProgressView(loadingTitle)
+            } else if isLookingUp {
+                ProgressView("Searching GitHub…")
+            } else {
+                Text(items.isEmpty ? emptyTitle : "Nothing matches")
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private var lookingUpForMore: some View {
+        HStack(spacing: Layout.spacing) {
+            ProgressView().controlSize(.small)
+            Text("Searching GitHub for more…")
+                .interfaceFont(.caption)
+                .foregroundStyle(.secondary)
+        }
     }
 
     private func resultsList(_ results: [Item]) -> some View {
@@ -196,6 +250,34 @@ struct ReferencedItemPicker<Item: ReferencedItem>: View {
         .controlSize(.small)
     }
 
+    /// Asks GitHub once typing pauses; a keystroke before the answer
+    /// cancels this and starts the next. The spinner shows from the
+    /// first keystroke, so "Nothing matches" waits for the answer.
+    private func lookUpQuery() async {
+        guard let lookUp, needsLookUp else {
+            isLookingUp = false
+            return
+        }
+
+        isLookingUp = true
+        try? await Task.sleep(for: Layout.typingPause)
+        guard Task.isCancelled == false else {
+            return
+        }
+
+        let asked = query
+        let answer = await lookUp(asked)
+        guard Task.isCancelled == false else {
+            return
+        }
+
+        let known = Set(found.map(\.id))
+        found += answer.filter { known.contains($0.id) == false }
+        lookedUp = answer
+        lookedUpQuery = asked
+        isLookingUp = false
+    }
+
     private func isChecked(_ item: Item) -> Binding<Bool> {
         Binding(
             get: { selection.contains(item.id) },
@@ -245,4 +327,8 @@ private enum Layout {
     static let spacing: CGFloat = 8
     static let rowPadding: CGFloat = 4
     static let width: CGFloat = 420
+    /// How long typing rests before GitHub is asked, so a word typed
+    /// quickly is one search rather than one per letter.
+    static let typingPauseMilliseconds = 400
+    static let typingPause: Duration = .milliseconds(typingPauseMilliseconds)
 }

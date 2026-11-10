@@ -6,18 +6,17 @@ import Foundation
 /// anything else matches a reference containing it, a GHSA id's
 /// case aside, and then ranks titles through `FuzzyMatcher`.
 public enum ReferencedItemSearch {
+    // MARK: Public
+
     /// The items matching the query, best first. An empty query
     /// returns the items unchanged.
     public static func rank<Item: ReferencedItem>(_ items: [Item], query: String) -> [Item] {
-        var trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
-        if trimmed.hasPrefix("#") {
-            trimmed.removeFirst()
-        }
+        let trimmed = searched(query)
         guard trimmed.isEmpty == false else {
             return items
         }
 
-        if trimmed.allSatisfy(\.isASCII), trimmed.allSatisfy(\.isNumber) {
+        if isNumber(trimmed) {
             return items.filter { $0.reference == "#" + trimmed }
                 + items.filter { $0.reference != "#" + trimmed && $0.reference.contains(trimmed) }
         }
@@ -31,5 +30,28 @@ public enum ReferencedItemSearch {
             // Stable, so equal scores keep GitHub's order, newest first.
             .sorted { $0.1 > $1.1 }
             .map(\.0)
+    }
+
+    /// The number a query names outright, `#` or not, and nil for
+    /// anything else: what a picker can look up directly.
+    public static func number(in query: String) -> Int? {
+        let trimmed = searched(query)
+        return isNumber(trimmed) ? Int(trimmed) : nil
+    }
+
+    /// What is searched for: surrounding whitespace and line breaks,
+    /// from a pasted number, and one leading `#` dropped.
+    public static func searched(_ query: String) -> String {
+        var trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed.hasPrefix("#") {
+            trimmed.removeFirst()
+        }
+        return trimmed
+    }
+
+    // MARK: Private
+
+    private static func isNumber(_ trimmed: String) -> Bool {
+        trimmed.isEmpty == false && trimmed.allSatisfy(\.isASCII) && trimmed.allSatisfy(\.isNumber)
     }
 }

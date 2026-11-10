@@ -663,6 +663,13 @@ the default branch. Placeholders and host directories supply no base.
    containing it (a GHSA id, case aside) and then ranks titles through
    `FuzzyMatcher`.
    Surrounding whitespace and line breaks are trimmed for pasted numbers.
+   The issue and pull request pickers list only the newest
+   `GitHubClient.pickerLimit` open ones, so a full list also asks
+   GitHub once typing pauses: a number with no exact match is looked
+   up directly (GitHub's search does not match numbers) and anything
+   else goes to GitHub's search of open titles and bodies. Results
+   join below the local matches, without repeating them. A shorter
+   list already holds every open one and asks nothing.
    A click or return picks one and closes, as everywhere else; in the
    new session form, each row's checkbox, Cmd-click or Cmd-Return
    checks several while the list stays open, and a footer that never
