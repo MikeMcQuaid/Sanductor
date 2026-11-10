@@ -254,6 +254,12 @@ public extension SessionService {
         try FileManager.default.createDirectory(atPath: directory, withIntermediateDirectories: true)
         let destination = directory + "/drop-" + UUID().uuidString + "-" + url.lastPathComponent
         try FileManager.default.copyItem(at: url, to: URL(fileURLWithPath: destination))
+        do {
+            try PromptPayload.track(destination, store: store, attempt: nil)
+        } catch {
+            try? FileManager.default.removeItem(atPath: destination)
+            throw error
+        }
         return destination
     }
 

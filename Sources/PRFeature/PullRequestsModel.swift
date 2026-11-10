@@ -74,8 +74,8 @@ final class PullRequestsModel {
         fetchLabels = {
             await gate.labels(repositoryPath: repository.path)
         }
-        fetchCheckLog = { jobID in
-            try await github.jobLog(repositoryPath: repository.path, jobID: jobID)
+        fetchCheckLog = { check in
+            try await github.checkLog(repositoryPath: repository.path, check: check)
         }
         fetchFailedRunLog = { runID in
             try await github.failedRunLog(repositoryPath: repository.path, runID: runID)
@@ -288,7 +288,7 @@ final class PullRequestsModel {
     var fetchLabels: () async -> [String] = { [] }
 
     /// Check logs and reruns.
-    var fetchCheckLog: (Int) async throws -> String = { _ in "" }
+    var fetchCheckLog: (PullRequestCheck) async throws -> String = { _ in "" }
     var fetchFailedRunLog: (Int) async throws -> String = { _ in "" }
     var performCheckRerun: (PullRequestCheck, Bool) async throws -> Void
 

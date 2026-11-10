@@ -1,14 +1,13 @@
 import Foundation
 
-/// A complete log parsed once for display and copying.
+/// A log parsed once for display and copying, with mechanical noise omitted.
 public struct CheckLogDocument: Sendable {
     // MARK: Lifecycle
 
     public init(_ log: String) {
         var parsed = [Line]()
         var groups = [Int]()
-        for raw in log.replacing("\r\n", with: "\n").split(separator: "\n", omittingEmptySubsequences: false) {
-            let plain = CheckLog.strippingANSI(String(raw))
+        for plain in CheckLog.lines(log) {
             let body = CheckLog.stripped(plain)
             if body == "##[endgroup]" {
                 if let start = groups.popLast() {

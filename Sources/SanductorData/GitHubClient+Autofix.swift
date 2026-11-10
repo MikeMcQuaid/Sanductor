@@ -2,7 +2,7 @@ import Foundation
 import SanductorDomain
 
 extension GitHubClient {
-    /// Available complete logs for the selected failed jobs.
+    /// Available diagnostics for the selected failed jobs.
     func autofixPrompt(
         _ candidate: AutofixCandidate,
         summary: PullRequestSummary,
@@ -16,28 +16,25 @@ extension GitHubClient {
         let isPublic = await repositoryIsPrivate(repositoryPath: repositoryPath) == false
         let failures = (summary.autofixChecks?.failures ?? []).filter { candidate.events.contains($0.runID) }
         for failure in failures {
+            let check = PullRequestCheck(
+                name: failure.name,
+                status: failure.status,
+                conclusion: failure.conclusion,
+                requirement: .unknown,
+                link: failure.link,
+            )
             guard GitHubRemote.fullName(ofURL: failure.link) == GitHubRemote.fullName(ofURL: summary.url),
-                  let url = URL(string: failure.link),
-                  url.pathComponents.dropLast().last == "job",
-                  let jobID = Int(url.lastPathComponent)
+                  check.canReadLog
             else {
                 continue
             }
-
-            let job = RunJob(
-                // swiftformat:disable:next acronyms
-                databaseId: jobID,
-                name: failure.name,
-                conclusion: failure.conclusion,
-                url: failure.link,
-                steps: nil,
-            )
-            guard let log = await jobLog(job, repositoryPath: repositoryPath, complete: true) else {
+            guard let log = try? await checkLog(repositoryPath: repositoryPath, check: check) else {
                 sections.append("CI · " + failure.name + ": job log not available yet.")
                 continue
             }
 
-            sections.append("CI · " + failure.name + "\n" + log)
+            sections.append("CI · " + failure.name + "\n[job " + failure.name + "]\n"
+                + CheckLogDocument(log).plainText(showTimestamps: false).trimmingCharacters(in: .newlines))
             if isPublic {
                 sections.append(failure.link)
             }

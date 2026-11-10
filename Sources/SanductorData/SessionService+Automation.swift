@@ -6,9 +6,9 @@ public extension SessionService {
     func refreshPullRequestAutomation(groups: [RepositoryGroup]) async -> Bool {
         await feedbackCollector.start("autofix") {
             await autofixCoordinator.refresh(store: store, driver: automationDriver(groups: groups))
-            PromptPayload.clean(
-                paths: paths, store: store, sessions: groups.flatMap(\.items).compactMap(\.session),
-            )
+        }
+        await feedbackCollector.start("prompt-cleanup", minimumInterval: RefreshCadence.promptCleanupSeconds) {
+            await cleanPromptFiles()
         }
         return await autofixCoordinator.hasChanges(store: store)
     }

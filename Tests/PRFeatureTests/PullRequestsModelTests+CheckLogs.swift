@@ -6,6 +6,58 @@ import TerminalUI
 import Testing
 
 extension PullRequestsModelTests {
+    @Test(arguments: ["SUCCESS", "FAILURE"])
+    func `copying a check from its row includes every group without timestamps`(conclusion: String) async {
+        let check = PullRequestCheck(
+            name: "build",
+            status: "COMPLETED",
+            conclusion: conclusion,
+            requirement: .optional,
+            link: "https://github.com/o/r/actions/runs/1/job/2",
+        )
+        let model = makeModel()
+        let pasteboard = NSPasteboard.withUniqueName()
+        defer { pasteboard.releaseGlobally() }
+        pasteboard.setString("stale", forType: .string)
+        model.fetchCheckLog = { requested in
+            #expect(requested == check)
+            #expect(pasteboard.string(forType: .string) == nil)
+            return """
+            2026-11-10T10:00:00Z ##[group]Build
+            2026-11-10T10:00:01Z ##[command]make
+            2026-11-10T10:00:02Z output
+            2026-11-10T10:00:03Z ##[endgroup]
+            """
+        }
+        model.preparePrompt = { text in
+            #expect(text == "Build\n  make\n  output")
+            return "prepared log"
+        }
+        #expect(await model.copyCheckLog(check, pasteboard: pasteboard))
+        #expect(pasteboard.string(forType: .string) == "prepared log")
+    }
+
+    @Test
+    func `a failed row log copy leaves no stale clipboard contents`() async {
+        let model = makeModel()
+        model.fetchCheckLog = { _ in throw URLError(.notConnectedToInternet) }
+        let pasteboard = NSPasteboard.withUniqueName()
+        defer { pasteboard.releaseGlobally() }
+        pasteboard.setString("stale", forType: .string)
+        #expect(await model.copyCheckLog(
+            PullRequestCheck(
+                name: "build",
+                status: "COMPLETED",
+                conclusion: "FAILURE",
+                requirement: .required,
+                link: "https://github.com/o/r/actions/runs/1/job/2",
+            ),
+            pasteboard: pasteboard,
+        ) == false)
+        #expect(pasteboard.string(forType: .string) == nil)
+        #expect(ErrorLog.shared.entries.last?.message.contains("Could not copy build's log") == true)
+    }
+
     @Test
     func `copying checks reads only finished failing jobs in a running workflow`() async throws {
         let completed = PullRequestCheck(
@@ -42,9 +94,9 @@ extension PullRequestsModelTests {
         )
         let model = makeModel()
         model.fetchFailedRunLog = { _ in "UNRELATED OPTIONAL FAILURE" }
-        model.fetchCheckLog = { jobID in
-            #expect(jobID == 2)
-            return "required failure"
+        model.fetchCheckLog = { check in
+            #expect(check == completed)
+            return "2026-11-10T13:40:24Z required failure"
         }
         #expect(PullRequestsModel.copyableFailingChecks(in: summary) == [completed])
         #expect(try await model.failingLogs(for: summary) == "## build\nrequired failure")
@@ -135,8 +187,8 @@ extension PullRequestsModelTests {
         defer { try? FileManager.default.removeItem(atPath: root) }
         let metadata = root + "/state.json"
         let model = makeModel(metadataFile: metadata)
-        model.fetchCheckLog = { jobID in
-            if jobID == 2 {
+        model.fetchCheckLog = { check in
+            if check == cancelled {
                 throw GitHubClient.JobLogUnavailable()
             }
             return "optional failure"

@@ -36,6 +36,9 @@ struct PullRequestChecksView: View {
 
     @State private var selectedID: String?
 
+    @AppStorage(UtilityTabTarget.key)
+    private var utilityTab = ""
+
     private func list(_ checks: [PullRequestCheck]) -> some View {
         ScrollView {
             LazyVStack(spacing: 0) {
@@ -55,22 +58,27 @@ struct PullRequestChecksView: View {
 
     private func row(_ check: PullRequestCheck) -> some View {
         HStack(spacing: Self.spacing) {
-            Button { selectedID = check.id } label: {
-                label(check).contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-            .hoverHelp("View the log for " + check.displayName)
+            Button { selectedID = check.id } label: { label(check).contentShape(Rectangle()) }
+                .buttonStyle(.plain)
+                .hoverHelp("View the log for " + check.displayName)
             if check.canRerun {
                 RerunChecksButton(model: model, summary: summary, check: check)
             }
-            Button { selectedID = check.id } label: {
-                HStack(spacing: Self.spacing) {
-                    Text("(" + check.requirement.rawValue + ")")
-                        .interfaceFont(.caption)
-                        .foregroundStyle(.secondary)
-                        .fixedSize()
-                    Image(systemName: "chevron.right").foregroundStyle(.secondary).accessibilityHidden(true)
+            BusyButton(
+                "",
+                busy: "",
+                systemImage: "doc.on.doc",
+                accessibilityLabel: "Copy log for " + check.displayName,
+                disabled: check.canReadLog == false || model.isRerunningChecks,
+            ) {
+                if await model.copyCheckLog(check) == false {
+                    utilityTab = UtilityTabTarget.errors
                 }
+            }
+            .controlSize(.small)
+            .hoverHelp("Copy the log for " + check.displayName)
+            Button { selectedID = check.id } label: {
+                Image(systemName: "chevron.right").foregroundStyle(.secondary).accessibilityHidden(true)
             }
             .buttonStyle(.plain)
             .hoverHelp("View the log for " + check.displayName)
@@ -80,16 +88,22 @@ struct PullRequestChecksView: View {
     }
 
     private func label(_ check: PullRequestCheck) -> some View {
-        HStack(alignment: .top, spacing: Self.spacing) {
-            Octicon(ChecksStyle.checksOcticonName, colour: ChecksStyle.colour(for: check.conclusion))
-                .padding(.top, Self.dotInset)
-            VStack(alignment: .leading, spacing: Self.dotInset) {
-                Text(check.displayName)
-                    .interfaceFont(.callout, weight: .semibold)
-                    .fixedSize(horizontal: false, vertical: true)
-                CheckStatusView(check: check)
+        HStack(spacing: Self.spacing) {
+            HStack(alignment: .top, spacing: Self.spacing) {
+                Octicon(ChecksStyle.checksOcticonName, colour: ChecksStyle.colour(for: check.conclusion))
+                    .padding(.top, Self.dotInset)
+                VStack(alignment: .leading, spacing: Self.dotInset) {
+                    Text(check.displayName)
+                        .interfaceFont(.callout, weight: .semibold)
+                        .fixedSize(horizontal: false, vertical: true)
+                    CheckStatusView(check: check)
+                }
             }
             Spacer(minLength: 0)
+            Text("(" + check.requirement.rawValue + ")")
+                .interfaceFont(.caption)
+                .foregroundStyle(.secondary)
+                .fixedSize()
         }
     }
 }

@@ -1,18 +1,30 @@
 import Foundation
 
 extension PromptPayload {
-    /// Once during setup, enrol files created before the cleanup ledger existed.
+    /// During setup, enrol older prompts and staged attachments in the cleanup ledger.
     static func adoptExisting(paths: WorkspacePaths, store: MetadataStore) throws {
         let metadata = store.load()
-        let directory = URL(fileURLWithPath: paths.promptsDirectory)
-        let files = try FileManager.default.contentsOfDirectory(
-            at: directory, includingPropertiesForKeys: [.contentModificationDateKey, .isRegularFileKey],
-        )
+        let keys: Set<URLResourceKey> = [
+            .contentModificationDateKey, .isRegularFileKey, .isDirectoryKey, .isSymbolicLinkKey,
+        ]
+        let files = [paths.promptsDirectory, paths.sharedWorkspace + "/tmp"].flatMap { directory -> [URL] in
+            guard (try? FileManager.default.attributesOfItem(atPath: directory)[.type]) as? FileAttributeType
+                == .typeDirectory
+            else {
+                return []
+            }
+
+            return (try? FileManager.default.contentsOfDirectory(
+                at: URL(fileURLWithPath: directory), includingPropertiesForKeys: Array(keys),
+            )) ?? []
+        }
         var records = [String: TemporaryPromptFile]()
         for file in files where metadata.temporaryPromptFiles[file.path] == nil {
             guard owns(file, paths: paths, metadata: metadata),
-                  let attributes = try? file.resourceValues(forKeys: [.contentModificationDateKey, .isRegularFileKey]),
-                  attributes.isRegularFile == true, let date = attributes.contentModificationDate
+                  let attributes = try? file.resourceValues(forKeys: keys), attributes.isSymbolicLink == false,
+                  attributes.isRegularFile == true || (attributes.isDirectory == true
+                      && file.deletingLastPathComponent().path == paths.sharedWorkspace + "/tmp"),
+                  let date = attributes.contentModificationDate
             else {
                 continue
             }
@@ -35,7 +47,20 @@ extension PromptPayload {
     }
 
     static func owns(_ file: URL, paths: WorkspacePaths, metadata: AppMetadata) -> Bool {
-        file.deletingLastPathComponent().standardizedFileURL
+        let directory = file.deletingLastPathComponent().standardizedFileURL
+        guard (try? FileManager.default.attributesOfItem(atPath: directory.path)[.type]) as? FileAttributeType
+            == .typeDirectory
+        else {
+            return false
+        }
+
+        if directory == URL(fileURLWithPath: paths.sharedWorkspace + "/tmp").standardizedFileURL {
+            return file.lastPathComponent.wholeMatch(
+                of: /drop-[0-9A-Fa-f]{8}(-[0-9A-Fa-f]{4}){3}-[0-9A-Fa-f]{12}-[\s\S]+/,
+            ) != nil
+        }
+
+        return directory
             == URL(fileURLWithPath: paths.promptsDirectory).standardizedFileURL
             && ["md", "json"].contains(file.pathExtension)
             && (file.lastPathComponent.hasPrefix("prompt-") || file.lastPathComponent.hasPrefix("autofix-")

@@ -3,8 +3,21 @@ import SanductorData
 import SanductorDomain
 import TerminalUI
 
-/// Copies complete failed-job diagnostics through the shared paste-size limit.
+/// Copies complete job diagnostics through the shared paste-size limit.
 extension PullRequestsModel {
+    func copyCheckLog(_ check: PullRequestCheck, pasteboard: NSPasteboard = .general) async -> Bool {
+        pasteboard.clearContents()
+        do {
+            let log = try await fetchCheckLog(check)
+            return PromptClipboard.copy(
+                CheckLogDocument(log).plainText(showTimestamps: false), to: pasteboard, prepare: preparePrompt,
+            )
+        } catch {
+            report("Could not copy " + check.displayName + "'s log: " + error.localizedDescription)
+            return false
+        }
+    }
+
     func includesOptionalLogs(for summary: PullRequestSummary) -> Bool {
         _ = checkCopyGeneration
         return store.load().includeOptionalCheckLogs[AppMetadata.threadsKey(
@@ -47,18 +60,15 @@ extension PullRequestsModel {
         }
     }
 
-    /// Every selected failing job's complete log under its heading.
+    /// Every selected failing job's diagnostics under its heading.
     func failingLogs(for summary: PullRequestSummary) async throws -> String {
         if summary.checkDetails != nil {
             var logs = [String]()
             var unreadable: any Error?
             for check in Self.copyableFailingChecks(in: summary, includeOptional: includesOptionalLogs(for: summary)) {
-                guard let jobID = check.jobID else {
-                    continue
-                }
-
                 do {
-                    try await logs.append("## " + check.name + "\n" + fetchCheckLog(jobID))
+                    try await logs.append("## " + check.name + "\n"
+                        + CheckLogDocument(fetchCheckLog(check)).plainText(showTimestamps: false))
                 } catch {
                     if check.conclusion != "CANCELLED" || error is GitHubClient.JobLogUnavailable == false {
                         unreadable = unreadable ?? error

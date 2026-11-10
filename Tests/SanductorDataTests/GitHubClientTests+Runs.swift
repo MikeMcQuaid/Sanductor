@@ -77,7 +77,7 @@ extension GitHubClientTests {
         let runner = ScriptedGitHubRunner(answers: [
             "gh run view 9 --repo upstream/repo --json jobs --jq .jobs": .success(jobs),
         ])
-        await #expect(throws: GitHubClient.CheckRerunUnavailable.self) {
+        await #expect(throws: GitHubClient.CheckJobUnavailable.self) {
             try await GitHubClient(runner: runner) { true }.rerunCheck(
                 repositoryPath: "/fork", check: rerunnableCheck, failedOnly: false,
             )
@@ -191,7 +191,7 @@ extension GitHubClientTests {
         #expect(GitHubClient.isText("2026-09-01T10:00:00Z it broke"))
         #expect(GitHubClient.isText("") == false)
         #expect(GitHubClient.isText("PK\u{3}\u{4}rubbish") == false)
-        #expect(GitHubClient.isText("some\0bytes") == false)
+        #expect(GitHubClient.isText("file.swift\0README.md\0"))
 
         // A job whose log comes back as anything but text leaves the
         // run's own refusal standing, rather than a prompt full of
@@ -268,7 +268,7 @@ extension GitHubClientTests {
 
 /// Answers each expected command from a script; anything unexpected
 /// fails, naming itself.
-private final class ScriptedGitHubRunner: ProcessRunner, Sendable {
+final class ScriptedGitHubRunner: ProcessRunner, Sendable {
     // MARK: Lifecycle
 
     init(answers: [String: Answer]) {
