@@ -219,6 +219,16 @@ public extension SessionService {
         )
     }
 
+    /// Open issues matching a picker's search, from GitHub.
+    func searchOpenIssues(repository: Repository, query: String) async -> [IssueSummary] {
+        await github.searchOpenIssues(repositoryPath: repository.path, query: query)
+    }
+
+    /// Open pull requests matching a picker's search, from GitHub.
+    func searchOpenPullRequests(repository: Repository, query: String) async -> [PullRequestSummary] {
+        await github.searchOpenPullRequests(repositoryPath: repository.path, query: query)
+    }
+
     /// The file's uncommitted line numbers, for the editor's gutter.
     func changedLineNumbers(worktreePath: String, file: String) async -> Set<Int> {
         await git.changedLineNumbers(worktreePath: worktreePath, file: file)

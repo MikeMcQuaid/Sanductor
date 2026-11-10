@@ -312,6 +312,8 @@ final class RecordingRunner: ProcessRunner, @unchecked Sendable {
     // MARK: Internal
 
     private(set) var commands: [[String]] = []
+    /// What every command prints.
+    var standardOutput = ""
 
     func run(
         _ arguments: [String],
@@ -320,6 +322,6 @@ final class RecordingRunner: ProcessRunner, @unchecked Sendable {
         outputLimit _: Int?,
     ) -> ProcessResult {
         commands.append(arguments)
-        return ProcessResult(status: 0, standardOutput: "", standardError: "")
+        return ProcessResult(status: 0, standardOutput: standardOutput, standardError: "")
     }
 }

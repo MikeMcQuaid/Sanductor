@@ -1,6 +1,24 @@
+import SanductorData
 import SanductorDomain
 import SwiftUI
 import TerminalUI
+
+/// A picker's GitHub search, only for a list the picker limit may
+/// have cut short: a shorter one already holds every open one.
+extension AgentSessionForm {
+    func lookUp<Item>(
+        _ listed: [Item],
+        search: @escaping @MainActor (Repository, String) async -> [Item],
+    ) -> (@MainActor (String) async -> [Item])? {
+        guard let repository, listed.count >= GitHubClient.pickerLimit else {
+            return nil
+        }
+
+        return { await search(repository, $0) }
+    }
+}
+
+// MARK: - AgentSessionForm.SourcePicker
 
 /// The pick for a GitHub source, split from the form's file for
 /// length: open issues or pull requests, several at once where the
@@ -22,6 +40,10 @@ extension AgentSessionForm {
         let isLoadingSources: Bool
         let isLoadingAdvisories: Bool
         let reloadAdvisories: @MainActor () async -> Void
+        /// GitHub's search past each list, nil once the list holds
+        /// every open one.
+        let searchIssues: (@MainActor (String) async -> [IssueSummary])?
+        let searchPullRequests: (@MainActor (String) async -> [PullRequestSummary])?
 
         var body: some View {
             if repository == nil {
@@ -37,7 +59,10 @@ extension AgentSessionForm {
                     loadingTitle: "Listing open issues…",
                     emptyTitle: "No open issues",
                     isLoading: isLoadingSources,
+                    lookUp: searchIssues,
                 )
+                // What a lookup found belongs to one repository.
+                .id(repository?.id ?? "")
                 .hoverHelp(
                     picksSeveral
                         ? "The repository's open issues; the pick becomes the prompt, each checked one its own session"
@@ -71,7 +96,9 @@ extension AgentSessionForm {
                     loadingTitle: "Listing open pull requests…",
                     emptyTitle: "No open pull requests",
                     isLoading: isLoadingSources,
+                    lookUp: searchPullRequests,
                 )
+                .id(repository?.id ?? "")
                 .hoverHelp(
                     picksSeveral
                         ? "The repository's open pull requests; each checked one gets its own worktree and session"

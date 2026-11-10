@@ -220,6 +220,8 @@ struct AgentSessionForm: View {
                 isLoadingSources: isLoadingSources,
                 isLoadingAdvisories: isLoadingAdvisories,
                 reloadAdvisories: reloadAdvisories,
+                searchIssues: lookUp(issues, search: model.searchOpenIssues(repository:query:)),
+                searchPullRequests: lookUp(pullRequests, search: model.searchOpenPullRequests(repository:query:)),
             )
             TextEditor(text: $prompt)
                 .interfaceFont(.body)

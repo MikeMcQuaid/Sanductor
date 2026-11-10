@@ -65,6 +65,12 @@ public extension GitHubClient {
         return rows.map { IssueSummary(number: $0.number, title: $0.title) }
     }
 
+    /// An issue as `gh issue list` and the picker search answer it.
+    internal struct IssueRow: Decodable {
+        let number: Int
+        let title: String
+    }
+
     /// An issue's title and body, the seed of an agent prompt.
     func issue(repositoryPath: String, number: Int) async throws -> (title: String, body: String) {
         let result = try await gh(
@@ -152,10 +158,5 @@ private extension GitHubClient {
         let title: String
         let body: String?
         let headRefName: String?
-    }
-
-    struct IssueRow: Decodable {
-        let number: Int
-        let title: String
     }
 }

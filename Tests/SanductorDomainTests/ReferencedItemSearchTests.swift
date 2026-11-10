@@ -62,6 +62,19 @@ struct ReferencedItemSearchTests {
         #expect(ids("names") == advisories.map(\.ghsaID))
     }
 
+    @Test(arguments: [
+        ("12345", 12_345),
+        ("#12345", 12_345),
+        (" \n#7\t", 7),
+        ("#", nil),
+        ("12a", nil),
+        ("picker", nil),
+        ("١٢", nil),
+    ] as [(String, Int?)])
+    func `only a whole number is looked up`(query: String, expected: Int?) {
+        #expect(ReferencedItemSearch.number(in: query) == expected)
+    }
+
     @Test
     func `empty queries keep the given order`() {
         #expect(rank(" ") == [12, 123, 7])
