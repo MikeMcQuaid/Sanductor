@@ -158,8 +158,7 @@ extension RootView {
             sessionStrip(for: item)
             primary(for: item, isSelected: isSelected)
         }
-        .opacity(isCovered ? 0 : 1)
-        .allowsHitTesting(isCovered == false)
+        .hidden(isCovered)
         .overlay {
             if isSelected {
                 coveringPage

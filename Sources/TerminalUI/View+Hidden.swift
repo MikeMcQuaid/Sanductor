@@ -7,5 +7,6 @@ public extension View {
     func hidden(_ isHidden: Bool) -> some View {
         opacity(isHidden ? 0 : 1)
             .allowsHitTesting(isHidden == false)
+            .disabled(isHidden)
     }
 }
