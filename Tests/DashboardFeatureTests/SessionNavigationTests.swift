@@ -92,6 +92,10 @@ struct SessionNavigationTests {
         func typeAndSubmit(in host: NSView, windowNumber: Int) throws {
             let editor = try #require(textView(in: host))
             editor.insertText(" prompt", replacementRange: NSRange(location: editor.string.utf16.count, length: 0))
+            try submit(in: host, windowNumber: windowNumber)
+        }
+
+        func submit(in host: NSView, windowNumber: Int) throws {
             let key = try #require(NSEvent.keyEvent(
                 with: .keyDown,
                 location: .zero,

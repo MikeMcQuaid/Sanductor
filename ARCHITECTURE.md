@@ -718,7 +718,10 @@ the default branch. Placeholders and host directories supply no base.
    including a repeated request for the current selection. Background
    refreshes leave repository disclosure alone. Submitting clears the
    draft at once, so a form opened while the launch is in flight starts
-   empty and can start a second session beside it. A launch that
+   empty and can start a second session beside it. Covered and hidden
+   panes disable their controls as well as hit testing: an invisible
+   Start Agent button could intercept Cmd-Return and submit an older
+   copy of the shared draft, dropping its latest edits. A launch that
    finishes opens its pane only while its own row is still selected and
    no page covers the pane: anything chosen since, another launch's
    placeholder included, keeps the sidebar where it is.
