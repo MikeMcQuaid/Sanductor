@@ -5,6 +5,16 @@ import SanductorDomain
 /// sandbox home, so every conversation stays readable and resumable
 /// from the repository's sessions browser afterwards.
 public extension SessionService {
+    /// Sweeps unused merged branches without changing any worktree.
+    func cleanUpBranches(repository: Repository) async throws -> (deleted: [String], failures: [String]) {
+        try await fetchIfStale(repositoryPath: repository.path)
+        guard let base = await git.defaultBaseRef(of: repository) else {
+            throw SessionServiceError(repository.name + " has no default branch to check for merged branches.")
+        }
+
+        return try await git.deleteMergedBranches(worktreePath: repository.path, into: base)
+    }
+
     /// Kills any session, records its resume id, then removes the
     /// worktree, its branch and any symlink an earlier release left
     /// beside it. The recorded session mapping survives, which is
@@ -38,6 +48,10 @@ public extension SessionService {
                 branch: worktree.branch,
             )
         } catch {
+            guard FileManager.default.fileExists(atPath: worktree.path) else {
+                throw error
+            }
+
             // Agents create files as the sandbox user (build
             // products, caches) that the host user cannot delete;
             // the removal runs again as their owner, then git

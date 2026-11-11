@@ -1,11 +1,79 @@
 import Foundation
 @testable import SanductorData
+import SanductorDomain
 import Synchronization
 import Testing
 
 // MARK: - SessionWorktreeTests
 
 struct SessionWorktreeTests {
+    @Test
+    func `deleting a worktree deletes its unmerged branch`() async throws {
+        let world = try await World.make()
+        defer { world.tearDown() }
+        let worktree = Worktree(
+            repositoryName: world.repository.name,
+            repositoryPath: world.repository.path,
+            branch: "topic",
+            path: world.root + "/topic",
+        )
+        try await TestSupport.runGit(
+            ["worktree", "add", "-b", worktree.branch, worktree.path, "main"], in: world.repository.path,
+        )
+        try await TestSupport.runGit(["commit", "--allow-empty", "-m", "Unmerged work"], in: worktree.path)
+        let item = WorktreeItem(worktree: worktree, session: nil, isDirty: false, aheadOfUpstream: 1)
+
+        try await world.service.deleteWorktree(item: item)
+
+        #expect(FileManager.default.fileExists(atPath: worktree.path) == false)
+        #expect(await world.service.git.branchExists(repository: world.repository, branch: "topic") == false)
+        try await world.service.git.forgetWorktree(repository: world.repository, branch: "topic")
+    }
+
+    @Test
+    func `a branch deletion failure does not retry filesystem removal`() async throws {
+        let world = try await World.make()
+        defer { world.tearDown() }
+        let worktree = Worktree(
+            repositoryName: world.repository.name,
+            repositoryPath: world.repository.path,
+            branch: "topic",
+            path: world.root + "/topic",
+        )
+        try await TestSupport.runGit(
+            ["worktree", "add", "-b", worktree.branch, worktree.path, "main"], in: world.repository.path,
+        )
+        try Data().write(to: URL(fileURLWithPath: world.repository.path + "/.git/refs/heads/topic.lock"))
+        let runner = RecordingRunner()
+        runner.status = 1
+        let service = world.service(herdr: world.herdr, processes: runner)
+
+        do {
+            try await service.deleteWorktree(item: WorktreeItem(
+                worktree: worktree, session: nil, isDirty: false, aheadOfUpstream: 0,
+            ))
+            Issue.record("Expected branch deletion to fail")
+        } catch let error as CommandError {
+            #expect(error.command == "git branch -D topic")
+        }
+        #expect(FileManager.default.fileExists(atPath: worktree.path) == false)
+        #expect(await service.git.branchExists(repository: world.repository, branch: "topic"))
+        #expect(runner.commands.isEmpty)
+    }
+
+    @Test
+    func `forgetting a worktree reports a branch deletion failure`() async throws {
+        let world = try await World.make()
+        defer { world.tearDown() }
+        try await TestSupport.runGit(["branch", "topic", "main"], in: world.repository.path)
+        try Data().write(to: URL(fileURLWithPath: world.repository.path + "/.git/refs/heads/topic.lock"))
+
+        await #expect(throws: CommandError.self) {
+            try await world.service.git.forgetWorktree(repository: world.repository, branch: "topic")
+        }
+        #expect(await world.service.git.branchExists(repository: world.repository, branch: "topic"))
+    }
+
     @Test
     func `a failed fetch leaves no worktree or successful fetch timestamp`() async throws {
         let world = try await World.make()

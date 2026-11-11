@@ -108,6 +108,7 @@ public extension GitClient {
         expectedTip: String? = nil,
         sourceCommit: String? = nil,
         parent: (branch: String, previousTip: String)? = nil,
+        busyWorktrees: @Sendable () async -> Set<String> = { [] },
     ) async throws {
         try await withRemoteOperation(worktreePath: worktreePath) {
             let tip: String =
@@ -115,22 +116,28 @@ public extension GitClient {
                     expectedTip
                 } else {
                     try await preparePush(
-                        worktreePath: worktreePath, branch: branch, remote: remote, parent: parent?.branch,
+                        worktreePath: worktreePath,
+                        branch: branch,
+                        remote: remote,
+                        parent: parent?.branch,
+                        busyWorktrees: busyWorktrees,
                     )
                 }
             if let parent, await commitHash(of: parent.branch, worktreePath: worktreePath) != parent.previousTip,
                await isAncestor(parent.branch, of: branch, worktreePath: worktreePath) == false
             {
                 try await rebaseForPush(
-                    worktreePath: worktreePath, branch: branch, onto: parent.branch, from: parent.previousTip,
+                    worktreePath: worktreePath,
+                    branch: branch,
+                    onto: parent.branch,
+                    from: parent.previousTip,
+                    busyWorktrees: busyWorktrees,
                 )
             }
             try await git(
                 ["push", "--force-with-lease=refs/heads/" + branch + ":" + tip]
-                    + (sourceCommit == nil ? ["--set-upstream"] : []) + [
-                        remote,
-                        sourceCommit.map { $0 + ":refs/heads/" + branch } ?? branch,
-                    ],
+                    + (sourceCommit == nil ? ["--set-upstream"] : [])
+                    + [remote, sourceCommit.map { $0 + ":refs/heads/" + branch } ?? branch],
                 in: worktreePath,
                 remote: remote,
             )

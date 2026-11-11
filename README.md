@@ -20,7 +20,7 @@ No Sanductor account, subscription or hosted relay exists or is planned.
 - Reviews changes with fresh agent sessions, [CodeRabbit](https://www.coderabbit.ai) or [Copilot](https://docs.github.com/copilot/code-review), including findings outside the diff.
 - Copies reviews and CI logs, with bulk review resolution and CI reruns.
 - Opt-in autofix feeds reviews, CI failures and merge conflicts back to agents, resumes after relaunch and never signs or pushes.
-- Keeps signing and pushing under your control, with rebasing, stacked PRs, labels, merge queues, automerge and temporary file cleanup.
+- Signs and pushes from any published stack layer, with rebasing, labels, merge queues, automerge and branch and temporary file cleanup.
 - Keeps agents running and reachable over SSH after quitting, with private backups and 30-day retention that preserves ongoing work.
 - Schedules repository prompts daily, weekly or monthly while open.
 - Tracks agents, PRs and blockers by repository or status, with bulk worktree actions and notifications.

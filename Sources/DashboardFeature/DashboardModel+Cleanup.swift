@@ -6,6 +6,26 @@ import TerminalUI
 /// one merge-safe path behind the context menu and the poll's own
 /// merge detection.
 public extension DashboardModel {
+    /// Cleans unused merged branches and refreshes the sidebar.
+    func cleanUpBranches(repository: Repository) async {
+        do {
+            let cleanup = try await service.cleanUpBranches(repository: repository)
+            for failure in cleanup.failures {
+                ErrorLog.shared.report(failure)
+            }
+            if cleanup.deleted.isEmpty == false || cleanup.failures.isEmpty {
+                ErrorLog.shared.note(
+                    cleanup.deleted.isEmpty ? "No unused merged branches to delete."
+                        : "Deleted merged branches: " + cleanup.deleted.joined(separator: ", ") + ".",
+                    about: repository.name,
+                )
+            }
+            await refresh()
+        } catch {
+            ErrorLog.shared.report(error.localizedDescription)
+        }
+    }
+
     /// Deletes a repository's checkout from disk; the sidebar only
     /// offers it while `deletionBlocker` is nil and the service
     /// checks again. The path joins `deletingPaths` so the header

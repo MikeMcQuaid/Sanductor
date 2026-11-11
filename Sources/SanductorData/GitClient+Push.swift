@@ -1,9 +1,14 @@
+import Foundation
 import SanductorDomain
 
 extension GitClient {
     /// Captures the lease before rebasing, so later background fetches cannot change it.
     func preparePush(
-        worktreePath: String, branch: String, remote: String, parent: String? = nil,
+        worktreePath: String,
+        branch: String,
+        remote: String,
+        parent: String? = nil,
+        busyWorktrees: @Sendable () async -> Set<String> = { [] },
     ) async throws -> String {
         try await git(["fetch", "--prune", remote], in: worktreePath, remote: remote)
         guard let tip = await commitHash(of: "refs/remotes/" + remote + "/" + branch, worktreePath: worktreePath) else {
@@ -27,15 +32,28 @@ extension GitClient {
             )
         }
 
-        try await rebaseForPush(worktreePath: worktreePath, branch: branch, onto: tip)
+        try await rebaseForPush(
+            worktreePath: worktreePath, branch: branch, onto: tip, from: nil, busyWorktrees: busyWorktrees,
+        )
         return tip
     }
 
     /// Integrates in the branch's own worktree and restores whichever branch was selected.
     func rebaseForPush(
-        worktreePath: String, branch: String, onto tip: String, from oldBase: String? = nil,
+        worktreePath: String,
+        branch: String,
+        onto tip: String,
+        from oldBase: String?,
+        busyWorktrees: @Sendable () async -> Set<String>,
     ) async throws {
         let path = await branchHolders(worktreePath: worktreePath)[branch] ?? worktreePath
+        guard await busyWorktrees().contains(where: { busy in
+            URL(fileURLWithPath: busy).resolvingSymlinksInPath().path
+                == URL(fileURLWithPath: path).resolvingSymlinksInPath().path
+        }) == false else {
+            throw SessionServiceError("`" + branch + "`'s agent is busy; push again once it is idle or done.")
+        }
+
         let held = await currentBranch(worktreePath: path)
         guard let held else {
             throw SessionServiceError("Check out a branch before integrating remote work.")

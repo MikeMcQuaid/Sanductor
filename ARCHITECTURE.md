@@ -1949,11 +1949,13 @@ steps.
   and actions refresh queue membership through the existing store.
   A queued pull request whose branch cannot be identified blocks
   rebasing, signing and pushing until its identity can be resolved.
-  Publication waits until every lower branch has been pushed.
+  Publication includes updates to lower branches with open pull requests.
+  Stack prefetch always reads branch-specific listings, including in Mine
+  and Open, and notifies the model when publication eligibility changes.
   The single branch action restacks before pushing when a branch being
   published needs rebasing or signing. Unpublished work above it does
-  not prevent a ready push. It waits for lower branches to be pushed
-  first and for worktrees needed by the rebase to be available.
+  not prevent a ready push. Lower branches without open pull requests
+  must be pushed first; worktrees needed by the rebase must be available.
   Only one branch action runs at a time. Merge on any layer, the bottom
   included, is the stack's merge of that layer and
   everything below it, through the asynchronous merge API that also
@@ -1967,9 +1969,10 @@ steps.
   those selected branches. Opening a pull request creates only the
   selected entry's pull request.
   Every local stack entry can be selected and drafted in PRs, even
-  before lower branches are published. Push waits until every lower
-  branch is pushed; Open and Draft wait until every lower branch has
-  an open pull request, then prepare and push the selected branch.
+  before lower branches are published. Sign and Push works from any
+  published layer and updates the published stack, bottom first.
+  Open and Draft wait until every lower branch has an open pull request,
+  then prepare and push the selected branch.
 - **Forks cannot publish stacks across repositories.** Local ancestry
   stays inspectable, with counts and twin selection using each
   branch's own remote. A stack containing a fork disables creation,
@@ -2022,7 +2025,11 @@ steps.
   reason. Dirty worktrees are temporarily stashed, including untracked
   files, then restored with their staged state; integrating remote work
   before a push uses the same protection. A failed restack restores
-  branches before applying those changes. Restore conflicts retain the
+  branches before applying those changes. Each push-time rebase reads
+  the model's current busy worktrees after remote waits and fetches,
+  before stashing or rebasing; a push needing no rebase remains available.
+  This check does not lock out agent resumption, so activity can still
+  change between the check and the rebase. Restore conflicts retain the
   stash with recovery instructions; existing user stashes stay untouched.
   Creating a branch at HEAD keeps changes in place without stashing.
   Push dims for those blockers
@@ -2163,7 +2170,10 @@ steps.
   brought level with origin (reset when it carries nothing local,
   signed rebase when it does). Each cleanup also sweeps merged local
   branches, excluding `main`, `master`, `trunk`, the base and branches
-  checked out in any worktree. Conditional `git update-ref -d` deletes
+  checked out in any worktree. Cleanup branches, offered on repository
+  headers and worktree rows, runs the same sweep against the default
+  branch after refreshing stale remote refs, without switching branches
+  or removing worktrees. Conditional `git update-ref -d` deletes
   only the verified tip, so concurrent commits survive and stale
   upstream refs cannot block deletion. Worktree ownership and ancestry
   against the current base are rechecked before deletion. Deletion and
@@ -2173,8 +2183,11 @@ steps.
   reported. External Git commands can still race the final checks.
   Optional branch and remote cleanup failures are reported separately
   and do not undo a successful worktree removal or its sidebar refresh.
-  Only Delete worktree discards unmerged work, after a dialog naming
-  what is lost. A repository is deleted
+  Delete worktree also deletes its branch, including unmerged work,
+  after a dialog naming what is lost. An already absent branch succeeds;
+  other deletion failures are reported. Filesystem removal retries as the
+  sandbox user only while the worktree directory still exists, preserving
+  branch-deletion errors after it has gone. A repository is deleted
   from its header's context menu only when
   `RepositoryGroup.deletionBlocker` names nothing: no extra worktrees,
   running agent, uncommitted files or commits absent from origin's

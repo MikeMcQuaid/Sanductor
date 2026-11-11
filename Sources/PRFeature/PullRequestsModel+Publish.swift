@@ -52,7 +52,8 @@ extension PullRequestsModel {
         }
         if isInStack {
             if needsRestackBeforePush, canPublish {
-                return "Rebase and sign as needed, then push the listed branch and published branches above it"
+                return "Rebase and sign as needed, then push the listed branch, "
+                    + "those below it and published branches above it"
             }
             return stack.stackingBlocker ?? (needsRestackBeforePush ? restackBlocker : nil) ?? pushStackHelp
         }
