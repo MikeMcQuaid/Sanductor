@@ -19,7 +19,7 @@ public extension GitHubClient {
         try Task.checkCancellation()
         let path = "repos/{owner}/{repo}/pulls/\(number)/merge"
         let method = await usingMergeQueue ? [] : [
-            "--raw-field", "merge_method=" + mergeMethodFlag(repositoryPath: repositoryPath).replacing("--", with: ""),
+            "--raw-field", "merge_method=" + mergeMethod(repositoryPath: repositoryPath, number: number),
         ]
         let arguments = [
             "api", "--include", "--header", "Accept: application/vnd.github+json",
@@ -64,6 +64,44 @@ public extension GitHubClient {
             throw MergeError(message: "Synchronous merge failed: " + synchronousFailure
                 + "\nAsynchronous merge failed: " + error.localizedDescription)
         }
+    }
+
+    /// The method a direct merge or `gh pr merge` names (gh refuses
+    /// to run with none when not interactive): the first of a merge
+    /// commit, rebase and squash that both the repository's settings
+    /// and every ruleset on the pull request's base branch allow. The
+    /// settings alone picked a merge commit that a squash-only
+    /// ruleset refused. An unreadable answer defaults to the merge
+    /// commit, the one method nearly every repository here allows.
+    func mergeMethod(repositoryPath: String, number: Int) async -> String {
+        let query = "query($owner: String!, $name: String!, $number: Int!) "
+            + "{ repository(owner: $owner, name: $name) { mergeCommitAllowed rebaseMergeAllowed "
+            + "squashMergeAllowed pullRequest(number: $number) { baseRefName } } }"
+        let settingsJSON = try? await gh([
+            "api", "graphql", "-f", "query=" + query,
+            "-F", "owner={owner}", "-F", "name={repo}", "-F", "number=" + String(number),
+            "--jq", ".data.repository",
+        ], in: repositoryPath).standardOutput
+        guard let settings = try? JSONDecoder().decode(MergeSettings.self, from: Data((settingsJSON ?? "").utf8)) else {
+            return "merge"
+        }
+
+        // GraphQL's own ruleset fields want a write scope; this
+        // endpoint answers with read access. An unescaped `#` or `%`
+        // in the branch cuts or breaks the path, and a page per JSON
+        // array would not decode as one, so each rule is a line.
+        let base = settings.pullRequest.baseRefName
+        let rules = try? await gh([
+            "api",
+            "repos/{owner}/{repo}/rules/branches/"
+                + (base.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? base) + "?per_page=100",
+            "--paginate",
+            "--jq", #".[] | select(.type == "pull_request") | .parameters.allowed_merge_methods // empty | join(",")"#,
+        ], in: repositoryPath).standardOutput
+        let rulesets = rules?.split(separator: "\n").map { $0.split(separator: ",").map(String.init) }
+        return settings.allowedMethods.first { method in
+            rulesets?.allSatisfy { $0.contains(method) } ?? true
+        } ?? "merge"
     }
 
     private func confirmedQueueState(number: Int, repositoryPath: String) async throws -> MergeResult {
@@ -170,6 +208,27 @@ struct MergePolling {
         return .seconds(RefreshCadence.pollSeconds(
             setting: RefreshCadence.mergeResultSeconds, visible: visible, onBattery: PowerSource.isOnBattery,
         ))
+    }
+}
+
+// MARK: - MergeSettings
+
+private struct MergeSettings: Decodable {
+    struct PullRequest: Decodable {
+        let baseRefName: String
+    }
+
+    let mergeCommitAllowed: Bool
+    let rebaseMergeAllowed: Bool
+    let squashMergeAllowed: Bool
+    let pullRequest: PullRequest
+
+    /// Most preferred first, spelt as rulesets, the REST API and
+    /// `gh pr merge`'s flags all spell them.
+    var allowedMethods: [String] {
+        [("merge", mergeCommitAllowed), ("rebase", rebaseMergeAllowed), ("squash", squashMergeAllowed)]
+            .filter(\.1)
+            .map(\.0)
     }
 }
 

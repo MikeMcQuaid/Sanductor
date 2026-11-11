@@ -159,7 +159,7 @@ public struct GitHubClient: Sendable {
 
     /// Enables automerge for a pull request.
     public func enableAutomerge(repositoryPath: String, number: Int, usingMergeQueue: Bool = false) async throws {
-        let flags = await usingMergeQueue ? [] : [mergeMethodFlag(repositoryPath: repositoryPath)]
+        let flags = await usingMergeQueue ? [] : ["--" + mergeMethod(repositoryPath: repositoryPath, number: number)]
         try await gh(["pr", "merge", String(number), "--auto"] + flags, in: repositoryPath)
     }
 
@@ -193,23 +193,6 @@ public struct GitHubClient: Sendable {
         return name.isEmpty ? nil : name
     }
 
-    /// The method flag `gh pr merge` needs when not interactive
-    /// (it refuses to run with none), from the repository's allowed
-    /// methods; hardcoding one broke on repositories disallowing it. Settings rarely change, so
-    /// gh's HTTP cache answers repeats.
-    public func mergeMethodFlag(repositoryPath: String) async -> String {
-        // No `--cache`: it belongs to `gh api` alone and silently
-        // forced the default method here.
-        let result = try? await gh(
-            [
-                "repo", "view",
-                "--json", "squashMergeAllowed,mergeCommitAllowed,rebaseMergeAllowed",
-            ],
-            in: repositoryPath,
-        )
-        return Self.mergeFlag(fromJSON: result?.standardOutput ?? "")
-    }
-
     // MARK: Internal
 
     /// How many words of a `gh` call name it in the performance log:
@@ -229,21 +212,6 @@ public struct GitHubClient: Sendable {
 
     let runner: any ProcessRunner
     var mergePolling: MergePolling = .init()
-
-    /// A merge commit preferred, then rebase, then squash; an
-    /// unreadable answer defaults to the merge commit, the one
-    /// method nearly every repository here allows. Plain substring
-    /// checks: gh's compact JSON needs no decoder here and Bools in
-    /// a Decodable would have to be optional.
-    static func mergeFlag(fromJSON json: String) -> String {
-        if json.contains("\"mergeCommitAllowed\":false") == false {
-            "--merge"
-        } else if json.contains("\"rebaseMergeAllowed\":true") {
-            "--rebase"
-        } else {
-            "--squash"
-        }
-    }
 
     static func listArguments(scope: ListScope, limit: Int = Self.listLimit) -> [String] {
         let fields = scope == .open ? Self.coreFields : Self.coreFields + "," + Self.statusFields

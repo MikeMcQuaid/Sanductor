@@ -2050,7 +2050,11 @@ steps.
   including while busy; hover help explains each action.
 - **Merge completion comes from GitHub.** Direct merges
   submit `PUT /repos/{owner}/{repo}/pulls/{number}/merge` through
-  `gh api`, using the repository's allowed merge method. A failed
+  `gh api`. The merge method there and on automerge is the first of a
+  merge commit, rebase and squash that both the repository's settings
+  and every ruleset on the base branch allow: one GraphQL read
+  answers the settings and the base, and the branch's rules endpoint,
+  which needs read access alone, answers the rulesets. A failed
   synchronous merge falls back once to the asynchronous `merge-async`
   endpoint, including stacks. Queue requests first use `gh pr merge`,
   falling back to `merge-async` only on failure. Neither queue attempt
