@@ -1,3 +1,4 @@
+import Foundation
 import SanductorDomain
 
 // MARK: - LocalFeedbackCollection
@@ -22,11 +23,21 @@ actor FeedbackCollector {
         tasks[key] != nil
     }
 
-    func start(_ key: String, operation: @escaping @Sendable () async -> Void) {
-        guard tasks[key] == nil else {
+    func start(
+        _ key: String,
+        minimumInterval: TimeInterval = 0,
+        now: Date = Date(),
+        operation: @escaping @Sendable () async -> Void,
+    ) {
+        guard tasks[key] == nil,
+              lastStarted[key].map({ now < $0 || now.timeIntervalSince($0) >= minimumInterval }) ?? true
+        else {
             return
         }
 
+        if minimumInterval > 0 {
+            lastStarted[key] = now
+        }
         tasks[key] = Task {
             await operation()
             tasks[key] = nil
@@ -40,4 +51,5 @@ actor FeedbackCollector {
     // MARK: Private
 
     private var tasks: [String: Task<Void, Never>] = [:]
+    private var lastStarted: [String: Date] = [:]
 }

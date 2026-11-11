@@ -4,7 +4,7 @@ import SanductorDomain
 import SwiftUI
 import TerminalUI
 
-/// A single job's complete text, shared by viewing and copying.
+/// A single job's diagnostics, shared by viewing and copying.
 struct CheckLogView: View {
     // MARK: Internal
 
@@ -85,7 +85,7 @@ struct CheckLogView: View {
             }
             PaneIconButton(
                 "doc.on.doc",
-                help: "Copy this check's complete log, including collapsed groups",
+                help: "Copy this check's log, including collapsed groups",
                 disabled: log.isEmpty || isLoading,
             ) {
                 PromptClipboard.copy(document.plainText(showTimestamps: showTimestamps), prepare: model.preparePrompt)
@@ -108,6 +108,7 @@ struct CheckLogView: View {
                     .foregroundStyle(.secondary)
                 if check.canReadLog {
                     BusyButton("Retry", busy: "Loading") { await load() }
+                        .controlSize(.small)
                 }
             }
             .padding()
@@ -120,12 +121,12 @@ struct CheckLogView: View {
         error = nil
         isLoading = true
         defer { isLoading = false }
-        guard check.canReadLog, let jobID = check.jobID else {
+        guard check.canReadLog else {
             return
         }
 
         do {
-            let fetched = try await model.fetchCheckLog(jobID)
+            let fetched = try await model.fetchCheckLog(check)
             guard Task.isCancelled == false else {
                 return
             }

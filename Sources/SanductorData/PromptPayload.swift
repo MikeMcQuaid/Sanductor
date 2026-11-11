@@ -57,15 +57,24 @@ public enum PromptPayload {
         }
     }
 
+    static func hasExpired(_ record: TemporaryPromptFile, now: Date) -> Bool {
+        now.timeIntervalSince(record.createdAt) >= (record.paneID == nil ? fileLifetime : stoppedGrace)
+    }
+
     static func clean(
-        paths: WorkspacePaths, store: MetadataStore, sessions: [AgentSession], now: Date = Date(),
+        paths: WorkspacePaths,
+        store: MetadataStore,
+        sessions: [AgentSession],
+        protectedPaths: Set<String>,
+        now: Date = Date(),
+        reader: any TemporaryFileReading = LocalTemporaryFileReader(),
     ) {
         let metadata = store.load()
         let active = Set(metadata.pullRequestAutomation.values.compactMap { $0.attempt?.paneID })
         for (file, record) in metadata.temporaryPromptFiles {
-            let age = now.timeIntervalSince(record.createdAt)
+            let expired = hasExpired(record, now: now)
             if let pane = record.paneID {
-                guard active.contains(pane) == false, age >= stoppedGrace else {
+                guard active.contains(pane) == false, expired else {
                     continue
                 }
 
@@ -75,19 +84,20 @@ public enum PromptPayload {
                 {
                     continue
                 }
-            } else if age < clipboardLifetime, FileManager.default.fileExists(atPath: file) {
+            } else if expired == false, FileManager.default.fileExists(atPath: file) {
                 continue
             }
             let url = URL(fileURLWithPath: file).standardizedFileURL
-            guard owns(url, paths: paths, metadata: metadata)
+            guard owns(url, paths: paths, metadata: metadata),
+                  isProtected(file, by: protectedPaths) == false,
+                  removeExpiredTemporaryItem(
+                      file, before: now.addingTimeInterval(-fileLifetime), reader: reader, ignoringFileAge: true,
+                  )
             else {
                 continue
             }
 
             do {
-                if FileManager.default.fileExists(atPath: file) {
-                    try FileManager.default.removeItem(atPath: file)
-                }
                 try store.updatePersisting { value in
                     if value.temporaryPromptFiles[file] == record {
                         value.temporaryPromptFiles[file] = nil
@@ -103,5 +113,5 @@ public enum PromptPayload {
     // MARK: Private
 
     private static let stoppedGrace: TimeInterval = 60
-    private static let clipboardLifetime: TimeInterval = 604_800
+    private static let fileLifetime: TimeInterval = 86_400
 }

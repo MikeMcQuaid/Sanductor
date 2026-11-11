@@ -23,6 +23,7 @@ struct RerunChecksButton: View {
                 utilityTab = UtilityTabTarget.errors
             }
         }
+        .controlSize(.small)
         .hoverHelp(check.map { "Rerun " + $0.displayName + " and its dependent jobs" }
             ?? "Rerun all " + String(count) + " failed Actions jobs, "
             + "including optional and hidden checks, and their dependent jobs")

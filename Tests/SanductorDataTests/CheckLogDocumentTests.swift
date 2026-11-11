@@ -3,6 +3,52 @@ import Testing
 
 struct CheckLogDocumentTests {
     @Test
+    func `file listing cleanup preserves command failures and other NUL separated output`() {
+        let document = CheckLogDocument("""
+        [command]/usr/bin/git ls-files -z
+        ##[error]Could not\0read repository
+        [command]another-command
+        file.swift\0README.md
+        """)
+        #expect(document.plainText(showTimestamps: false) == """
+        /usr/bin/git ls-files -z
+        Error: Could not read repository
+        another-command
+        file.swift README.md
+        """)
+    }
+
+    @Test
+    func `log cleanup omits progress and terminal formatting while preserving diagnostics`() {
+        let document = CheckLogDocument("""
+        2026-11-10T13:40:12Z \u{1B}]0;build title\u{7}\u{1B}[38:2::1:2:3mInstalling\u{1B}[0m
+        2026-11-10T13:40:13Z Downloading flow-bin@0.339.0: 3.37 MB/150.98 MB
+        2026-11-10T13:40:14Z Progress: resolved 1272, reused 1151, downloaded 119, added 558
+        2026-11-10T13:40:15Z Progress: resolved 1272, reused 1151, downloaded 119, added 1397, done
+        2026-11-10T13:40:16Z Received 109051904 of 178283434 (61%), 104.0 MB/s
+        2026-11-10T13:40:17Z + express 5.3.0
+        2026-11-10T13:40:18Z \u{1B}]8;;https://example.com\u{1B}\\Documentation\u{1B}]8;;\u{1B}\\
+        2026-11-10T13:40:19Z ##[warning]Downloading dependency failed; retrying
+        2026-11-10T13:40:20Z Progress: resolved a regression
+        2026-11-10T13:40:21Z ##[error]Test failed
+          at file.swift:1
+        error: repeated
+        error: repeated
+        """)
+        #expect(document.plainText(showTimestamps: false) == """
+        Installing
+        + express 5.3.0
+        Documentation
+        Warning: Downloading dependency failed; retrying
+        Progress: resolved a regression
+        Error: Test failed
+          at file.swift:1
+        error: repeated
+        error: repeated
+        """)
+    }
+
+    @Test
     func `action groups hide markers and retain precise optional timestamps`() {
         let log = """
         2026-10-17T19:22:49.6831900Z ##[group]Runner Image Provisioner

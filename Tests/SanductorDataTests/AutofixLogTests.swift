@@ -10,9 +10,9 @@ struct AutofixLogTests {
 
     @Test(arguments: ["public", "private", "unknown"])
     func `CI prompts include complete optional job logs and only public links`(visibility: String) async throws {
-        var lines = (1 ... 600).map { "analyze\tAnalyze\t2026-10-10T11:15:00Z Analyzing file " + String($0) }
-        lines[99] = "analyze\tAnalyze\t2026-10-10T11:15:00Z Sources/A.swift:1:1: error: Unused import"
-        lines[199] = "tests\tTest\t2026-10-10T11:15:00Z ✘ Test recorded an issue: Expectation failed: submitted"
+        var lines = (1 ... 600).map { "2026-10-10T11:15:00Z Analyzing file " + String($0) }
+        lines[99] = "2026-10-10T11:15:00Z Sources/A.swift:1:1: error: Unused import"
+        lines[199] = "2026-10-10T11:15:00Z ✘ Test recorded an issue: Expectation failed: submitted"
         let runner = LogRunner(output: lines.joined(separator: "\n"), visibility: visibility)
         let summary = summary()
         var state = PullRequestAutomation(repositoryPath: "/repo", number: 1, url: summary.url)
@@ -28,12 +28,14 @@ struct AutofixLogTests {
         #expect(prompt.contains("lines cut") == false)
         #expect(prompt.contains("https://github.com/o/r/actions") == (visibility == "public"))
         #expect(prompt.contains("Analyzing file 201"))
-        #expect(prompt.contains("2026-10-10T"))
+        #expect(prompt.contains("2026-10-10T") == false)
         #expect(prompt.contains("optional"))
         #expect(await runner.commands == [
             ["gh", "api", "repos/{owner}/{repo}", "--cache", "60s"],
-            ["gh", "api", "--allow-escape-sequences", "repos/{owner}/{repo}/actions/jobs/11/logs"],
-            ["gh", "api", "--allow-escape-sequences", "repos/{owner}/{repo}/actions/jobs/22/logs"],
+            ["gh", "run", "view", "1", "--repo", "o/r", "--json", "jobs", "--jq", ".jobs"],
+            ["gh", "api", "--allow-escape-sequences", "repos/o/r/actions/jobs/111/logs"],
+            ["gh", "run", "view", "2", "--repo", "o/r", "--json", "jobs", "--jq", ".jobs"],
+            ["gh", "api", "--allow-escape-sequences", "repos/o/r/actions/jobs/122/logs"],
         ])
     }
 
@@ -128,6 +130,16 @@ private actor LogRunner: ProcessRunner {
         let body: String =
             if arguments.contains("repos/{owner}/{repo}") {
                 visibility == "unknown" ? "Unavailable" : "{\"private\":" + String(visibility == "private") + "}"
+            } else if arguments.contains("--json") {
+                // swiftlint:disable:next no_magic_numbers - The fixture's linked job IDs.
+                "[" + (11 ... 22)
+                    .map { job in
+                        "{\"databaseId\":" + String(job + 100)
+                            // swiftlint:disable:next no_magic_numbers - The run ID follows gh run view.
+                            + ",\"url\":\"https://github.com/o/r/actions/runs/" + arguments[3]
+                            + "/job/" + String(job) + "\"}"
+                    }
+                    .joined(separator: ",") + "]"
             } else if arguments.last?.hasSuffix("/logs") == true {
                 output
             } else {

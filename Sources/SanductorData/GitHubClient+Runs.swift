@@ -1,4 +1,5 @@
 import Foundation
+import SanductorDomain
 
 /// Actions runs, split from the client body for length.
 extension GitHubClient {
@@ -21,9 +22,12 @@ extension GitHubClient {
         let steps: [RunStep]?
     }
 
-    /// One step of a job; only its conclusion matters here.
+    /// Step outcomes and timings identify successful maintenance output.
     struct RunStep: Decodable {
         let conclusion: String?
+        let name: String?
+        let startedAt: String?
+        let completedAt: String?
     }
 
     /// Why a run handed over no log, in the app's own words: gh's
@@ -114,12 +118,29 @@ extension GitHubClient {
         }
     }
 
-    /// Reads one complete job independently of its workflow run's state.
-    public func jobLog(repositoryPath: String, jobID: Int) async throws -> String {
+    /// Reads a finished check's log with terminal controls and download progress omitted.
+    public func checkLog(repositoryPath: String, check: PullRequestCheck) async throws -> String {
+        guard check.canReadLog, let repository = GitHubRemote.fullName(ofURL: check.link) else {
+            throw JobLogUnavailable()
+        }
+
+        let job = try await checkJob(repositoryPath: repositoryPath, check: check)
+        return try await jobLog(
+            repositoryPath: repositoryPath,
+            jobID: job.databaseId, // swiftformat:disable:this acronyms
+            repository: repository,
+            steps: job.steps ?? [],
+        )
+    }
+
+    /// Reads one job's diagnostics independently of its workflow run's state.
+    func jobLog(
+        repositoryPath: String, jobID: Int, repository: String = "{owner}/{repo}", steps: [RunStep] = [],
+    ) async throws -> String {
         let raw: ProcessResult
         do {
             raw = try await gh(
-                ["api", "--allow-escape-sequences", "repos/{owner}/{repo}/actions/jobs/" + String(jobID) + "/logs"],
+                ["api", "--allow-escape-sequences", "repos/" + repository + "/actions/jobs/" + String(jobID) + "/logs"],
                 in: repositoryPath,
             )
         } catch let error as CommandError where error.result.standardError.contains("HTTP 404") {
@@ -129,7 +150,7 @@ extension GitHubClient {
             throw JobLogUnavailable()
         }
 
-        return CheckLog.strippingANSI(raw.standardOutput)
+        return CheckLog.lines(raw.standardOutput, steps: steps).joined(separator: "\n")
     }
 
     /// The run's own address, which every one of its jobs hangs
@@ -190,7 +211,6 @@ extension GitHubClient {
     static func isText(_ output: String) -> Bool {
         output.isEmpty == false
             && output.hasPrefix("PK\u{3}\u{4}") == false
-            && output.contains("\0") == false
     }
 
     /// The slice of `gh run view --json url,jobs` the fallback
@@ -208,18 +228,19 @@ extension GitHubClient {
     /// dropped rather than pasted, so a prompt can never be handed
     /// an archive's bytes. Nil when neither answers, so one job
     /// still uploading never takes down the logs the others have.
-    /// Complete capture bypasses step filtering so unassigned output survives.
-    func jobLog(_ job: RunJob, repositoryPath: String, complete: Bool = false) async -> String? {
+    func jobLog(_ job: RunJob, repositoryPath: String) async -> String? {
         // swiftformat:disable:next acronyms
         let jobID = String(job.databaseId)
-        if complete == false,
-           let viewed = try? await gh(["run", "view", "--job", jobID, "--log-failed"], in: repositoryPath),
+        if let viewed = try? await gh(["run", "view", "--job", jobID, "--log-failed"], in: repositoryPath),
            viewed.standardOutput.isEmpty == false
         {
             return viewed.standardOutput.trimmingCharacters(in: .newlines)
         }
-        // swiftformat:disable:next acronyms
-        guard let raw = try? await jobLog(repositoryPath: repositoryPath, jobID: job.databaseId) else {
+        guard let raw = try? await jobLog(
+            repositoryPath: repositoryPath,
+            jobID: job.databaseId, // swiftformat:disable:this acronyms
+            steps: job.steps ?? [],
+        ) else {
             return nil
         }
 

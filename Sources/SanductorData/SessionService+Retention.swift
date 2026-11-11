@@ -22,8 +22,53 @@ extension SessionService {
 
     @concurrent
     func expireConversations(now: Date = Date()) async {
-        guard let panes = try? await herdr.panes() else {
+        guard let state = await retentionState() else {
             return
+        }
+
+        PromptPayload.cleanTemporaryFiles(
+            paths: paths, store: store, protectedPaths: state.openFiles.union(state.livePaths), now: now,
+        )
+        var files = await backupRetentionFiles(now: now)
+        for runner in runners {
+            files += runner.conversationFiles(sandboxHome: paths.sandboxHome).compactMap { path, worktree in
+                ConversationRetention.File(path: path, worktree: retentionWorktree(worktree))
+            }
+        }
+        await removeExpiredFiles(files.filter { file in
+            file.expired(now: now, livePaths: state.livePaths, openFiles: state.openFiles)
+        })
+    }
+
+    @concurrent
+    func cleanPromptFiles() async {
+        let now = Date()
+        guard store.load().temporaryPromptFiles.values.contains(where: { PromptPayload.hasExpired($0, now: now) }),
+              let state = await retentionState()
+        else {
+            return
+        }
+
+        PromptPayload.clean(
+            paths: paths,
+            store: store,
+            sessions: state.panes.map { pane in
+                AgentSession(
+                    name: pane.sessionName,
+                    agent: nil,
+                    status: pane.isFinished ? .finished : .running,
+                    paneID: pane.paneID,
+                    activity: pane.activity,
+                )
+            },
+            protectedPaths: state.openFiles.union(state.livePaths),
+            now: now,
+        )
+    }
+
+    private func retentionState() async -> RetentionState? {
+        guard let panes = try? await herdr.panes() else {
+            return nil
         }
 
         let payload = "/usr/sbin/lsof -n -P -u " + launcher.sandboxUser.shellQuoted + " -Ffn"
@@ -36,7 +81,7 @@ extension SessionService {
         guard let opened = try? await processes.run(command, workingDirectory: "/", environment: [:]),
               opened.succeeded
         else {
-            return
+            return nil
         }
 
         let lines = opened.standardOutput.split(separator: "\n").map(String.init)
@@ -45,13 +90,7 @@ extension SessionService {
         for (previous, line) in zip(lines, lines.dropFirst()) where previous == "fcwd" && line.hasPrefix("n/") {
             livePaths.insert(String(line.dropFirst()))
         }
-        var files = await backupRetentionFiles(now: now)
-        for runner in runners {
-            files += runner.conversationFiles(sandboxHome: paths.sandboxHome).compactMap { path, worktree in
-                ConversationRetention.File(path: path, worktree: retentionWorktree(worktree))
-            }
-        }
-        await removeExpiredFiles(files.filter { $0.expired(now: now, livePaths: livePaths, openFiles: openFiles) })
+        return RetentionState(panes: panes, openFiles: openFiles, livePaths: livePaths)
     }
 
     private func removeExpiredFiles(_ files: [ConversationRetention.File]) async {
@@ -156,4 +195,12 @@ extension SessionService {
         }
         return files
     }
+}
+
+// MARK: - RetentionState
+
+private struct RetentionState {
+    let panes: [HerdrPane]
+    let openFiles: Set<String>
+    let livePaths: Set<String>
 }

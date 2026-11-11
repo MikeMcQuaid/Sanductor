@@ -6,6 +6,32 @@ import Testing
 /// directory: idempotency and coexistence with third-party hooks.
 struct HookInstallerTests {
     @Test
+    func `unreadable temporary files do not prevent hook installation`() throws {
+        let root = try TestSupport.temporaryDirectory("unreadable-hooks")
+        defer { try? FileManager.default.removeItem(atPath: root) }
+        let paths = WorkspacePaths(
+            hostUser: "test", sharedWorkspace: root, sandboxHome: root + "/home", metadataFile: root + "/state.json",
+        )
+        try FileManager.default.createDirectory(atPath: root + "/tmp", withIntermediateDirectories: true)
+        try FileManager.default.setAttributes([.posixPermissions: 0o000], ofItemAtPath: root + "/tmp")
+        defer { try? FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: root + "/tmp") }
+        #expect(throws: (any Error).self) {
+            try FileManager.default.contentsOfDirectory(atPath: root + "/tmp")
+        }
+        try FileManager.default.createDirectory(atPath: paths.promptsDirectory, withIntermediateDirectories: true)
+        let prompt = paths.promptsDirectory + "/prompt-old.md"
+        try "feedback".write(toFile: prompt, atomically: true, encoding: .utf8)
+
+        try HookInstaller(paths: paths).ensureInstalled()
+
+        let directory = paths.userTemplateDirectory + "/.claude"
+        #expect(FileManager.default.isExecutableFile(atPath: directory + "/sanductor-notify.sh"))
+        let settings = try String(contentsOfFile: directory + "/settings.json", encoding: .utf8)
+        #expect(settings.contains("sanductor-notify.sh"))
+        #expect(MetadataStore(file: paths.metadataFile).load().temporaryPromptFiles[prompt] != nil)
+    }
+
+    @Test
     func `legacy hook commands and session variables still deliver events`() async throws {
         let root = try TestSupport.temporaryDirectory("legacy-hooks")
         defer { try? FileManager.default.removeItem(atPath: root) }

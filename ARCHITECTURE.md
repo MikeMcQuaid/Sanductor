@@ -1692,15 +1692,22 @@ steps.
   every check, including optional checks and required checks that have
   not reported, with requirement, status and timing. Compact rows show
   workflow, job and event names, with requirement labels aligned right.
-  Failed Actions jobs offer a rerun icon before the requirement label
-  in both check rows and individual log headers. A separate rerun icon
-  sits left of the show-only filters and includes required and optional
-  failures regardless of display filters, with its count in hover help.
+  Finished Actions jobs with logs offer a copy icon beside the compact
+  rerun control in check rows, without opening the log. Copies include
+  every group with timestamps hidden, matching the log viewer's default.
+  Bulk job copies and Autofix use the same timestamp-free text.
+  Requirement labels precede the trailing actions, with rerun left of
+  copy so different labels and absent reruns never shift copy buttons.
+  Failed jobs offer rerun controls in both rows and log headers.
+  A separate rerun icon sits left of the show-only filters and includes
+  required and optional failures regardless of display filters, with its
+  count in hover help.
   Bulk reruns submit once per workflow run, including cancelled and
   timed-out jobs. GitHub also reruns dependent jobs.
   The shared GitHub client names the repository from each check's link
-  and resolves individual jobs to their database IDs before rerunning,
-  since the displayed link can carry a different check-run ID.
+  and resolves individual jobs to their database IDs before reading logs
+  or rerunning, since the displayed link can carry a different
+  check-run ID.
   Job links match by path, ignoring query strings, before falling back
   to an unambiguous job name. Owner and repository names ignore case;
   the rest of the path matches exactly.
@@ -1739,8 +1746,15 @@ steps.
   controls share the compact pane button sizing; browser actions use
   `LinkOpener`'s Safari symbol. Finished Actions jobs fetch their full log
   through the REST job endpoint, accepting terminal escape sequences for
-  display as plain text,
-  independently of the rest of the run; running and external checks
+  display as plain text, omitting terminal controls and using spaces for
+  embedded NUL separators. Shared cleanup omits the NUL-separated file
+  dump immediately after `git ls-files -z`, package download progress
+  and cache transfer counters. Successful runner setup, post-job steps
+  and job completion output are omitted using GitHub's step timings.
+  Boundary seconds, steps with warnings or errors and unknown outcomes
+  remain. Other commands, dependency versions and stack traces remain,
+  without a line or size cutoff. Job logs are available independently
+  of the rest of the run; running and external checks
   link to their live log. Logs load only on demand.
 - **Row and pane never disagree**: both read the same two caches
   through `PullRequestStore`, the per-branch summary (which pull
@@ -2198,9 +2212,10 @@ steps.
   Failed compression keeps the original and cleans up temporary output;
   launch maintenance removes interrupted output older than a day.
   Transcripts and backups expire after 30 days without modification.
-  Live sessions, open files and existing Git worktrees are protected;
-  an existing main checkout alone does not prevent expiry. Unknown
-  origins still expire by file age, rather than being kept forever.
+  Live sessions, files open by the sandbox user's processes and existing
+  Git worktrees are protected; an existing main checkout alone does not
+  prevent expiry. Unknown origins still expire by file age, rather than
+  being kept forever.
   Agent adapters locate original Codex and Claude transcripts for the
   same maintenance; credentials, installed plugins and live databases
   are never pruned. Deletion rechecks each file's timestamp and size.
@@ -3159,9 +3174,31 @@ in a unique file and the paste references it. Files retain the complete
 payload, so concurrent prompts cannot overwrite or truncate one another.
 A durable ledger keeps autofix inputs and results while their attempt or
 agent is active, then removes them once idle, with a minute's grace.
-Clipboard files expire after seven days because pasting is unobservable.
+Clipboard files and attachments staged as `tmp/drop-<UUID>-<name>`
+expire after 24 hours. Dashboard refreshes check tracked files at most
+once a minute while the app is open, after fresh checks for live sessions
+and files open by the sandbox user's processes. Open files, live working
+directories and tracked directories containing either are preserved;
+failed checks defer cleanup. A backwards clock correction allows the
+next check immediately. Fresh tracked files require no live-state
+lookup. Dropped directory contents expire individually after 24 hours,
+including directories adopted during setup; newer contents are preserved.
+Other shared temporary files and untracked prompt files expire
+after seven days without modification. The daily background maintenance
+also runs after launch, preserving files open by the sandbox user's
+processes, live session directories, tracked feedback and the current
+performance logging enablement marker. Files open only by the host user's
+processes are not protected from expiry.
+Cleanup visits recent directories too, removing expired children
+individually and directories only if expired and empty. Directory
+descriptors anchor listing, metadata reads and deletion, so replacing a
+directory with a symlink cannot redirect cleanup outside its tree.
+Cleanup roots reject symlinks in any path component. Diagnostic files
+inside `tmp/sanductor` expire individually, and a failed live-state check
+defers the sweep.
 Initial launch files are removed by the shell after reading; unused files
-expire with clipboard files. Setup adopts older prompt files for cleanup.
+expire with clipboard files. Setup adopts older prompt files and staged
+attachments for cleanup, skipping directories it cannot read.
 Blocked agents, unknown activity and the default branch never receive a
 prompt. Delivery is claimed durably before sending;
 an ambiguous failure is reported and never repeated automatically.
