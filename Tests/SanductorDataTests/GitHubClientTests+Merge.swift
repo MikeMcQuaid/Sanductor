@@ -335,12 +335,16 @@ private final class AsyncMergeRunner: ProcessRunner, Sendable {
         outputLimit _: Int?,
     ) throws -> ProcessResult {
         #expect(workingDirectory == "/repo")
-        if arguments.starts(with: ["gh", "repo", "view"]) {
+        if arguments.contains(where: { $0.contains("mergeCommitAllowed") }) {
             return ProcessResult(
                 status: 0,
-                standardOutput: #"{"mergeCommitAllowed":false,"rebaseMergeAllowed":true}"#,
+                standardOutput: #"{"mergeCommitAllowed":true,"rebaseMergeAllowed":true,"squashMergeAllowed":true,"#
+                    + #""pullRequest":{"baseRefName":"main"}}"#,
                 standardError: "",
             )
+        }
+        if arguments.contains("repos/{owner}/{repo}/rules/branches/main?per_page=100") {
+            return ProcessResult(status: 0, standardOutput: "rebase,squash\n", standardError: "")
         }
         calls.withLock { $0.append(arguments) }
         if arguments.contains("GET"), let failure = pollFailure.withLock({ failure in

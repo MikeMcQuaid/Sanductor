@@ -84,8 +84,8 @@ private final nonisolated class MergeRoutingRunner: ProcessRunner {
         environment _: [String: String],
         outputLimit _: Int?,
     ) -> ProcessResult {
-        if arguments.starts(with: ["gh", "repo", "view"]) {
-            return ProcessResult(status: 0, standardOutput: #"{"mergeCommitAllowed":true}"#, standardError: "")
+        if arguments.contains(where: { $0.contains("mergeCommitAllowed") }) {
+            return ProcessResult(status: 0, standardOutput: "", standardError: "")
         }
         if arguments == ["gh", "pr", "view", "7", "--json", "id", "--jq", ".id"] {
             return ProcessResult(status: 0, standardOutput: "PR_7\n", standardError: "")
