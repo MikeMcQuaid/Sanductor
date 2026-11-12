@@ -56,4 +56,35 @@ struct MergedBranchCleanupIntegrationTests {
         }
         #expect(await world.service.git.currentBranch(worktreePath: path) == "main")
     }
+
+    @Test
+    func `branch cleanup uses the remote default and preserves dirty checkouts and worktrees`() async throws {
+        let world = try await World.make()
+        defer { world.tearDown() }
+        let path = world.repository.path
+        let origin = world.root + "/origin.git"
+        try await TestSupport.runGit(["clone", "--bare", path, origin], in: world.root)
+        try await TestSupport.runGit(["remote", "add", "origin", origin], in: path)
+        try await TestSupport.runGit(["fetch", "origin"], in: path)
+        try await TestSupport.runGit(["remote", "set-head", "origin", "--auto"], in: path)
+        try await TestSupport.runGit(["checkout", "-b", "merged", "main"], in: path)
+        try await TestSupport.runGit(["commit", "--allow-empty", "-m", "Merged work"], in: path)
+        try await TestSupport.runGit(["push", "origin", "merged:main"], in: path)
+        try await TestSupport.runGit(["worktree", "add", "-b", "held", world.root + "/held", "merged"], in: path)
+        try await TestSupport.runGit(["checkout", "-b", "unmerged", "main"], in: path)
+        try await TestSupport.runGit(["commit", "--allow-empty", "-m", "Unmerged work"], in: path)
+        try await TestSupport.runGit(["branch", "kept", "unmerged"], in: path)
+        try "Local edits".write(toFile: path + "/README.md", atomically: true, encoding: .utf8)
+
+        let cleanup = try await world.service.cleanUpBranches(repository: world.repository)
+
+        #expect(cleanup.deleted == ["merged"])
+        #expect(cleanup.failures.isEmpty)
+        #expect(await world.service.git.branchExists(repository: world.repository, branch: "merged") == false)
+        #expect(await world.service.git.branchExists(repository: world.repository, branch: "kept"))
+        #expect(await world.service.git.currentBranch(worktreePath: path) == "unmerged")
+        #expect(await world.service.git.currentBranch(worktreePath: world.root + "/held") == "held")
+        #expect(await world.service.git.isMerged(worktreePath: path, branch: "origin/main", into: "main") == false)
+        #expect(try String(contentsOfFile: path + "/README.md", encoding: .utf8) == "Local edits")
+    }
 }

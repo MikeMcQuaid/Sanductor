@@ -45,6 +45,10 @@ struct WorktreeActions: View {
             }
         }
         .hoverHelp("Ask GitHub about this repository's branches and merge queue now")
+        BranchCleanupButton(
+            repository: Repository(name: item.worktree.repositoryName, path: item.worktree.repositoryPath),
+            model: model,
+        )
         Divider()
         CopyBranchNameButton(item.worktree.branch)
             .hoverHelp("Copy this worktree's branch name")
@@ -107,9 +111,9 @@ struct WorktreeActions: View {
             }
             .hoverHelp(
                 item.worktree.path == item.worktree.repositoryPath
-                    ? "Return to the default branch and safely delete this merged branch; "
+                    ? "Return to the default branch and delete all unused merged branches; "
                     + "dirty checkouts are left alone"
-                    : "Remove this worktree once its branch is merged and clean; "
+                    : "Remove this clean, merged worktree and all unused merged branches; "
                     + "anything that would lose work asks first",
             )
         }

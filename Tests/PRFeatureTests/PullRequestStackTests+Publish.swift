@@ -34,7 +34,7 @@ extension PullRequestStackTests {
         #expect(model.unpushedBelow == nil)
         model.store.update { $0.queuedCache[model.repository.path] = [] }
         #expect(model.canRestack)
-        #expect(model.unpushedBelow == "lower")
+        #expect(model.unpushedBelow == nil)
     }
 
     @Test
@@ -87,5 +87,48 @@ extension PullRequestStackTests {
         #expect(model.isFullyPushed)
         #expect(model.canPublish == false)
         #expect(model.pushDoneTitle == "Pushed")
+    }
+
+    @Test(arguments: ["lower", "middle", "upper"], [false, true])
+    func `publishing from any open layer updates the published stack`(branch: String, unsigned: Bool) async {
+        let fixtures = PullRequestsModelTests()
+        let model = fixtures.makeModel(items: [fixtures.item(branch: "feature", ahead: 1)])
+        let branches = ["lower", "middle", "upper"]
+        let stack = BranchStack(base: "main", branches: branches, checkedOut: "upper", published: branches)
+        var actions = [String]()
+        model.stacking.facts = { _ in
+            StackFacts(
+                stack: stack,
+                unpushed: actions.contains("push") ? [] : branches,
+                unsigned: unsigned && actions.isEmpty ? branches : [],
+            )
+        }
+        model.stacking.restack = { worktree, _ in
+            #expect(worktree.branch == branch)
+            actions.append("sign")
+            return branches
+        }
+        model.stacking.push = { worktree in
+            #expect(worktree.branch == branch)
+            #expect(stack.branchesToPush(through: worktree.branch) == branches)
+            actions.append("push")
+            return branches
+        }
+        await model.reload()
+        for (index, entry) in branches.enumerated() {
+            model.pullRequests.rememberListing(
+                repositoryPath: model.repository.path,
+                scope: .branch(entry),
+                summaries: [fixtures.summary(index + 1, head: entry)],
+            )
+        }
+        model.stacking.selected = branch
+
+        #expect(model.unpushedBelow == nil)
+        #expect(model.canPublish)
+        #expect(model.publishTitle == (unsigned ? "Sign and Push" : "Push"))
+        #expect(model.unpushedStackBranches == branches)
+        #expect(await model.publish())
+        #expect(actions == (unsigned ? ["sign", "push"] : ["push"]))
     }
 }

@@ -13,12 +13,13 @@ extension PullRequestsModelTests {
         items: [WorktreeItem] = [],
         metadataFile: String? = nil,
         worktreePath: String? = nil,
+        runner: any ProcessRunner = FoundationProcessRunner(),
     ) -> PullRequestsModel {
         // Clear earlier models in this fixture; other tests use distinct paths.
         for item in items {
             StackSelection.remember(nil, for: item.worktree.path)
         }
-        let model = makeBareModel(items: items, metadataFile: metadataFile, worktreePath: worktreePath)
+        let model = makeBareModel(items: items, metadataFile: metadataFile, worktreePath: worktreePath, runner: runner)
         model.fetchList = { _, _ in [] }
         model.fetchSummary = { _ in nil }
         model.fetchHasMergeQueue = { false }
@@ -50,9 +51,9 @@ extension PullRequestsModelTests {
     private func makeBareModel(
         items: [WorktreeItem],
         metadataFile: String?,
-        worktreePath: String? = nil,
+        worktreePath: String?,
+        runner: any ProcessRunner,
     ) -> PullRequestsModel {
-        let runner = FoundationProcessRunner()
         let base = FileManager.default
             .temporaryDirectory
             .appendingPathComponent("sanductor-prmodel-" + UUID().uuidString, isDirectory: true)

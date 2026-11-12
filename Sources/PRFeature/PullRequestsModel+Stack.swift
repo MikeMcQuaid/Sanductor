@@ -15,8 +15,10 @@ extension PullRequestsModel {
         stacking.restack = { worktree, busy in
             try await service.restack(worktree: worktree, busyWorktrees: busy)
         }
-        stacking.push = { worktree in
-            try await service.pushStack(worktree: worktree)
+        stacking.push = { [weak self] worktree in
+            try await service.pushStack(worktree: worktree) { @MainActor [weak self] in
+                self?.busyWorktrees ?? []
+            }
         }
     }
 
@@ -159,22 +161,29 @@ extension PullRequestsModel {
     /// so moving to one paints it complete rather than empty. The
     /// answers land in the same cache an ordinary load reads, and
     /// nothing on screen waits for them.
-    func prefetchStack() {
+    @discardableResult
+    func prefetchStack() -> Task<Void, Never>? {
         let others = stacking.stack.branches.filter { $0 != listedBranch }
         guard others.isEmpty == false else {
-            return
+            return nil
         }
 
-        Task { [weak self] in
+        return Task { [weak self] in
             for branch in others {
                 guard let self, Task.isCancelled == false else {
                     return
                 }
 
+                let wasOpen = hasOpenPullRequest(branch)
                 let listed = try? await pullRequests.listing(
                     repositoryPath: repository.path,
-                    scope: scope.listScope(branch: branch),
+                    scope: .branch(branch),
                 )
+                if hasOpenPullRequest(branch) != wasOpen {
+                    withMutation(keyPath: \.stacking) {
+                        // Stack eligibility also depends on the listing cache.
+                    }
+                }
                 // The entry's open pull request warms too: its
                 // header and conversation are what clicking shows.
                 guard let open = listed?.first(where: { $0.state == "OPEN" }) else {
@@ -325,10 +334,11 @@ extension PullRequestsModel {
         return listed.contains { $0.state == "OPEN" }
     }
 
-    /// The first lower branch that must be pushed before this entry.
+    /// Unopened lower branches must be pushed first; open pull requests update together.
     var unpushedBelow: String? {
         stackThroughListed.dropLast().first { branch in
             mutableStackBranches.contains(branch) && stacking.unpushedBranches.contains(branch)
+                && hasOpenPullRequest(branch) == false
         }
     }
 

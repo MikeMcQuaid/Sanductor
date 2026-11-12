@@ -279,7 +279,9 @@ struct World {
         )
     }
 
-    func service(herdr: HerdrClient, git: GitClient? = nil) -> SessionService {
+    func service(
+        herdr: HerdrClient, git: GitClient? = nil, processes: any ProcessRunner = FoundationProcessRunner(),
+    ) -> SessionService {
         SessionService(
             paths: paths,
             git: git ?? service.git,
@@ -289,6 +291,7 @@ struct World {
             spool: service.spool,
             store: service.store,
             runners: [],
+            processes: processes,
         )
     }
 
@@ -301,7 +304,7 @@ struct World {
 
 // MARK: - RecordingRunner
 
-/// Records every command and answers success.
+/// Records every command and answers success by default.
 final class RecordingRunner: ProcessRunner, @unchecked Sendable {
     // MARK: Lifecycle
 
@@ -314,6 +317,7 @@ final class RecordingRunner: ProcessRunner, @unchecked Sendable {
     private(set) var commands: [[String]] = []
     /// What every command prints.
     var standardOutput = ""
+    var status: Int32 = 0
 
     func run(
         _ arguments: [String],
@@ -322,6 +326,6 @@ final class RecordingRunner: ProcessRunner, @unchecked Sendable {
         outputLimit _: Int?,
     ) -> ProcessResult {
         commands.append(arguments)
-        return ProcessResult(status: 0, standardOutput: standardOutput, standardError: "")
+        return ProcessResult(status: status, standardOutput: standardOutput, standardError: "")
     }
 }

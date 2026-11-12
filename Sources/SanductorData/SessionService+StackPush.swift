@@ -1,7 +1,9 @@
 import SanductorDomain
 
 extension SessionService {
-    func pushStack(worktree: Worktree, stack: BranchStack) async throws -> [String] {
+    func pushStack(
+        worktree: Worktree, stack: BranchStack, busyWorktrees: @Sendable () async -> Set<String>,
+    ) async throws -> [String] {
         let queued = try await pullRequests.queuedBranches(repositoryPath: worktree.repositoryPath)
         let (index, branches) = try stackPushSelection(
             worktree: worktree, stack: stack, queued: queued,
@@ -36,6 +38,7 @@ extension SessionService {
                 branch: branch,
                 remote: remote,
                 parent: parent,
+                busyWorktrees: busyWorktrees,
             )
             parent = previousTip.map { (branch, $0) }
             pushed.append(branch)

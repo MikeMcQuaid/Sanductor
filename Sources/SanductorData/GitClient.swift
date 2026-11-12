@@ -306,7 +306,10 @@ public struct GitClient: Sendable {
         // A branch that is not there is the state this was asking
         // for: a worktree whose creation failed part way has none,
         // and refusing to finish left the row undeletable.
-        try await git(["branch", "-D", branch], in: repository.path, allowFailure: true)
+        let result = try await git(["branch", "-D", branch], in: repository.path, allowFailure: true)
+        if result.succeeded == false, await branchExists(repository: repository, branch: branch) {
+            throw CommandError(command: "git branch -D " + branch, result: result)
+        }
     }
 
     // MARK: Internal

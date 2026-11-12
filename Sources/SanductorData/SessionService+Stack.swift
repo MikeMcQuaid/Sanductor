@@ -293,8 +293,10 @@ public extension SessionService {
     /// bottom up, so each pull request's base is on the remote first.
     /// Each push integrates remote work and pins its lease just like
     /// the single-branch push.
-    func pushStack(worktree: Worktree) async throws -> [String] {
-        try await pushStack(worktree: worktree, stack: stack(for: worktree))
+    func pushStack(
+        worktree: Worktree, busyWorktrees: @Sendable () async -> Set<String> = { [] },
+    ) async throws -> [String] {
+        try await pushStack(worktree: worktree, stack: stack(for: worktree), busyWorktrees: busyWorktrees)
     }
 
     /// The branches this worktree's stack has been told to leave

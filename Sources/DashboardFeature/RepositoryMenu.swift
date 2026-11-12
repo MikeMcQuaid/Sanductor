@@ -3,6 +3,8 @@ import SanductorDomain
 import SwiftUI
 import TerminalUI
 
+// MARK: - RepositoryMenu
+
 /// A repository header's context menu and the confirmation its
 /// delete item opens; a modifier so the header stays one expression.
 struct RepositoryMenu: ViewModifier {
@@ -14,12 +16,7 @@ struct RepositoryMenu: ViewModifier {
     func body(content: Content) -> some View {
         content
             .contextMenu {
-                Button("Refresh") {
-                    Task {
-                        await model.refreshRepository(path: group.repository.path)
-                    }
-                }
-                .hoverHelp("Ask GitHub about this repository's branches and merge queue now")
+                maintenanceActions
                 Divider()
                 Button("Copy path") {
                     NSPasteboard.general.clearContents()
@@ -80,6 +77,16 @@ struct RepositoryMenu: ViewModifier {
             .branch
     }
 
+    @ViewBuilder private var maintenanceActions: some View {
+        Button("Refresh") {
+            Task {
+                await model.refreshRepository(path: group.repository.path)
+            }
+        }
+        .hoverHelp("Ask GitHub about this repository's branches and merge queue now")
+        BranchCleanupButton(repository: group.repository, model: model)
+    }
+
     /// Asks for the directory, then lists it under this
     /// repository. Nothing is copied or changed on disk.
     private func addDirectory() {
@@ -96,5 +103,22 @@ struct RepositoryMenu: ViewModifier {
         Task {
             await model.addHostDirectory(url.path, to: group.repository)
         }
+    }
+}
+
+// MARK: - BranchCleanupButton
+
+struct BranchCleanupButton: View {
+    let repository: Repository
+    let model: DashboardModel
+
+    var body: some View {
+        BusyButton("Cleanup branches", busy: "Cleaning branches") {
+            await model.cleanUpBranches(repository: repository)
+        }
+        .hoverHelp(
+            "Delete local branches merged into the default branch; "
+                + "protected and checked-out branches are kept",
+        )
     }
 }
