@@ -4,9 +4,9 @@ import SwiftUI
 import Textual
 
 extension MarkdownText {
-    static func content(_ text: String) -> AttributedString {
-        contentCache.value(for: text) { raw in
-            let source = strippingHTML(raw)
+    static func content(_ text: String, repositoryURL: URL? = nil) -> AttributedString {
+        contentCache.value(for: (repositoryURL?.absoluteString ?? "") + "\0" + text) { _ in
+            let source = strippingHTML(text)
             let matter = frontMatter(in: source)
             let body = matter?.body ?? source
             var content = (try? AttributedStringMarkdownParser.markdown().attributedString(for: body))
@@ -18,7 +18,7 @@ extension MarkdownText {
             }
             var result = matter.map { frontMatterTable($0.fields) } ?? AttributedString()
             result.append(adapted(content))
-            return result
+            return linkingIssues(result, repositoryURL: repositoryURL)
         }
     }
 

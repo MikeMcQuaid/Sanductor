@@ -122,8 +122,10 @@ public struct MarkdownText: View {
     }
 
     private struct Parser: MarkupParser {
+        let repositoryURL: URL?
+
         func attributedString(for input: String) -> AttributedString {
-            MarkdownText.content(input)
+            MarkdownText.content(input, repositoryURL: repositoryURL)
         }
     }
 
@@ -138,6 +140,9 @@ public struct MarkdownText: View {
 
     private static let disclosureSpacing: CGFloat = 8
 
+    @Environment(\.markdownRepositoryURL)
+    private var repositoryURL
+
     private var codeStyle: CodeStyle = .init()
     private let text: String
     private let directory: String?
@@ -147,10 +152,11 @@ public struct MarkdownText: View {
     }
 
     private func markdown(_ source: String) -> some View {
-        StructuredText(source, parser: Parser())
+        StructuredText(source, parser: Parser(repositoryURL: repositoryURL))
             // Textual retains resolved attachments when new content has no images.
             .id(source)
             .id(directory)
+            .id(repositoryURL)
             .modifier(MarkdownSelection())
     }
 }

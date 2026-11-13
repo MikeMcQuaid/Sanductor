@@ -5,6 +5,56 @@ import TerminalUI
 import Testing
 
 extension SessionNavigationTests {
+    @Test(arguments: ["typed", "pasted", "marked"], [false, true])
+    func `command return submits every edit before the next render`(input: String, settledFocus: Bool) async throws {
+        let fixture = Fixture()
+        defer { fixture.close() }
+        let restore = Fixture.overriding([
+            AgentSessionForm.promptKey: "Makes ",
+            "agentKind": "claude",
+            "agentModel": "sonnet",
+            "agentEffort": "high",
+        ])
+        defer { restore() }
+        var submitted: AgentSessionForm.Submission?
+        let form = AgentSessionForm(
+            model: fixture.model,
+            repository: fixture.repository,
+            submitTitle: "Start agent",
+            submitHelp: "Start",
+        ) { submission in submitted = submission }
+        let host = NSHostingView(rootView: AnyView(form))
+        let window = Fixture.window(hosting: host)
+        defer { window.close() }
+        try await Task.sleep(for: .milliseconds(100))
+        let editor = try #require(fixture.textView(in: host))
+        window.makeFirstResponder(editor)
+        if settledFocus {
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        #expect(window.firstResponder === editor)
+        let expected = "Make Fixes #1234 in the PR view rendering link the #1234 to the relevant issue/PR URL"
+            + " so I can click on it and open it like other links in the application."
+        editor.setSelectedRange(NSRange(location: 0, length: editor.string.utf16.count))
+        if input == "marked" {
+            editor.setMarkedText(
+                expected,
+                selectedRange: NSRange(location: expected.utf16.count, length: 0),
+                replacementRange: editor.selectedRange(),
+            )
+        } else {
+            for edit in input == "pasted" ? [expected] : expected.map(String.init) {
+                editor.insertText(edit, replacementRange: editor.selectedRange())
+            }
+        }
+        #expect(editor.string == expected)
+        try fixture.submit(in: host, windowNumber: window.windowNumber)
+        for _ in 0 ..< 50 where submitted == nil {
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        #expect(submitted?.prompt == expected)
+    }
+
     @Test(arguments: [false, true])
     func `a covered form cannot steal Cmd Return or submit an older draft`(pasted: Bool) async throws {
         let fixture = Fixture()
@@ -56,7 +106,7 @@ extension SessionNavigationTests {
         #expect(submitted?.prompt == expected)
     }
 
-    private func textViews(in view: NSView) -> [NSTextView] {
+    func textViews(in view: NSView) -> [NSTextView] {
         if let editor = view as? NSTextView {
             return [editor]
         }

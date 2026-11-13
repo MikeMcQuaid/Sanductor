@@ -721,7 +721,14 @@ the default branch. Placeholders and host directories supply no base.
    empty and can start a second session beside it. Covered and hidden
    panes disable their controls as well as hit testing: an invisible
    Start Agent button could intercept Cmd-Return and submit an older
-   copy of the shared draft, dropping its latest edits. A launch that
+   copy of the shared draft, dropping its latest edits. Submission
+   keeps the system TextEditor in its own native host and captures
+   its full text before ending active composition. Native hit testing
+   confirms that this input is visible, even beside another editor.
+   This is independent of SwiftUI focus and draft updates: marked text is
+   visible before the binding receives it, and ending composition can
+   restore that older value. A missing editor leaves the form and draft
+   intact and reports an error after retrying layout. A launch that
    finishes opens its pane only while its own row is still selected and
    no page covers the pane: anything chosen since, another launch's
    placeholder included, keeps the sidebar where it is.
@@ -3013,10 +3020,14 @@ states without flattening the document. Interface and code fonts follow
 Settings, Textual highlights code with the shared token colours and
 links use the existing opener. Its attachment loader handles local and
 remote images, resolving relative images beside the previewed file.
-The view identity follows source and image directory so retained
-attachments cannot outlive their document. Paragraphs and headings fill
-the available width inside Textual's selection overlay, so a drag can
-start beside short text as well as directly over it.
+PR conversations supply their repository URL so bare issue and pull
+request references such as `#1234` become links in prose, including
+comments and disclosures, while code and existing links stay intact.
+The attributed-content cache includes that repository context.
+The view identity follows source, repository and image directory so
+retained attachments cannot outlive their document. Paragraphs and
+headings fill the available width inside Textual's selection overlay, so
+a drag can start beside short text as well as directly over it.
 Only one Markdown region holds a selection at a time. Conversation rows
 put author headers above full-width comment bodies and retain their
 compact rails; author names use the shared selectable renderer. Headers
