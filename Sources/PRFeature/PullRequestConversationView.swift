@@ -176,6 +176,9 @@ struct PullRequestConversationView: View {
                 }
             }
         }
+        .environment(
+            \.markdownRepositoryURL, URL(string: summary.url)?.deletingLastPathComponent().deletingLastPathComponent(),
+        )
         .onChange(of: summary.url) { showsChecks = false }
         // The listing's body or the cached conversation paints
         // instantly (or the state clears, so another pull request's

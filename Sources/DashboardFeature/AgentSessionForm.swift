@@ -65,8 +65,6 @@ struct AgentSessionForm: View {
     // MARK: Private
 
     private static let spacing: CGFloat = 10
-    private static let promptHeight: CGFloat = 140
-    private static let contextHeight: CGFloat = 70
 
     @State private var source: PromptSource = .prompt
     /// The last agent, model and effort come back next time: the
@@ -102,6 +100,7 @@ struct AgentSessionForm: View {
     /// typing away.
     @AppStorage(Self.promptKey)
     private var prompt = ""
+    @State private var promptEditor: PromptEditorHost = .init(rootView: AnyView(EmptyView()))
     @AppStorage("agentModel")
     private var agentModel = ""
     @AppStorage("agentEffort")
@@ -199,8 +198,7 @@ struct AgentSessionForm: View {
     @ViewBuilder private var sourceFields: some View {
         switch source {
         case .prompt:
-            TextEditor(text: $prompt)
-                .interfaceFont(.body)
+            PromptEditor(text: $prompt, view: promptEditor)
                 .frame(minHeight: Self.promptHeight)
                 .border(.separator)
 
@@ -223,8 +221,7 @@ struct AgentSessionForm: View {
                 searchIssues: lookUp(issues, search: model.searchOpenIssues(repository:query:)),
                 searchPullRequests: lookUp(pullRequests, search: model.searchOpenPullRequests(repository:query:)),
             )
-            TextEditor(text: $prompt)
-                .interfaceFont(.body)
+            PromptEditor(text: $prompt, view: promptEditor)
                 .frame(minHeight: Self.contextHeight)
                 .border(.separator)
                 .hoverHelp("Context appended to each fetched title and body; anything typed first is kept")
@@ -308,14 +305,18 @@ struct AgentSessionForm: View {
         guard isStarting == false else {
             return
         }
+        guard let text = promptEditor.capture() else {
+            ErrorLog.shared.report("Could not read the prompt editor. Your draft has been kept.")
+            return
+        }
 
         isStarting = true
         let submission = Submission(
             source: source,
             numbers: pickedNumbers.sorted(),
             ghsaID: ghsaID,
-            prompt: source == .prompt ? prompt : "",
-            context: source == .prompt ? "" : prompt,
+            prompt: source == .prompt ? text : "",
+            context: source == .prompt ? "" : text,
             agent: agent.wrappedValue,
             options: AgentLaunchOptions(
                 model: agentModel.isEmpty ? nil : agentModel,
