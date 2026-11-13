@@ -9,12 +9,14 @@ cd "$(dirname "$0")/.."
 . bin/environment.sh
 : "${APP_STORE_IOS_PROFILE:=${SANDUCTOR_APP_STORE_IOS_PROFILE:-}}"
 
-[[ $# == 0 || ($# == 1 && $1 == --dry-run) ]] || {
-  echo 'Usage: script/testflight [--dry-run]' >&2
+[[ $# == 0 || ($# == 1 && ($1 == --dry-run || $1 == --internal)) ]] || {
+  echo 'Usage: script/testflight [--dry-run|--internal]' >&2
   exit 1
 }
 destination=upload
 [[ "${1:-}" == --dry-run ]] && destination="export"
+internal=false
+[[ "${1:-}" == --internal ]] && internal=true
 
 : "${RELEASE_VERSION:?}" "${BUILD_NUMBER:?}"
 : "${APP_STORE_KEY:?}" "${APP_STORE_KEY_ID:?}" "${APP_STORE_ISSUER_ID:?}"
@@ -26,18 +28,11 @@ scratch="$(mktemp -d -t sanductor-testflight)"
 keychain="${scratch}/signing.keychain-db"
 keychains=()
 installed_profiles=()
-original_keychains="${scratch}/original-keychains"
-if ! security list-keychains -d user >"${original_keychains}"; then
-  rm -rf "${scratch}"
-  exit 1
-fi
-while read -r existing_keychain; do
-  existing_keychain="${existing_keychain#\"}"
-  keychains+=("${existing_keychain%\"}")
-done <"${original_keychains}"
+signing_started=false
 cleanup() {
-  security list-keychains -d user -s "${keychains[@]}" &>/dev/null || true
-  security delete-keychain "${keychain}" &>/dev/null || true
+  if [[ "${signing_started}" == true ]]; then
+    security delete-keychain "${keychain}" &>/dev/null || true
+  fi
   if [[ ${#installed_profiles[@]} -gt 0 ]]; then
     rm -f "${installed_profiles[@]}"
   fi
@@ -57,6 +52,7 @@ uuid="$(/usr/libexec/PlistBuddy -c 'Print UUID' "${scratch}/profile.plist")"
 team_id="$(/usr/libexec/PlistBuddy -c 'Print TeamIdentifier:0' "${scratch}/profile.plist")"
 
 keychain_password="$(uuidgen)"
+signing_started=true
 security create-keychain -p "${keychain_password}" "${keychain}"
 security set-keychain-settings -lut 3600 "${keychain}"
 security unlock-keychain -p "${keychain_password}" "${keychain}"
@@ -65,6 +61,12 @@ security import "${scratch}/certificates.p12" -k "${keychain}" \
   -P "${APP_STORE_CERTIFICATES_PASSWORD}" -T /usr/bin/codesign
 security set-key-partition-list -S apple-tool:,apple: -s \
   -k "${keychain_password}" "${keychain}" &>/dev/null
+# Xcode export needs the signing identity in the live search list.
+security list-keychains -d user >"${scratch}/keychains"
+while read -r existing_keychain; do
+  existing_keychain="${existing_keychain#\"}"
+  keychains+=("${existing_keychain%\"}")
+done <"${scratch}/keychains"
 security list-keychains -d user -s "${keychain}" "${keychains[@]}"
 printf '%s\n' "${APP_STORE_KEY}" >"${scratch}/key.p8"
 
@@ -73,6 +75,7 @@ plutil -create xml1 "${scratch}/export.plist"
   -c "Add :destination string ${destination}" -c 'Add :signingStyle string manual' \
   -c 'Add :signingCertificate string Apple Distribution' \
   -c 'Add :manageAppVersionAndBuildNumber bool false' \
+  -c "Add :testFlightInternalTestingOnly bool ${internal}" \
   -c 'Add :provisioningProfiles dict' "${scratch}/export.plist"
 
 profile_directory="${HOME}/Library/Developer/Xcode/UserData/Provisioning Profiles"

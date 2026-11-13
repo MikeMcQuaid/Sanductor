@@ -4,7 +4,8 @@ set -euo pipefail
 
 cd "$(dirname "$0")/.."
 ruby -ryaml <<'WORKFLOW'
-jobs = YAML.load_file('.github/workflows/release.yml').fetch('jobs')
+workflow = YAML.load_file('.github/workflows/release.yml')
+jobs = workflow.fetch('jobs')
 release = jobs.fetch('release')
 unless Array(release['needs']).include?('testflight')
   abort 'GitHub publication can run before TestFlight succeeds'
@@ -19,6 +20,63 @@ end
 if testflight['continue-on-error'] || testflight.fetch('steps').any? { |step| step['continue-on-error'] }
   abort 'TestFlight failures can be ignored'
 end
+unless workflow.dig('concurrency', 'queue') == 'max' && workflow.dig('concurrency', 'group') == "${{ github.event_name == 'push' && format('sanductor-release-dry-run-{0}', github.ref) || 'sanductor-release' }}"
+  abort 'Releases and private uploads must share a serial queue'
+end
+%w[workflow_run workflow_dispatch push].product(%w[push pull_request], %w[main feature],
+  %w[local foreign], %w[success failure cancelled skipped], %w[success failure skipped],
+  %w[success failure skipped], %w[maintainer dependabot[bot]], [false, true]).each do |event, cause, branch, repo, conclusion, build, smoke, actor, cancelled|
+  values = {
+    'github.event_name' => event, 'github.event.workflow_run.event' => cause,
+    'github.event.workflow_run.head_branch' => branch,
+    'github.event.workflow_run.head_repository.full_name' => repo, 'github.repository' => 'local',
+    'github.event.workflow_run.conclusion' => conclusion, 'github.actor' => actor,
+    'needs.build.result' => build, 'needs.smoke-test.result' => smoke, 'cancelled()' => cancelled
+  }
+  expression = testflight.fetch('if').gsub(/\s+/, ' ')
+  values.each { |key, value| expression = expression.gsub(key, value.inspect) }
+  expected = !cancelled && if event == 'workflow_run'
+    cause == 'push' && branch == 'main' && repo == 'local' && conclusion == 'success'
+  else
+    actor != 'dependabot[bot]' && build == 'success' && smoke == 'success'
+  end
+  abort "Unsafe TestFlight trigger: #{values}" unless eval(expression) == expected
+end
+build_steps = jobs.fetch('build').fetch('steps')
+quota = build_steps.index { |step| step.fetch('run', '').include?('check-release-limit') }
+build = build_steps.index { |step| step.fetch('run', '') == 'script/build' }
+unless quota && build && quota < build && build_steps[quota]['if'] == "github.event_name == 'workflow_dispatch'"
+  abort 'Release limit is not checked before building'
+end
+archive = build_steps.find { |step| step.dig('with', 'name') == 'Sanductor' }
+unless archive.dig('with', 'retention-days') == "${{ github.event_name == 'workflow_dispatch' && 30 || 1 }}"
+  abort 'Manual release ZIPs must survive the 30-day rerun window'
+end
+publish = release.fetch('steps').last.fetch('run')
+unless publish.index('check-release-limit') && publish.index('check-release-limit') < publish.index('git push')
+  abort 'Release limit is not checked before pushing the tag'
+end
+steps = testflight.fetch('steps')
+upload = steps.find { |step| step['id'] == 'upload' }
+abort 'Upload step needs outputs for distribution recovery' unless upload
+prepare = steps.find { |step| step['id'] == 'prepare' }
+abort 'Allocate an upload identity before archiving' unless prepare
+restore = steps.index { |step| step.dig('with', 'pattern') == 'testflight-upload*' }
+record = steps.index { |step| step.dig('with', 'name').to_s.start_with?('testflight-upload-') }
+reservation = steps.index { |step| step.dig('with', 'name').to_s.start_with?('testflight-attempt-') }
+unless restore && record && reservation && restore < steps.index(prepare) && steps.index(prepare) < record && record < reservation && reservation < steps.index(upload)
+  abort 'Save the identity and quota reservation before uploading to Apple'
+end
+[record, reservation].each do |index|
+  unless steps[index].dig('with', 'name').include?('-v${{ steps.prepare.outputs.release_version }}')
+    abort 'Public artefacts must identify the marketing version as well as the build number'
+  end
+end
+unless steps[record]['if'].include?("steps.prepare.outputs.fresh == 'true'")
+  abort 'A retry must preserve the saved upload intent'
+end
+abort 'Quota history needs Actions read permission' unless testflight.dig('permissions', 'actions') == 'read'
+abort 'Build numbers still depend on workflow run order' if prepare.fetch('run').include?('run_number')
 puts 'TestFlight release gating tests passed'
 WORKFLOW
 mkdir -p "${PWD}/.test-scratch"
@@ -35,20 +93,33 @@ echo "$1" >>"${TESTFLIGHT_TEST_DIRECTORY}/security.log"
 case "$1" in
   list-keychains)
     if [[ $# == 3 ]]; then
-      echo '"/existing.keychain-db"'
+      cat "${TESTFLIGHT_TEST_DIRECTORY}/keychains"
       [[ "${TESTFLIGHT_TEST_FAILURE}" != list ]] || exit 1
     else
+      shift 4
       printf '%s\n' "$@" >"${TESTFLIGHT_TEST_DIRECTORY}/keychains"
     fi
     ;;
-  create-keychain) dirname "$4" >"${TESTFLIGHT_TEST_DIRECTORY}/credentials" ;;
-  cms) cat "$4" ;;
+  create-keychain)
+    echo /created-concurrently.keychain-db >>"${TESTFLIGHT_TEST_DIRECTORY}/keychains"
+    dirname "$4" >"${TESTFLIGHT_TEST_DIRECTORY}/credentials"
+    [[ "${TESTFLIGHT_TEST_FAILURE}" != create ]]
+    ;;
+  delete-keychain)
+    awk -v removed="$2" '$0 != removed' "${TESTFLIGHT_TEST_DIRECTORY}/keychains" >"${TESTFLIGHT_TEST_DIRECTORY}/remaining"
+    mv "${TESTFLIGHT_TEST_DIRECTORY}/remaining" "${TESTFLIGHT_TEST_DIRECTORY}/keychains"
+    ;;
+  cms)
+    echo /concurrent.keychain-db >"${TESTFLIGHT_TEST_DIRECTORY}/keychains"
+    cat "$4"
+    ;;
   import) [[ "${TESTFLIGHT_TEST_FAILURE}" != import ]] ;;
 esac
 SECURITY
 cat >"${scratch}/bin/xcodebuild" <<'XCODEBUILD'
 #!/bin/bash
 set -euo pipefail
+echo /archive-concurrent.keychain-db >>"${TESTFLIGHT_TEST_DIRECTORY}/keychains"
 if [[ "$1" == -exportArchive ]]; then
   while [[ "$1" != -exportOptionsPlist ]]; do shift; done
   cp "$2" "${TESTFLIGHT_TEST_DIRECTORY}/export.plist"
@@ -108,20 +179,29 @@ if APP_STORE_IOS_PROFILE="$(base64 -i "${scratch}/old-profile.plist")" TESTFLIGH
 fi
 grep -q SANDUCTOR_APP_STORE_IOS_PROFILE "${scratch}/old-profile.log"
 [[ ! -e "${scratch}/calls" ]]
+[[ "$(cat "${scratch}/keychains")" == /concurrent.keychain-db ]] || {
+  echo 'Profile validation restored a stale keychain search list' >&2
+  exit 1
+}
 if grep -Eq '^(create-keychain|import)$' "${scratch}/security.log"; then
   echo 'An invalid profile changed the signing keychain' >&2
   exit 1
 fi
-rm "${scratch}/security.log"
+rm -f "${scratch}/security.log"
 
-for mode in upload export; do
-  dry_run=
-  [[ "${mode}" == export ]] && dry_run=1
-  for failure in list none import archive export validate; do
+for audience in public private dry-run; do
+  mode=upload
+  args=()
+  [[ "${audience}" == private ]] && args=(--internal)
+  if [[ "${audience}" == dry-run ]]; then
+    mode="export"
+    args=(--dry-run)
+  fi
+  for failure in list none create import archive export validate; do
     [[ "${mode}" == upload && "${failure}" == validate ]] && continue
     export TESTFLIGHT_TEST_FAILURE="${failure}"
     rm -f "${scratch}/calls" "${scratch}/security.log"
-    if script/testflight ${dry_run:+--dry-run} >"${scratch}/run.log" 2>&1; then
+    if script/testflight ${args[@]+"${args[@]}"} >"${scratch}/run.log" 2>&1; then
       [[ "${failure}" == none ]]
     else
       [[ "${failure}" != none ]] || {
@@ -129,18 +209,18 @@ for mode in upload export; do
         exit 1
       }
     fi
-    if [[ "${failure}" == list ]]; then
-      [[ "$(cat "${scratch}/security.log")" == list-keychains ]] || {
-        echo 'Failed keychain read did not stop signing' >&2
-        exit 1
-      }
-      [[ ! -e "${scratch}/calls" ]] || exit 1
-      continue
-    fi
     [[ ! -d "$(cat "${scratch}/credentials")" ]]
     grep -qx delete-keychain "${scratch}/security.log"
-    [[ "$(tail -n 1 "${scratch}/keychains")" == /existing.keychain-db ]]
-    if [[ "${failure}" == import ]]; then
+    grep -qx /concurrent.keychain-db "${scratch}/keychains"
+    grep -qx /created-concurrently.keychain-db "${scratch}/keychains"
+    if [[ -e "${scratch}/calls" ]]; then
+      grep -qx /archive-concurrent.keychain-db "${scratch}/keychains"
+    fi
+    if grep -q signing.keychain-db "${scratch}/keychains"; then
+      echo 'Temporary keychain remained in the search list' >&2
+      exit 1
+    fi
+    if [[ "${failure}" == create || "${failure}" == import || "${failure}" == list ]]; then
       [[ ! -e "${scratch}/calls" ]]
       continue
     fi
@@ -160,6 +240,9 @@ for mode in upload export; do
       fi
       [[ "$(/usr/libexec/PlistBuddy -c 'Print :method' "${scratch}/export.plist")" == app-store-connect ]]
       [[ "$(/usr/libexec/PlistBuddy -c 'Print :destination' "${scratch}/export.plist")" == "${mode}" ]]
+      internal=false
+      [[ "${audience}" == private ]] && internal=true
+      [[ "$(/usr/libexec/PlistBuddy -c 'Print :testFlightInternalTestingOnly' "${scratch}/export.plist")" == "${internal}" ]]
       [[ "$(/usr/libexec/PlistBuddy -c 'Print :teamID' "${scratch}/export.plist")" == ABCDEFGHIJ ]]
       [[ "$(/usr/libexec/PlistBuddy -c 'Print :manageAppVersionAndBuildNumber' "${scratch}/export.plist")" == false ]]
     fi
@@ -172,3 +255,5 @@ for mode in upload export; do
   done
 done
 echo 'TestFlight script tests passed'
+
+ruby Tests/TestFlightAutomationTests.rb
