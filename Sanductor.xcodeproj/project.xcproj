@@ -115,6 +115,7 @@
         "CODE_SIGN_STYLE": "Automatic",
         "DEVELOPMENT_TEAM": "6248TWFRH6",
         "GENERATE_INFOPLIST_FILE": "YES",
+        "INFOPLIST_KEY_ITSAppUsesNonExemptEncryption": "NO",
         "INFOPLIST_KEY_NSHumanReadableCopyright": "© 2026 Mike McQuaid.",
         "INFOPLIST_KEY_NSLocalNetworkUsageDescription": "Connect to your Mac over SSH to view and steer its agents.",
         "INFOPLIST_KEY_UIApplicationSceneManifest_Generation": "YES",
