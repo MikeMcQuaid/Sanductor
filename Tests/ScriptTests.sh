@@ -509,6 +509,7 @@ modules = [
     for name in ["SanductorApp", "Sanductor-iOS"]
 ]
 assert len(set(modules)) == len(modules), "App targets share a Swift module name"
+assert targets["Sanductor-iOS"]["build-settings"].get("INFOPLIST_KEY_ITSAppUsesNonExemptEncryption") == "NO", "iOS builds require a manual encryption answer"
 '
 rm "${scratch}/periphery-arguments"
 if env PATH="${scratch}/bin:${PATH}" SV_SESSION_ID=fixture SCRIPT_TEST_STATUS=65 \
