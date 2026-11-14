@@ -1,4 +1,15 @@
 public extension AgentKind {
+    /// Claude opens its questions directly; Codex queues them behind Shift-Left.
+    var answerQuestionInput: [UInt8] {
+        switch self {
+        case .codexCLI:
+            Array("\u{1B}[1;2D".utf8)
+
+        case .claudeCode:
+            []
+        }
+    }
+
     /// The default binding for queueing a draft while the agent is working.
     var queueInput: [UInt8] {
         switch self {

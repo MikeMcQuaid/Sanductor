@@ -19,6 +19,9 @@ public struct CachedRepository: Codable, Hashable, Sendable {
     /// The repository's default branch, when known.
     public var defaultBranch: String?
 
+    // swiftlint:disable:next discouraged_optional_collection - Absent in older snapshots.
+    public var localBranches: [String]?
+
     /// The checkout path.
     public var path = ""
 

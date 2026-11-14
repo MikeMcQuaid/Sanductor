@@ -95,7 +95,7 @@ public extension SessionService {
     /// Only when no host copy answers does the sandbox get asked.
     func probeVersion(of agent: AgentKind) async -> String? {
         let parse = runner(for: agent).parseVersion
-        for prefix in Quarantine.homebrewBinaries {
+        for prefix in [paths.sandboxHome + "/.local/bin"] + Quarantine.homebrewBinaries {
             let binary = prefix + "/" + agent.rawValue
             guard FileManager.default.isExecutableFile(atPath: binary) else {
                 continue

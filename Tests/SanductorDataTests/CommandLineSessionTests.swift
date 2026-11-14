@@ -49,7 +49,7 @@ struct CommandLineSessionTests {
         let plan = try await Self.plan(answering: "2\n2\n1\n1\ntidy the docs\n", in: shared)
 
         #expect(plan["label"] == SessionName.make(repository: "brew", branch: "tidy_the_docs", agent: .codexCLI))
-        #expect(plan["command"]?.contains("-c model_reasoning_effort=minimal") == true)
+        #expect(plan["command"]?.contains("-c model_reasoning_effort=low") == true)
     }
 
     @Test
@@ -57,17 +57,17 @@ struct CommandLineSessionTests {
         let shared = try Self.makeWorkspace()
         let file = shared + "/sanductor/session-defaults"
         // Nothing chosen for Codex yet: Enter is refused until its
-        // effort and model are picked.
+        // model and effort are picked.
         let plan = try await Self.plan(answering: "\n2\n\n1\n1\ntidy the docs\n", in: shared)
 
         #expect(plan["command"]?.contains("--model gpt-5.6-sol") == true)
-        #expect(plan["command"]?.contains("-c model_reasoning_effort=minimal") == true)
+        #expect(plan["command"]?.contains("-c model_reasoning_effort=low") == true)
 
         // What was chosen is what the next session, in either
         // surface, comes back to.
         let kept = try String(contentsOfFile: file, encoding: .utf8)
         #expect(kept.contains("codex-model=gpt-5.6-sol"))
-        #expect(kept.contains("codex-effort=minimal"))
+        #expect(kept.contains("codex-effort=low"))
         #expect(kept.contains("agent=codex"))
         // Everything else in the file survives the write.
         #expect(kept.contains("claude-models=opus-5 sonnet-5"))
@@ -126,11 +126,13 @@ struct CommandLineSessionTests {
         agent=claude
         repositories=Sanductor brew
         claude-models=opus-5 sonnet-5
-        claude-efforts=low medium high xhigh max
+        claude-opus-5-efforts=low medium high xhigh max
+        claude-sonnet-5-efforts=low medium high
         claude-model=opus-5
         claude-effort=high
         codex-models=gpt-5.6-sol gpt-5.5
-        codex-efforts=minimal low medium high xhigh
+        codex-gpt-5.6-sol-efforts=low medium high xhigh
+        codex-gpt-5.5-efforts=low medium high
 
         """.write(toFile: shared + "/sanductor/session-defaults", atomically: true, encoding: .utf8)
         return shared

@@ -364,6 +364,11 @@ Rules that follow from that shape:
   modified-arrow sequences explicitly, since SwiftTerm 1.99.1 applies
   shell bindings when the local keyboard mode is empty; only local
   shells use `TerminalKeys` for traditional word navigation.
+- **Control-Return reaches the agent before AppKit.** Focused agent
+  panes consume Control-Return and Control-keypad-Enter in their event
+  monitor and send `ESC [ 13 ; 5 u`, preserving Claude's Send now binding
+  instead of opening the macOS context menu. Local shells, other
+  modifiers and unfocused panes keep their normal routing.
 - **The numeric keypad types its numbers in shell panes.** zsh asks
   for application keypad mode at every prompt, and SwiftTerm answers
   it as a VT does, sending `ESC O u` for the 5, which a shell has
@@ -609,12 +614,19 @@ blocked) comes from herdr, the same for every agent, so no runner detects
 anything. Foreign-session discovery is reconciliation in
 `SanductorData`, outside the protocol.
 
-Models are asked of every CLI once after first reading and kept in the
-metadata under the CLI's version, so `claude models` (a twenty-second
-sandbox launch) runs only when the CLI changed. Curated lists serve when
-the command fails. The pickers re-validate the agent and model pair on
-appearance as well as on change: a persisted Codex model once reached
-Claude.
+Model names and per-model effort levels come from Claude Code's SDK
+initialisation and Codex's app-server `model/list`, without sending a
+prompt.
+Successful catalogues persist under the CLI version, schema and cache stamp;
+installation changes trigger another check while the app is open.
+Failed checks retain the last good catalogue. Models sort by capability
+family (Fable/Astra, Opus/Sol, Sonnet/Terra, Haiku/Luna), then newest
+version first. Pickers and PR template disclosures share those names.
+Pickers offer only discovered models and their reported effort levels;
+models without effort controls omit that picker. Model changes reset invalid
+efforts, and saved launches and reviews reject unsupported combinations.
+The Mac publishes per-model choices for the phone and `sanductor new`;
+both choose the model before its effort and validate before launching.
 
 ## Concurrency model
 
@@ -650,38 +662,71 @@ opens the existing new-session form through
 worktree’s branch when it belongs to that repository, otherwise using
 the default branch. Placeholders and host directories supply no base.
 
-1. Input: a prompt, an issue or pull request number or a security
-   advisory's GHSA id, plus repository, agent, model and effort. Every
+Settings' Prompts pane manages one library of named, reusable text in the
+host metadata. Each prompt can optionally run in a selected repository
+on a daily, weekly or monthly schedule. Removing its schedule keeps
+the prompt reusable; pausing keeps its repository and recurrence.
+Existing saved prompts and scheduled jobs migrate into this library,
+preserving their identities, next run and launch history.
+Prompt titles show the repository owner's avatar when known and the
+sidebar's folder fallback otherwise. Edit and Delete sit above a compact
+schedule toggle and icon-only Start button on the right. Repository,
+recurrence, agent and last/next run share one line, with full details on
+hover.
+Repository names and pickers reuse the sidebar's owner avatars.
+The session form's Saved prompts menu lists reusable text and the
+selected repository's scheduled prompts alphabetically, including paused
+schedules. Choosing one prepends its text and a blank line to the live
+draft, preserving pasted text and unfinished edits,
+then focuses the editor. It changes neither the selected source nor the
+agent, model or effort, and never launches or advances a schedule.
+Names and previews mask recognised Sentry and GitHub tokens;
+editing and insertion retain the original text.
+
+1. Input: a prompt, an issue or pull request number, a repository or
+   organisation discussion or a security advisory's GHSA id, plus
+   repository, agent, model and effort. Every
    picker opens on something: the last
    pick where the chosen agent still offers it, and otherwise the first
    model that agent lists and the effort its own CLI would run at, so
    changing agent leaves a working choice rather than two empty pickers.
-   The issue, pull request and advisory pickers open a search field over
+   Issues, pull requests, advisories and discussions share a source
+   selector, loading and empty states and the same context editor.
+   Missing GitHub remotes leave the usual empty picker, without a
+   source-specific error banner or retry button.
+   Their pickers open a search field over
    the repository's open ones (`ReferencedItemSearch` over any
    `ReferencedItem`): digits, with or without a `#`, match any part of
    a number, exact matches first; anything else matches a reference
    containing it (a GHSA id, case aside) and then ranks titles through
    `FuzzyMatcher`.
    Surrounding whitespace and line breaks are trimmed for pasted numbers.
-   The issue and pull request pickers list only the newest
+   The issue, pull request and discussion pickers list only the newest
    `GitHubClient.pickerLimit` open ones, so a full list also asks
-   GitHub once typing pauses: a number with no exact match is looked
-   up directly (GitHub's search does not match numbers) and anything
-   else goes to GitHub's search of open titles and bodies. Results
+   GitHub once typing pauses, searching open titles and bodies.
+   Issues and pull requests look up a number with no exact match
+   directly, since GitHub's search does not match numbers. Results
    join below the local matches, without repeating them. A shorter
    list already holds every open one and asks nothing.
-   A click or return picks one and closes, as everywhere else; in the
-   new session form, each row's checkbox, Cmd-click or Cmd-Return
-   checks several while the list stays open, and a footer that never
-   changes the popover's height counts them, clears them or checks
-   every search result. A worktree's own form, which is one place,
-   takes one. Several picks
+   A click or return picks one and closes, as everywhere else. In the
+   new session form, issue and pull request rows offer checkboxes,
+   Cmd-click or Cmd-Return to check several while the list stays open.
+   A footer that never changes the popover's height counts them,
+   clears them or checks every search result. A worktree's own form,
+   which is one place, takes one. Several picks
    become one ordinary launch per pick, side by side, each with the
    same typed context, its own placeholder, progress and failure, and
    a retry of just that pick. Only the first takes the selection, so
    the sidebar does not jump from row to row as they appear. Nothing
    caps how many: the launches only queue where they would write the
    same repository's refs and config (step 3).
+   Discussion picks list and search only open discussions, excluding
+   closed results even when a search returns them.
+   They automatically search the repository when discussions
+   are enabled, otherwise its organisation, carrying their canonical URL
+   into the prompt and retries. Their title and body
+   are fetched on launch, with the user's context appended; they never
+   add an issue-closing reference.
    A pull request row in the Pull requests tab offers Start Agent…,
    which opens this form on that pull request, and with Option held,
    Start Agent Without Prompt, which launches at once on its title and
@@ -861,10 +906,21 @@ page resumes any past conversation into a fresh worktree.
 ### Watch and steer
 
 Work settings provide an opt-in visibility filter for selected GitHub
-organisations, using local working days and hours (Monday to Friday,
-09:00 to 17:00 by default). Outside those hours their repositories and
-selected panes are hidden; schedules and agents continue running. The
-filter updates at the next boundary and on wake or settings changes.
+organisations or individual owner/repository names, using local working
+days and hours (Monday to Friday, 09:00 to 17:00 by default). Outside
+those hours their repositories and selected panes are hidden and work
+alerts, sounds and Dock badges are silent; schedules and agents continue
+running. The filter updates at the next boundary and on wake or settings
+changes.
+Holiday mode is available only with the filter enabled and hides work
+until a chosen date, also skipping scheduled work jobs until it ends.
+Skipped occurrences are not replayed. Snooze reveals work for exactly
+15 minutes without restoring notifications or scheduled holiday jobs.
+Both deadlines persist across relaunches. Work settings list selected
+organisations before individual repositories below the other controls,
+with compact add pickers. Selected rows and menus share the sidebar's
+cached GitHub avatars, using the organisation or repository owner's
+avatar. GitHub users are excluded from the organisation picker.
 Organisation names retain GitHub's capitalisation in settings; matching
 and deduplication are case-insensitive.
 The Mac publishes visibility in its sidebar snapshot; the iPhone follows
@@ -873,12 +929,13 @@ working schedule of its own.
 Schedule previews mask recognised Sentry and GitHub tokens; editing and
 launching retain the original prompt.
 
-Scheduled prompts belong to the host metadata, with a repository path,
-prompt, agent, model, effort and daily, weekly or monthly recurrence.
-Settings' Schedules pane left-aligns prompt previews and uses repeat, day
-and time controls, showing the
-time zone recorded when the schedule was created. Monthly dates absent
-from a month are skipped; a missing daylight-saving time runs at the
+Scheduled prompts add a repository path, agent, model, effort and
+recurrence to the same saved prompt. Only prompts with a schedule can
+run automatically or through Start; ordinary prompts remain reusable
+text. Settings' Prompts pane left-aligns previews and uses repeat, day
+and time controls, showing the time zone recorded when the schedule was
+created. Monthly dates absent from a month are skipped; a missing
+daylight-saving time runs at the
 next valid time, and a repeated time runs once. Schedules can be edited,
 paused or deleted, and show their next run and last launch result.
 Start launches the saved job immediately, including while paused, using
@@ -904,7 +961,12 @@ the main window through the existing defaults signal bus. Pull request
 rows, conversation headers and footer actions offer Copy pull request
 URL and Copy branch name for the pull request they display. Branch
 copying uses that pull request's head branch, including when a stack
-shows a different branch from the one checked out.
+shows a different branch from the one checked out. Branch switching
+never offers the default branch in linked worktrees; it remains available
+in the repository checkout. The sidebar disables switching only when
+the default branch is the repository's only known branch. Unknown or
+incomplete branch listings leave the action available; the popover
+reads git before offering branches not held by other worktrees.
 
 - **Hooks.** `HookInstaller` manages the Claude Code settings template
   at `<workspace>/user/.claude/settings.json`, which sandvault rsyncs
@@ -1055,29 +1117,12 @@ shows a different branch from the one checked out.
   the cause. The pane's shell is asked of herdr once and remembered,
   since it lives as long as the pane; the steady state is the one
   `ps`.
-- **A model list is only as fresh as its key.** Each agent's models are
-  discovered once per stamp rather than per launch, since asking costs a
-  sandbox launch of about twenty seconds. The stamp is the CLI's version
-  and, where the list lives in a cache the server rewrites
-  (`modelCacheFile`, Codex's `~/.codex/models_cache.json`), that file's
-  modification time: keyed on the version alone, a model added
-  server-side stayed out of the picker until the CLI itself was
-  upgraded. A cache written by a client older than the one installed
-  is left unread and the last accepted list stands: the server gives
-  each client the models it can use, and a session started before an
-  upgrade kept rewriting the cache with its own list, so a model the
-  new client knew vanished from the picker each time. The version the
-  stamp was read from is kept for the launch and shown beside the
-  agent's name in the pickers, never probed again for a render. Names
-  shown are the ids read as words (`gpt-5.6-sol` is GPT
-  5.6 Sol). Claude takes an alias saying nothing about its version and
-  has no listing to ask, so the version is read from the identifiers
-  Claude Code recorded using in its own state (`modelNamesFile`,
-  `~/.claude.json`): `claude-fable-5-1` is what makes `fable` read as
-  Fable 5.1, the newest of each family winning, and an alias no
-  identifier names is shown as it is rather than guessed at. No model's
-  version is written down in this app, and what is sent is always the
-  name the agent takes.
+- **A model list is only as fresh as its key.** CLI upgrades invalidate
+  the saved catalogue. Codex cache modification times also invalidate
+  it; discovery always asks the installed client, so an old running
+  client rewriting the cache cannot replace the new client's list.
+  Claude's SDK reports resolved names even for aliases never used here;
+  usage history is only a fallback before the first successful discovery.
 - **Sidebar arrows show drift from upstream** (ahead or behind, none
   when level, the main checkout included) and a conflict icon where
   the pull request is unmergeable.
@@ -1360,8 +1405,13 @@ reads additional source files.
    onto a moved base shows nothing, and the base's changes never
    show; the commits listed under it are those whose patch the
    upstream lacks (`git cherry`, bounded the same way). A replay that
-   conflicts falls back to those commits' own patches. Only the tip
-   can be amended; other commits review read-only. A newer reload
+   conflicts falls back to those commits' own patches. Selecting Last
+   commit on another stack layer shows only that layer's tip commit,
+   while Branch shows the layer's complete changes.
+   Stack branch menus copy the branch or its open PR and switch the
+   current worktree to an available local branch. The sidebar branch
+   switcher orders branches by newest commit date first.
+   Only the tip can be amended; other commits review read-only. A newer reload
    supersedes earlier reads, including their diffs, messages and
    availability checks, so late results cannot replace the selection.
 2. Generated files (lockfiles and the like, by path fragment) hide by
@@ -2403,9 +2453,16 @@ with monospaced branch names. The terminal uses the system monospaced
 font at 13 points before Dynamic Type scaling, matching the Mac default;
 Settings can change only its base size. Other saved font overrides are
 ignored.
-Connection settings accept an IP address or hostname and keep the
-`sandvault-` username prefix fixed. The SSH port stays visible beside the
-address; a menu selects `sanductor` for the installed Mac app or
+Connection settings save home and optional away addresses and ports,
+sharing the sandbox username and herdr session. Automatic tries home
+first with a one-second timeout, then away on a transport failure;
+Home and Away can also be selected explicitly. It reevaluates on reconnect,
+without reading Wi-Fi names or requesting location access. Existing
+single-address settings become the home endpoint. Authentication and
+host-key failures stop recovery rather than trying another address, and
+pins remain separate for each host and port. Progress and trust prompts
+name the endpoint being contacted. The `sandvault-` prefix stays fixed;
+a menu selects `sanductor` for the installed Mac app or
 `sanductor-dev` for development builds. Network errors name the destination
 and give actionable guidance for permissions, DNS, refusal and timeouts.
 Validation, connections, host-key pins and diagnostics share a host value
@@ -2443,7 +2500,12 @@ accordingly and keeps new or unlisted sessions accessible. Without a
 snapshot it retains the sessions-first listing. This optional snapshot
 never grants access to repositories absent from the command's listing.
 Both platforms share `OwnerAvatar` and its per-owner memory and disk
-cache with the new-session menu. Menus preload avatars before opening
+cache with the new-session menu and the iPhone's new-session repository
+row. The iPhone's agent picker uses text-sized marks with extra space
+before the agent name, scaling with Dynamic Type.
+The Mac's picker gives monochrome agent marks the primary foreground
+colour so they stay visible on light and dark backgrounds.
+Menus preload avatars before opening
 and use native image labels. Avatars load from GitHub's public
 `/<owner>.png?size=64` endpoint without credentials, falling back to a
 folder when unavailable; no host GitHub access or additional sandbox
@@ -2484,7 +2546,10 @@ The selected terminal uses the same JSON frames and commands as the Mac
 through SwiftTerm's UIKit view. Its palette follows the phone's system
 appearance automatically, including changes during a session.
 The phone's keyboard accessory keeps Escape, Tab, up/down and Return
-beside the keypad toggle and Hide Keyboard. Hiding the keyboard
+beside the keypad toggle and Hide Keyboard. Codex also gets an Answer
+question button in this main row, sending Shift-Left to open queued
+questions without submitting the draft. Claude's questions open directly
+and use the existing arrows and Return. Hiding the keyboard
 leaves terminal control and the draft intact; tapping the terminal
 shows it again. Its initial frame has the same non-zero height as its
 fitted layout so UIKit reserves the accessory row before presenting it.
@@ -2686,8 +2751,10 @@ parser, preserving the built bundles and every plist reference. This
 avoids Periphery's legacy project parser without keeping a second
 project. SwiftLint uses each platform's own build log
 and `.xcfilelist`, the extension its file-list reader requires, and
-excludes the other platform's font implementations: SourceKit's
-cursor lookup otherwise enters inactive branches with an unavailable SDK.
+excludes the other platform's font and tooltip implementations:
+SourceKit's cursor lookup otherwise enters inactive branches with an
+unavailable SDK. The shared `hoverHelp` modifier calls an AppKit tooltip
+surface kept under `macOS`, outside the iPhone import scan.
 Platform-neutral Domain files need only the Mac import check; Domain
 files with conditional compilation are still checked on both platforms.
 File lists use absolute paths so SwiftLint can match them to compiler
@@ -2739,6 +2806,9 @@ Message-log tests own isolated logs so clearing or trimming entries
 cannot erase a service-status report another test is awaiting.
 Pull request model fixtures use distinct worktree paths so parallel
 tests cannot change each other's remembered stack selection.
+Model catalogue fixtures recognise direct CLI arguments and sandboxed
+shell payloads, so version probes never count as model listings, even
+on hosts without agent binaries.
 CI (`.github/workflows/tests.yml`) runs style on every push and pull
 request, and build-and-test and analyze in parallel on the `xcode-27`
 image, each requiring Xcode 27.2 or later. Analysis shares its

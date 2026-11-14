@@ -13,7 +13,7 @@ struct SessionNavigationTests {
     struct Fixture {
         // MARK: Lifecycle
 
-        init(runner: any ProcessRunner = EmptyRunner()) {
+        init(runner: any ProcessRunner = EmptyRunner(), agents: [any AgentRunner] = []) {
             let paths = WorkspacePaths(
                 hostUser: "test",
                 sharedWorkspace: root + "/shared",
@@ -21,6 +21,17 @@ struct SessionNavigationTests {
                 metadataFile: root + "/state.json",
             )
             let store = MetadataStore(file: paths.metadataFile)
+            if agents.isEmpty {
+                store.update { metadata in
+                    metadata.modelCatalogues[AgentKind.claudeCode.rawValue] = AgentModelCatalogue(
+                        models: ["fable", "opus", "sonnet", "haiku"],
+                        efforts: ["sonnet": ["high", "medium", "low"]],
+                    )
+                    metadata.modelCatalogues[AgentKind.codexCLI.rawValue] = AgentModelCatalogue(
+                        models: ["test-model"], efforts: ["test-model": ["low"]],
+                    )
+                }
+            }
             let github = GitHubClient(runner: runner) { true }
             let service = SessionService(
                 paths: paths,
@@ -35,7 +46,7 @@ struct SessionNavigationTests {
                 transcripts: TranscriptReader(),
                 spool: EventSpool(directory: paths.eventsDirectory),
                 store: store,
-                runners: [],
+                runners: agents,
                 processes: runner,
             )
             model = DashboardModel(service: service, store: store, github: github)
@@ -188,18 +199,6 @@ struct SessionNavigationTests {
         finish = nil
         try await Task.sleep(for: .milliseconds(100))
         #expect(defaults.string(forKey: AgentSessionForm.promptKey) == nextPrompt)
-    }
-
-    @Test
-    func `a base branch is kept only until another opener opens the form`() {
-        let fixture = Fixture()
-        defer { fixture.close() }
-
-        fixture.model.openNewSession(for: fixture.repository, base: "part_one")
-        #expect(fixture.model.newSessionBase == "part_one")
-
-        fixture.model.openNewSession(for: fixture.repository)
-        #expect(fixture.model.newSessionBase == nil)
     }
 
     @Test

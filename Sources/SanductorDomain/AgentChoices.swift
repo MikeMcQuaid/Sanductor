@@ -13,12 +13,16 @@ public struct AgentChoices: Hashable, Sendable {
         efforts: [String],
         defaultModel: String,
         defaultEffort: String,
+        modelEfforts: [String: [String]] = [:],
+        modelDefaultEfforts: [String: String] = [:],
         names: [String: String] = [:],
         version: String? = nil,
         isAvailable: Bool = true,
     ) {
         self.models = models
         self.efforts = efforts
+        self.modelEfforts = modelEfforts
+        self.modelDefaultEfforts = modelDefaultEfforts
         self.defaultModel = defaultModel
         self.defaultEffort = defaultEffort
         self.names = names
@@ -40,6 +44,8 @@ public struct AgentChoices: Hashable, Sendable {
 
     /// Its reasoning tiers, strongest first.
     public let efforts: [String]
+    public let modelEfforts: [String: [String]]
+    public let modelDefaultEfforts: [String: String]
 
     /// The model a form opens on: the first the agent listed.
     public let defaultModel: String
@@ -52,4 +58,22 @@ public struct AgentChoices: Hashable, Sendable {
     /// alias like `fable` reads as the version it stands for where
     /// the agent has said which, and as itself where it has not.
     public let names: [String: String]
+
+    public func supportedEfforts(for model: String) -> [String] {
+        modelEfforts[model] ?? []
+    }
+
+    public func supports(model: String, effort: String) -> Bool {
+        models.contains(model) && (effort.isEmpty || supportedEfforts(for: model).contains(effort))
+    }
+
+    /// Model changes cannot carry an unsupported effort across families.
+    public func selection(model: String, effort: String) -> (model: String, effort: String) {
+        let selected = models.contains(model) ? model
+            : models.contains(defaultModel) ? defaultModel : models.first ?? ""
+        let levels = supportedEfforts(for: selected)
+        let preferred = modelDefaultEfforts[selected] ?? defaultEffort
+        return (selected, levels.contains(effort) ? effort
+            : levels.contains(preferred) ? preferred : levels.first ?? "")
+    }
 }

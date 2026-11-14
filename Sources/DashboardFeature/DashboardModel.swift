@@ -26,14 +26,23 @@ public final class DashboardModel {
         self.store = store
         self.github = github
         self.launchProgress = launchProgress
+        prompts = PromptsModel(store: store, service: service)
         notifiedFeedback = store.load().pullRequestAutomation
         workBlocks = store.load().workBlocks
+        modelWatcher = service.makeModelWatcher()
         watcher = service.makeWorkspaceWatcher()
         watcher.start()
         restoreCachedSidebar()
         restoreDiscoveredModels()
         readModelNames()
         refreshWorkMode()
+        modelWatcher.onChange { [weak self] in
+            Task { @MainActor in
+                _ = self?.modelWatcher.consumeChangedPaths()
+                await self?.discoverModels(ifFilesChanged: true)
+            }
+        }
+        modelWatcher.start()
         watcher.onChange { [weak self] in
             Task { @MainActor in
                 guard let self, self.hasLoaded, self.isWindowVisible, self.isOnBattery() == false else {
@@ -54,6 +63,9 @@ public final class DashboardModel {
     /// The step log the current launch narrates into, shown by the
     /// pane covering the split while a session is created or resumed.
     public let launchProgress: LaunchProgress
+
+    /// Reusable prompts and their optional schedules, shared with Settings.
+    public let prompts: PromptsModel
 
     /// Whether the window is visible on screen at all; minimised or
     /// fully covered, the poll slows to a safety tick, since nobody
@@ -156,7 +168,7 @@ public final class DashboardModel {
                 return
             }
 
-            if hiddenOrganisations.contains(groups.group(holding: selection)?.repository.owner?.lowercased() ?? "") {
+            if let group = groups.group(holding: selection), isWorkHidden(group.repository) {
                 self.selection = nil
                 return
             }
@@ -221,24 +233,6 @@ public final class DashboardModel {
         reveal(item)
     }
 
-    /// The models and efforts an agent offers, and what to start on:
-    /// models the CLI reported at startup when it answered, the
-    /// curated fallback otherwise.
-    public func launchChoices(for agent: AgentKind) -> AgentChoices {
-        let fallback = service.launchChoices(for: agent)
-        let models = discoveredModels[agent] ?? fallback.models
-        let defaults = service.launchDefaults(for: agent, models: models)
-        return AgentChoices(
-            models: models,
-            efforts: fallback.efforts,
-            defaultModel: defaults.model,
-            defaultEffort: defaults.effort,
-            names: modelNames[agent] ?? [:],
-            version: installedVersions[agent],
-            isAvailable: availableAgents.contains(agent),
-        )
-    }
-
     /// Deletes a worktree; its conversations stay readable in the
     /// repository's sessions browser. The path joins
     /// `deletingPaths` immediately, so the row can grey out the
@@ -287,13 +281,6 @@ public final class DashboardModel {
     /// so the picker opens instantly without a cache of its own.
     public func openPullRequests(repository: Repository) async -> [PullRequestSummary] {
         await (try? service.openPullRequests(repository: repository)) ?? []
-    }
-
-    /// The repository's security advisories in triage or draft, read
-    /// afresh each time: never cached, since their titles describe
-    /// unpublished vulnerabilities.
-    public func securityAdvisories(repository: Repository) async -> [SecurityAdvisorySummary] {
-        await service.securityAdvisories(repository: repository)
     }
 
     // MARK: Internal
@@ -345,10 +332,14 @@ public final class DashboardModel {
     /// The file-system events that say which repository is worth
     /// asking git about; the git reads extension consumes it.
     let watcher: WorkspaceWatcher
+    let modelWatcher: WorkspaceWatcher
+    @ObservationIgnored var modelFilesStamp: String?
 
     /// Models each CLI reported, seeded from the last launch's answer
     /// by the cache extension; absent agents fall back.
     var discoveredModels: [AgentKind: [String]] = [:]
+    var modelCatalogues: [AgentKind: AgentModelCatalogue] = [:]
+    @ObservationIgnored var isDiscoveringModels = false
 
     /// See `SessionService.modelNames`: read beside the models, so a
     /// picker draws from memory rather than a file.
@@ -379,6 +370,7 @@ public final class DashboardModel {
     var pendingPaneRead = true
 
     var hiddenOrganisations: Set<String> = []
+    var hiddenRepositories: Set<String> = []
     @ObservationIgnored var workModeTimer: Timer?
     @ObservationIgnored var workModeSettings: WorkMode?
 

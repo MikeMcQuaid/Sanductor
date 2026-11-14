@@ -22,7 +22,7 @@ extension MobileModel {
                     try await read(client, includingPreferences: withPreferences)
                 } catch {
                     if Task.isCancelled == false, remote === client {
-                        self.error = configuration.errorMessage(error)
+                        self.error = (activeConfiguration ?? configuration).errorMessage(error)
                     }
                 }
             } while refreshAgain && Task.isCancelled == false

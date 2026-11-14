@@ -23,6 +23,30 @@ struct RepositoryGroupTests {
         #expect([other, group].group(holding: unlisted)?.id == group.id)
     }
 
+    @Test(arguments: [[], ["main"], ["main", "feature"], ["main", "feature", "other"]])
+    func `branch switching stays available for a worktree despite incomplete or occupied branches`(branches: [String]) {
+        let linked = item(path: "/w/repo/feature", repositoryPath: "/r/repo")
+        let group = RepositoryGroup(
+            repository: Repository(name: "repo", path: "/r/repo"),
+            items: [linked],
+            defaultBranch: "main",
+            localBranches: branches,
+        )
+        #expect(group.canSwitchBranch(in: linked.worktree))
+    }
+
+    @Test(arguments: [[], ["main"], ["main", "feature"]])
+    func `only a known default branch alone disables branch switching`(branches: [String]) {
+        let repository = Repository(name: "repo", path: "/r/repo")
+        let main = Worktree(
+            repositoryName: "repo", repositoryPath: repository.path, branch: "main", path: repository.path,
+        )
+        let group = RepositoryGroup(repository: repository, items: [], defaultBranch: "main", localBranches: branches)
+        #expect(group.canSwitchBranch(in: main) == (branches != ["main"]))
+        let adopted = item(path: "/w/repo/stray", repositoryPath: "/w/repo/.base")
+        #expect(group.canSwitchBranch(in: adopted.worktree))
+    }
+
     // MARK: Private
 
     private func item(path: String, repositoryPath: String) -> WorktreeItem {

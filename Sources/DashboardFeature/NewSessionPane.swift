@@ -1,6 +1,6 @@
 import SanductorDomain
+import SanductorInterface
 import SwiftUI
-import TerminalUI
 
 /// The session entry point, shown in the middle pane rather than a
 /// sheet: pick a repository, then the shared form starts from a
@@ -168,19 +168,11 @@ public struct NewSessionPane: View {
                 )
             }
 
-        case .advisory:
-            guard let ghsaID = submission.ghsaID else {
-                return
-            }
+        case .discussion:
+            await submission.startDiscussion(model: model, repository: repository)
 
-            await model.createSession(
-                fromAdvisory: ghsaID,
-                repository: repository,
-                context: submission.context,
-                agent: submission.agent,
-                options: submission.options,
-                baseBranch: model.newSessionBase,
-            )
+        case .advisory:
+            await submission.startAdvisory(model: model, repository: repository)
         }
     }
 }

@@ -1,3 +1,4 @@
+// swiftformat:disable testSuiteAccessControl -- Helpers are shared with Control-Return tests.
 import AppKit
 import Metal
 import SwiftTerm
@@ -6,7 +7,68 @@ import Testing
 
 @MainActor
 struct TerminalKeyRoutingTests {
-    // MARK: Internal
+    /// A pane, its window and the bytes it sends.
+    struct Pane {
+        let view: PaneTerminalView
+        let window: NSWindow
+        let capture: InputCapture
+    }
+
+    final class InputCapture: TerminalViewDelegate {
+        // MARK: Lifecycle
+
+        deinit {
+            // No resources beyond the captured bytes.
+        }
+
+        // MARK: Internal
+
+        var bytes: [UInt8] = []
+        var links: [String] = []
+
+        func requestOpenLink(source _: TerminalView, link: String, params _: [String: String]) {
+            links.append(link)
+        }
+
+        func send(source _: TerminalView, data: ArraySlice<UInt8>) {
+            bytes.append(contentsOf: data)
+        }
+
+        func sizeChanged(source _: TerminalView, newCols _: Int, newRows _: Int) {
+            // Only input is captured.
+        }
+
+        func setTerminalTitle(source _: TerminalView, title _: String) {
+            // Only input is captured.
+        }
+
+        func hostCurrentDirectoryUpdate(source _: TerminalView, directory _: String?) {
+            // Only input is captured.
+        }
+
+        func scrolled(source _: TerminalView, position _: Double) {
+            // Only input is captured.
+        }
+
+        func rangeChanged(source _: TerminalView, startY _: Int, endY _: Int) {
+            // Only input is captured.
+        }
+    }
+
+    /// A pane in a key window, with its input captured and no
+    /// keyboard enhancements in play.
+    static func focusedPane(herdrBacked: Bool) throws -> Pane {
+        let view = PaneTerminalView(frame: NSRect(x: 0, y: 0, width: 400, height: 200))
+        view.isHerdrBacked = herdrBacked
+        let capture = InputCapture()
+        view.terminalDelegate = capture
+        let window = NSWindow(contentRect: view.frame, styleMask: [], backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false
+        window.contentView = view
+        try #require(window.makeFirstResponder(view))
+        #expect(view.keyboardEnhancementFlags.isEmpty)
+        return Pane(view: view, window: window, capture: capture)
+    }
 
     @Test(.enabled(if: MTLCreateSystemDefaultDevice() != nil), arguments: [false, true], [false, true])
     func `terminal hit targets accept focus and typed keys`(herdrBacked: Bool, metal: Bool) throws {
@@ -181,70 +243,5 @@ struct TerminalKeyRoutingTests {
         pane.view.feed(text: "https://first.test https://second.test")
         try TerminalMouse.select(in: pane.view, row: 0, from: 18.8, to: 18.8, modifiers: .command)
         #expect(pane.capture.links.isEmpty)
-    }
-
-    // MARK: Private
-
-    /// A pane, its window and the bytes it sends.
-    private struct Pane {
-        let view: PaneTerminalView
-        let window: NSWindow
-        let capture: InputCapture
-    }
-
-    private final class InputCapture: TerminalViewDelegate {
-        // MARK: Lifecycle
-
-        deinit {
-            // No resources beyond the captured bytes.
-        }
-
-        // MARK: Internal
-
-        var bytes: [UInt8] = []
-        var links: [String] = []
-
-        func requestOpenLink(source _: TerminalView, link: String, params _: [String: String]) {
-            links.append(link)
-        }
-
-        func send(source _: TerminalView, data: ArraySlice<UInt8>) {
-            bytes.append(contentsOf: data)
-        }
-
-        func sizeChanged(source _: TerminalView, newCols _: Int, newRows _: Int) {
-            // Only input is captured.
-        }
-
-        func setTerminalTitle(source _: TerminalView, title _: String) {
-            // Only input is captured.
-        }
-
-        func hostCurrentDirectoryUpdate(source _: TerminalView, directory _: String?) {
-            // Only input is captured.
-        }
-
-        func scrolled(source _: TerminalView, position _: Double) {
-            // Only input is captured.
-        }
-
-        func rangeChanged(source _: TerminalView, startY _: Int, endY _: Int) {
-            // Only input is captured.
-        }
-    }
-
-    /// A pane in a key window, with its input captured and no
-    /// keyboard enhancements in play.
-    private static func focusedPane(herdrBacked: Bool) throws -> Pane {
-        let view = PaneTerminalView(frame: NSRect(x: 0, y: 0, width: 400, height: 200))
-        view.isHerdrBacked = herdrBacked
-        let capture = InputCapture()
-        view.terminalDelegate = capture
-        let window = NSWindow(contentRect: view.frame, styleMask: [], backing: .buffered, defer: false)
-        window.isReleasedWhenClosed = false
-        window.contentView = view
-        try #require(window.makeFirstResponder(view))
-        #expect(view.keyboardEnhancementFlags.isEmpty)
-        return Pane(view: view, window: window, capture: capture)
     }
 }

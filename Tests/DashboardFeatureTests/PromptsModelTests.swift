@@ -7,14 +7,14 @@ import SanductorDomain
 import Testing
 
 @Suite(.serialized)
-struct ScheduledPromptsModelTests {
+struct PromptsModelTests {
     @Test
     func `overdue schedules catch up once and claim before launch`() async {
         let fixture = SessionNavigationTests.Fixture()
         defer { fixture.close() }
         let prompt = prompt()
         fixture.model.store.update { metadata in
-            metadata.scheduledPrompts = [prompt]
+            metadata.savedPrompts = [prompt]
             metadata.prompts["existing"] = "keep"
         }
         let model = makeModel(fixture)
@@ -23,7 +23,7 @@ struct ScheduledPromptsModelTests {
             launches += 1
             #expect(launched.prompt == prompt.prompt)
             #expect(due == prompt.nextRun)
-            let claimed = try #require(fixture.model.store.load().scheduledPrompts.first)
+            let claimed = try #require(fixture.model.store.load().savedPrompts.first)
             #expect(try #require(claimed.nextRun) > model.now())
             await model.runDue()
             return "scheduled-session"
@@ -48,7 +48,7 @@ struct ScheduledPromptsModelTests {
         defer { fixture.close() }
         var prompt = prompt()
         prompt.isEnabled = false
-        fixture.model.store.update { $0.scheduledPrompts = [prompt] }
+        fixture.model.store.update { $0.savedPrompts = [prompt] }
         let model = makeModel(fixture)
         model.launch = { _, _ in
             Issue.record("Paused schedules must not launch")
@@ -61,7 +61,7 @@ struct ScheduledPromptsModelTests {
         await model.runDue()
         model.delete(prompt)
         #expect(model.prompts.isEmpty)
-        #expect(fixture.model.store.load().scheduledPrompts.isEmpty)
+        #expect(fixture.model.store.load().savedPrompts.isEmpty)
     }
 
     @Test
@@ -69,7 +69,7 @@ struct ScheduledPromptsModelTests {
         let fixture = SessionNavigationTests.Fixture()
         defer { fixture.close() }
         var draft = prompt()
-        fixture.model.store.update { $0.scheduledPrompts = [draft] }
+        fixture.model.store.update { $0.savedPrompts = [draft] }
         let model = makeModel(fixture)
         var branches = [String]()
         model.launch = { prompt, due in
@@ -95,7 +95,7 @@ struct ScheduledPromptsModelTests {
         defer { fixture.close() }
         let first = prompt()
         var second = prompt()
-        fixture.model.store.update { $0.scheduledPrompts = [first, second] }
+        fixture.model.store.update { $0.savedPrompts = [first, second] }
         let model = makeModel(fixture)
         var launches = 0
         model.launch = { _, _ in
@@ -113,7 +113,7 @@ struct ScheduledPromptsModelTests {
         let fixture = SessionNavigationTests.Fixture()
         defer { fixture.close() }
         let prompt = prompt()
-        fixture.model.store.update { $0.scheduledPrompts = [prompt] }
+        fixture.model.store.update { $0.savedPrompts = [prompt] }
         let model = makeModel(fixture)
         let file = fixture.root + "/state.json"
         try FileManager.default.removeItem(atPath: file)
@@ -140,17 +140,19 @@ struct ScheduledPromptsModelTests {
         #expect(model.error == nil)
     }
 
-    func prompt() -> ScheduledPrompt {
-        var prompt = ScheduledPrompt(repositoryPath: "/repository")
+    func prompt() -> SavedPrompt {
+        var prompt = SavedPrompt()
+        prompt.repositoryPath = "/repository"
+        prompt.schedule = PromptSchedule()
         prompt.name = "Daily review"
         prompt.prompt = "Check recent changes"
         prompt.nextRun = Date(timeIntervalSince1970: 1_893_488_400)
-        prompt.schedule.timeZoneIdentifier = "UTC"
+        prompt.schedule?.timeZoneIdentifier = "UTC"
         return prompt
     }
 
-    func makeModel(_ fixture: SessionNavigationTests.Fixture) -> ScheduledPromptsModel {
-        let model = ScheduledPromptsModel(store: fixture.model.store, service: fixture.model.service)
+    func makeModel(_ fixture: SessionNavigationTests.Fixture) -> PromptsModel {
+        let model = PromptsModel(store: fixture.model.store, service: fixture.model.service)
         model.now = { Date(timeIntervalSince1970: 1_893_686_400) }
         return model
     }

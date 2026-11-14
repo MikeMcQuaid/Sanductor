@@ -6,12 +6,9 @@ import Testing
 /// on, the successor to the deleted paste-delivery coverage.
 struct AgentRunnerTests {
     @Test
-    func `an agent with no listing offers its curated models and forgets what was scraped`() {
-        // `claude models` is not a subcommand: Claude Code takes an
-        // unknown argument as a prompt, so asking started a session
-        // and the words of its answer were read as model names.
-        #expect(ClaudeCodeRunner().modelListingCommand.isEmpty)
-        #expect(ClaudeCodeRunner().models == ["fable", "opus", "sonnet", "haiku"])
+    func `model discovery uses metadata without submitting a prompt`() {
+        #expect(ClaudeCodeRunner().modelListingCommand.joined().contains("control_request"))
+        #expect(ClaudeCodeRunner().modelListingCommand.joined().contains("--no-session-persistence"))
         // Codex has a real listing to read, so it keeps one.
         #expect(CodexRunner().modelListingCommand.isEmpty == false)
     }
@@ -48,17 +45,12 @@ struct AgentRunnerTests {
     }
 
     @Test
-    func `every agent offers something to start on`() {
-        // A form opens on these: the first model the agent lists and
-        // the effort the CLI itself runs at, which is not the first
-        // of its tiers.
+    func `agents describe the effort used without an explicit choice`() {
         let claude = ClaudeCodeRunner()
-        #expect(claude.models.first == "fable")
         #expect(claude.defaultEffort == "high")
         #expect(claude.efforts.first == "max")
 
         let codex = CodexRunner()
-        #expect(codex.models.first == "gpt-5.6-sol")
         #expect(codex.defaultEffort == "medium")
     }
 

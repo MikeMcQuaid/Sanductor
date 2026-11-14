@@ -44,16 +44,13 @@
                 }
                 .interactiveDismissDisabled(model.isCreating)
                 .onAppear { model.error = nil; focused = true }
-                .onChange(of: agent) { _, agent in
-                    modelName = model.defaults[agent.rawValue + "-model"] ?? ""
-                    effort = model.defaults[agent.rawValue + "-effort"] ?? ""
-                }
             }
         }
 
         // MARK: Private
 
         private static let promptLines = 5 ... 15
+        private static let avatarCornerRadius: CGFloat = 4
 
         @Environment(\.dismiss)
         private var dismiss
@@ -62,6 +59,8 @@
         @State private var effort: String
         @State private var prompt = ""
         @FocusState private var focused: Bool
+        @ScaledMetric(relativeTo: .body)
+        private var avatarSize = 20.0
 
         private let model: MobileModel
         private let repository: String
@@ -69,19 +68,21 @@
 
         private var cannotStart: Bool {
             prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || model.isConnected == false
+                || AgentChoices(agent: agent, defaults: model.defaults)
+                .supports(model: modelName, effort: effort) == false
         }
 
         private var form: some View {
             Form {
                 Section {
-                    Text(repository).font(nameStyle.font)
-                    Picker("Agent", selection: $agent) {
-                        ForEach(AgentKind.allCases, id: \.self) { choice in
-                            Text(choice.displayName).tag(choice)
-                        }
+                    HStack {
+                        OwnerAvatar(owner: model.sidebar.first { $0.name == repository }?.owner, size: avatarSize)
+                            .clipShape(RoundedRectangle(cornerRadius: Self.avatarCornerRadius))
+                        Text(repository).font(nameStyle.font)
                     }
-                    TextField("Model (default when empty)", text: $modelName)
-                    TextField("Effort (default when empty)", text: $effort)
+                    AgentOptionPickers(agent: $agent, model: $modelName, effort: $effort) { kind in
+                        AgentChoices(agent: kind, defaults: model.defaults)
+                    }
                 }
                 .textInputAutocapitalization(.never)
                 .autocorrectionDisabled()

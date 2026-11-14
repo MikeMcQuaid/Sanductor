@@ -21,6 +21,7 @@ struct CommandLineRemoteSessionTests {
         let shared = try TestSupport.temporaryDirectory("phone")
         defer { try? FileManager.default.removeItem(atPath: shared) }
         try await TestSupport.makeRepository(at: shared + "/repositories/repo")
+        try publish(["codex-models=gpt-5", "codex-gpt-5-efforts=high"], in: shared)
         let prompt = "First line\nSecond line with 'quotes' and $(touch should-not-exist)"
         let result = try await run(
             "new --repository repo --agent codex --model gpt-5 --effort high --no-attach",
@@ -33,6 +34,22 @@ struct CommandLineRemoteSessionTests {
         #expect(result.standardError.contains("Repository:") == false)
         #expect(result.standardOutput.contains("label=sanductor--repo--"))
         #expect(result.standardOutput.contains("codex --model gpt-5 -c model_reasoning_effort=high"))
+    }
+
+    @Test
+    func `remote creation rejects an effort the selected model does not support`() async throws {
+        let shared = try TestSupport.temporaryDirectory("invalid-effort")
+        defer { try? FileManager.default.removeItem(atPath: shared) }
+        try await TestSupport.makeRepository(at: shared + "/repositories/repo")
+        try publish(["codex-models=gpt-6-luna", "codex-gpt-6-luna-efforts=low medium high max"], in: shared)
+        let result = try await run(
+            "new --repository repo --agent codex --model gpt-6-luna --effort ultra --no-attach",
+            input: "A prompt",
+            shared: shared,
+        )
+        #expect(result.succeeded == false)
+        #expect(result.standardError.contains("effort"))
+        #expect(FileManager.default.fileExists(atPath: shared + "/worktrees") == false)
     }
 
     @Test(arguments: ["my repo", "café", "repo ' $(false)"])

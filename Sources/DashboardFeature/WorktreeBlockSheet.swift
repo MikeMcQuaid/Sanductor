@@ -37,7 +37,7 @@ struct WorktreeBlockSelection: Identifiable {
 struct WorktreeBlockSheet: View {
     let selection: WorktreeBlockSelection
     let model: DashboardModel
-    let dismiss: () -> Void
+    let dismiss: @MainActor () -> Void
 
     var body: some View {
         if let target = selection.targets.first {

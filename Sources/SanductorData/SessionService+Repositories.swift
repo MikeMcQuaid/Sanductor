@@ -10,6 +10,11 @@ public extension SessionService {
         await (try? github.organisations(directory: paths.repositoriesDirectory)) ?? []
     }
 
+    /// Validates a saved organisation, retaining it when GitHub cannot be reached.
+    func isOrganisation(owner: String) async throws -> Bool {
+        try await github.isOrganisation(owner: owner, directory: paths.repositoriesDirectory)
+    }
+
     /// Every repository under one owner on GitHub. Empty when GitHub
     /// is unreachable.
     func repositories(owner: String) async -> [String] {

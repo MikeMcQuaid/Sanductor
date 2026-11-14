@@ -3,16 +3,37 @@ import SanductorDomain
 
 /// Key routing for local shells and herdr-backed agents.
 extension PaneTerminalView {
-    /// Keeps agent modifiers and traditional shell bindings when the
-    /// local terminal has no keyboard protocol. Nil consumes the event.
+    /// Keeps agent modifiers and traditional shell bindings. Nil consumes the event.
     func routeKey(_ event: NSEvent) -> NSEvent? {
-        guard unsafe window?.firstResponder === self,
-              keyboardEnhancementFlags.isEmpty,
+        guard unsafe window?.firstResponder === self else {
+            return event
+        }
+
+        if isHerdrBacked,
+           event.modifierFlags.intersection([.command, .control, .option, .shift]) == .control,
+           event.charactersIgnoringModifiers == "\r" || event.charactersIgnoringModifiers == "\u{3}"
+        {
+            // AppKit otherwise handles Control-Return as a request for the context menu.
+            selectNone()
+            send(txt: "\u{1B}[13;5u")
+            return nil
+        }
+
+        guard keyboardEnhancementFlags.isEmpty,
               event.modifierFlags.isDisjoint(with: [.command, .control])
         else {
             return event
         }
 
+        return routeLegacyKey(event)
+    }
+
+    // MARK: Private
+
+    /// The characters a keypad key can type: space through tilde.
+    private static let printable: ClosedRange<UInt32> = 0x20 ... 0x7E
+
+    private func routeLegacyKey(_ event: NSEvent) -> NSEvent? {
         if event.modifierFlags.contains(.option) {
             guard let arrow = Self.arrow(of: event) else {
                 return event
@@ -55,11 +76,6 @@ extension PaneTerminalView {
         send(txt: text)
         return nil
     }
-
-    // MARK: Private
-
-    /// The characters a keypad key can type: space through tilde.
-    private static let printable: ClosedRange<UInt32> = 0x20 ... 0x7E
 
     /// Which arrow an event is, if it is one.
     private static func arrow(of event: NSEvent) -> TerminalKeys.Arrow? {

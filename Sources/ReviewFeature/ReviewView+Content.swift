@@ -9,13 +9,15 @@ extension ReviewView {
     }
 
     @ViewBuilder var scopeButtons: some View {
-        scopeButton(.uncommitted, systemImage: "pencil", help: "Review uncommitted changes")
+        scopeButton(
+            .uncommitted, systemImage: "pencil", help: "Review uncommitted changes", disabled: model.stackTarget != nil,
+        )
         scopeButton(.lastCommit, systemImage: "clock", help: "Review the last commit")
         scopeButton(
             .upstream,
             systemImage: "icloud.and.arrow.up",
             help: "Review the commits not yet on this branch's own origin ref; dimmed until the branch has been pushed",
-            disabled: model.hasUpstream == false,
+            disabled: model.hasUpstream == false || model.stackTarget != nil,
         )
         scopeButton(
             .branch,

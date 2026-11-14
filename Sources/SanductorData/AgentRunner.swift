@@ -35,10 +35,6 @@ public protocol AgentRunner: Sendable {
     /// sessions.
     var scopesTranscriptsByWorkingDirectory: Bool { get }
 
-    /// The models offered when discovery finds nothing, most capable
-    /// first.
-    var models: [String] { get }
-
     /// The reasoning efforts the agent's picker offers, strongest
     /// first, matching the model list's most-capable-first order.
     var efforts: [String] { get }
@@ -53,10 +49,11 @@ public protocol AgentRunner: Sendable {
     /// list.
     var modelListingCommand: [String] { get }
 
-    /// The file naming the models the agent has actually used,
-    /// relative to its home, where it keeps one. Their identifiers
-    /// carry versions the aliases do not, which is the only honest
-    /// way to write `fable` as Fable 5.1.
+    /// Decodes model metadata without interpreting generated prose.
+    func modelCatalogue(from output: String) -> AgentModelCatalogue?
+
+    /// Historical model names used before the first successful SDK
+    /// discovery, relative to the agent's home.
     var modelNamesFile: String? { get }
 
     /// The file that listing reads, relative to the agent's home,
@@ -85,9 +82,15 @@ public protocol AgentRunner: Sendable {
     func reviewOutput(_ output: String) throws -> String
 }
 
-extension AgentRunner {
+public extension AgentRunner {
+    /// Adapters with plain listings retain their existing parser.
+    func modelCatalogue(from output: String) -> AgentModelCatalogue? {
+        let models = parseModelList(output)
+        return models.isEmpty ? nil : AgentModelCatalogue(models: models)
+    }
+
     /// Runners without recognised storage have nothing to expire.
-    public func conversationFiles(sandboxHome _: String) -> [String: String] {
+    func conversationFiles(sandboxHome _: String) -> [String: String] {
         [:]
     }
 
@@ -95,7 +98,7 @@ extension AgentRunner {
     /// their own names and notes ("2.1.238 (Claude Code)",
     /// "codex-cli 0.149.0"), so the first token that looks like a
     /// version is taken and anything else is no answer at all.
-    func parseVersion(_ output: String) -> String? {
+    internal func parseVersion(_ output: String) -> String? {
         output
             .split(whereSeparator: \.isWhitespace)
             .map { $0.trimmingCharacters(in: CharacterSet(charactersIn: "()v")) }
@@ -110,7 +113,7 @@ extension AgentRunner {
     /// Joins a base command, verbatim extra arguments and an
     /// optional initial prompt read from a file at launch time,
     /// inside the sandbox where the shared workspace is readable.
-    func command(_ base: String, _ extraArguments: String, promptFile: String? = nil) -> String {
+    internal func command(_ base: String, _ extraArguments: String, promptFile: String? = nil) -> String {
         let trimmed = extraArguments.trimmingCharacters(in: .whitespaces)
         var joined = trimmed.isEmpty ? base : base + " " + trimmed
         if let promptFile {
@@ -126,16 +129,16 @@ extension AgentRunner {
     /// Extracts model names from a listing's output, tolerating ANSI
     /// colour codes and prose: the first plausible token per line.
     /// Most agents answer from the binary, not from a file.
-    public var modelCacheFile: String? {
+    var modelCacheFile: String? {
         nil
     }
 
     /// Most agents' names need no looking up.
-    public var modelNamesFile: String? {
+    var modelNamesFile: String? {
         nil
     }
 
-    func parseModelList(_ output: String) -> [String] {
+    internal func parseModelList(_ output: String) -> [String] {
         var names = [String]()
         let hidden: Set = ["gpt-reserve", "codex-auto-review"]
         for line in output.split(separator: "\n") {
@@ -205,19 +208,6 @@ public struct ClaudeCodeRunner: AgentRunner {
     /// Each working directory has its own transcript directory.
     public var scopesTranscriptsByWorkingDirectory: Bool {
         true
-    }
-
-    /// The Claude model aliases offered when discovery fails.
-    public var models: [String] {
-        ["fable", "opus", "sonnet", "haiku"]
-    }
-
-    /// Claude Code has no listing subcommand: every argument it
-    /// does not know becomes a prompt, so `claude models` started a
-    /// session, answered in prose, and the words of that answer were
-    /// read as model names. The curated list above stands instead.
-    public var modelListingCommand: [String] {
-        []
     }
 
     /// Claude Code records every model identifier it has used here,
@@ -302,22 +292,6 @@ public struct CodexRunner: AgentRunner {
     /// The flat directory mixes every working directory's sessions.
     public var scopesTranscriptsByWorkingDirectory: Bool {
         false
-    }
-
-    /// The Codex model ids offered when discovery fails; the bare
-    /// nicknames are not ids `--model` accepts.
-    public var models: [String] {
-        ["gpt-5.6-sol", "gpt-6-astra", "gpt-5.6-terra", "gpt-5.6-luna", "gpt-5.5", "gpt-5.4"]
-    }
-
-    /// Codex has no listing subcommand (a bare argument becomes an
-    /// interactive prompt), but it caches the server's model list in
-    /// its home; the slugs are exactly what `--model` accepts.
-    public var modelListingCommand: [String] {
-        [
-            "grep -o '\"slug\": *\"[^\"]*\"' ~/.codex/models_cache.json"
-                + " | cut -d '\"' -f4 | grep -vE 'codex-auto-review|gpt-reserve'",
-        ]
     }
 
     /// Codex rewrites this cache when the server's list changes,

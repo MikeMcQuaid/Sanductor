@@ -15,6 +15,7 @@ public extension SessionService {
         agent: AgentKind,
         options: AgentLaunchOptions = AgentLaunchOptions(),
     ) async throws -> String {
+        try validate(options, for: agent)
         await clearQuarantine(for: agent)
         async let probed = probeVersion(of: agent)
         let detail = try await github.pullRequestDetail(repositoryPath: repository.path, number: number)

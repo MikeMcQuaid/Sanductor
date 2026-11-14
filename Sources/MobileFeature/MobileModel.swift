@@ -62,6 +62,7 @@ public final class MobileModel {
     // MARK: Internal
 
     var configuration: SSHConfiguration
+    var activeConfiguration: SSHConfiguration?
     var publicKey = ""
     var allSessions: [MobileSession] = []
     var allRepositories: [String] = []
@@ -74,6 +75,10 @@ public final class MobileModel {
     var error: String?
     var pendingHostKey: String?
     let progress: LaunchProgress = .init()
+
+    @ObservationIgnored var connectRemote: @MainActor (RemoteHerdr, Int64?) async throws -> Void = { client, timeout in
+        try await client.connect(timeoutSeconds: timeout)
+    }
 
     @ObservationIgnored var remote: RemoteHerdr?
     @ObservationIgnored var eventChannel: SSHCommand?
@@ -133,7 +138,7 @@ public final class MobileModel {
         do {
             try await read(remote, includingPreferences: true)
         } catch {
-            self.error = configuration.errorMessage(error)
+            self.error = (activeConfiguration ?? configuration).errorMessage(error)
         }
     }
 
@@ -209,15 +214,15 @@ public final class MobileModel {
     private func run() async {
         var failures = 0
         while failures < Self.maximumAttempts {
-            let client = RemoteHerdr(configuration: configuration)
-            remote = client
             error = nil
             isConnecting = true
             progress.begin(failures == 0 ? "Connecting to your Mac" : "Reconnecting to your Mac")
             do {
-                try await watch(client)
+                try await watch(connectEndpoint())
             } catch {
-                await client.disconnect()
+                if Task.isCancelled == false {
+                    await remote?.disconnect()
+                }
                 guard Task.isCancelled == false else {
                     return
                 }
@@ -234,7 +239,7 @@ public final class MobileModel {
                     break
                 }
                 if error is SSHHostKeyError || failures == Self.maximumAttempts {
-                    self.error = configuration.errorMessage(error)
+                    self.error = (activeConfiguration ?? configuration).errorMessage(error)
                     break
                 }
             }
@@ -244,7 +249,6 @@ public final class MobileModel {
     }
 
     private func watch(_ client: RemoteHerdr) async throws {
-        try await client.connect()
         try Task.checkCancellation()
         progress.report("Reading repositories and subscribing to agent changes")
         eventPaneIDs = try await MobileSession.sessions(in: client.snapshot()).map(\.id)

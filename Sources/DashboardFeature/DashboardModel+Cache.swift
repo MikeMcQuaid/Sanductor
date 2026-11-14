@@ -7,75 +7,88 @@ import SanductorDomain
 /// on its own rows and its own selection rather than on an empty
 /// frame. Only what herdr owns arrives late.
 extension DashboardModel {
-    /// Seeds the pickers with the models each CLI reported last
-    /// time, so they open on the real list while the CLI is asked
-    /// again in the background.
-    /// Asks each CLI its models, beside the others, only when its
-    /// version has moved since the last answer.
-    func discoverModels() async {
-        // Keyed by the CLI's version and, where its list lives in a
-        // cache, that file's modification time: both read from the
-        // host in a few milliseconds, where asking the agent itself
-        // is twenty seconds of sandbox launch. The cache's time is
-        // what catches a model the server added under a version that
-        // had not moved.
-        let known = store.load().discoveredModelsVersion
-        await withTaskGroup(of: (AgentKind, String?, [String]?).self) { tasks in
+    /// The models and efforts an agent offers, and what to start on:
+    /// models the CLI reported at startup when it answered, the
+    /// cached catalogue while discovery is in flight.
+    public func launchChoices(for agent: AgentKind) -> AgentChoices {
+        let fallback = service.launchChoices(for: agent)
+        let models = discoveredModels[agent] ?? fallback.models
+        let defaults = service.launchDefaults(for: agent, models: models)
+        return AgentChoices(
+            models: models,
+            efforts: fallback.efforts,
+            defaultModel: defaults.model,
+            defaultEffort: defaults.effort,
+            modelEfforts: modelCatalogues[agent]?.efforts ?? [:],
+            modelDefaultEfforts: modelCatalogues[agent]?.defaultEfforts ?? [:],
+            names: modelNames[agent] ?? [:],
+            version: installedVersions[agent],
+            isAvailable: availableAgents.contains(agent),
+        )
+    }
+
+    func discoverModels(ifFilesChanged: Bool = false) async {
+        let filesStamp = service.modelFilesStamp()
+        if ifFilesChanged, modelFilesStamp == filesStamp {
+            return
+        }
+        guard isDiscoveringModels == false else {
+            return
+        }
+
+        modelFilesStamp = filesStamp
+        isDiscoveringModels = true
+
+        let known = store.load()
+        await withTaskGroup(of: (AgentKind, String?, AgentModelCatalogue?).self) { tasks in
             for agent in AgentKind.allCases {
                 tasks.addTask {
-                    let version = await self.service.modelListingStamp(for: agent)
-                    guard version == nil || version != known[agent.rawValue] else {
-                        return (agent, version, nil)
+                    let stamp = await self.service.modelListingStamp(for: agent)
+                    guard stamp == nil || stamp != known.discoveredModelsVersion[agent.rawValue]
+                        || known.modelCatalogues[agent.rawValue] == nil
+                    else {
+                        return (agent, stamp, nil)
                     }
 
-                    return await (agent, version, self.service.discoverModels(for: agent))
+                    return await (agent, stamp, self.service.discoverModels(for: agent))
                 }
             }
-            // Collected first and stored in one step: the probes
-            // take seconds each, and metadata loaded before them is
-            // stale by the time they answer.
-            var discovered = [(agent: AgentKind, version: String?, models: [String])]()
-            for await (agent, version, models) in tasks {
-                // The stamp leads with the CLI's version; a cache's
-                // time follows a hash where there is one.
-                if let probed = version?.split(separator: "#").first, probed.isEmpty == false {
-                    installedVersions[agent] = String(probed)
+            for await (agent, stamp, catalogue) in tasks {
+                if let version = stamp?.split(separator: "#").first, version.isEmpty == false {
+                    installedVersions[agent] = String(version)
                 }
-                guard let models else {
+                guard let catalogue else {
                     continue
                 }
 
-                discoveredModels[agent] = models
-                discovered.append((agent, version, models))
-            }
-            store.update { metadata in
-                for entry in discovered {
-                    metadata.discoveredModels[entry.agent.rawValue] = entry.models
-                    metadata.discoveredModelsVersion[entry.agent.rawValue] = entry.version
+                discoveredModels[agent] = catalogue.models
+                modelNames[agent] = catalogue.names
+                modelCatalogues[agent] = catalogue
+                store.update { metadata in
+                    metadata.discoveredModels[agent.rawValue] = catalogue.models
+                    metadata.discoveredModelsVersion[agent.rawValue] = stamp
+                    metadata.modelCatalogues[agent.rawValue] = catalogue
                 }
             }
         }
+        isDiscoveringModels = false
+        publishSessionChoices()
+        if service.modelFilesStamp() != filesStamp {
+            await discoverModels(ifFilesChanged: true)
+        }
     }
 
-    /// Reads what each agent calls its own models, which costs a
-    /// file read apiece and no sandbox launch at all.
     func readModelNames() {
         for agent in AgentKind.allCases {
-            let names = service.modelNames(for: agent)
-            if names.isEmpty == false {
-                modelNames[agent] = names
-            }
+            modelNames[agent] = service.modelNames(for: agent)
         }
     }
 
     func restoreDiscoveredModels() {
-        for (raw, models) in store.load().discoveredModels {
-            // Only what the agent itself can report: anything
-            // remembered for an agent with no listing was scraped
-            // out of its prose by an earlier release.
-            if let agent = AgentKind(rawValue: raw), service.reportsModels(agent) {
-                discoveredModels[agent] = models
-            }
+        let metadata = store.load()
+        for agent in AgentKind.allCases {
+            modelCatalogues[agent] = metadata.modelCatalogues[agent.rawValue]
+            discoveredModels[agent] = metadata.modelCatalogues[agent.rawValue]?.models
         }
     }
 
@@ -103,7 +116,12 @@ extension DashboardModel {
                     revision: worktree.revision,
                 )
             }
-            return RepositoryGroup(repository: repository, items: items, defaultBranch: cached.defaultBranch)
+            return RepositoryGroup(
+                repository: repository,
+                items: items,
+                defaultBranch: cached.defaultBranch,
+                localBranches: cached.localBranches ?? [],
+            )
         }
         // The stacks the last run derived come back with the rows,
         // and count as fresh for one interval: the first reading
@@ -142,6 +160,7 @@ extension DashboardModel {
             cached.fullName = group.repository.fullName
             cached.path = group.repository.path
             cached.defaultBranch = group.defaultBranch
+            cached.localBranches = group.localBranches
             cached.worktrees = group.items.map { item in
                 var worktree = CachedWorktree()
                 worktree.branch = item.worktree.branch
@@ -185,7 +204,7 @@ extension DashboardModel {
                 lastActivityAt: SessionService.repositoryActivity(of: group),
                 fullName: group.repository.fullName,
                 defaultBranch: group.defaultBranch,
-                isHidden: hiddenOrganisations.contains(group.repository.owner?.lowercased() ?? ""),
+                isHidden: isWorkHidden(group.repository),
             )
         }
         if sidebar != publishedSidebar, service.publishSidebar(sidebar) {

@@ -110,6 +110,9 @@ conventional-commit prefixes such as `feat:`, `fix:` or `chore:`.
 
 ### UI Principles
 
+- When a repository or project name omits its organisation or user
+  prefix, show that owner's avatar beside it. Reuse `OwnerAvatar`
+  and its shared cache, including in menus and pickers.
 - One implementation per concern: terminals, editors, conversation
   views, markdown rendering, git access and GitHub access each have
   exactly one shared component or client. Before adding a second

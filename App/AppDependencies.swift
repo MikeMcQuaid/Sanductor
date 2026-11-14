@@ -41,13 +41,13 @@ final class AppDependencies {
         setup = SetupModel(check: SetupChecker(service: sessionService).check)
         localReviews = LocalReviewStore(service: sessionService)
         store = metadataStore
-        schedules = ScheduledPromptsModel(store: metadataStore, service: sessionService)
         dashboard = DashboardModel(
             service: sessionService,
             store: metadataStore,
             github: githubClient,
             launchProgress: launchProgress,
         )
+        prompts = dashboard.prompts
         // The machine's own power state, wired here rather than read
         // by the model, so the model under test is always plugged in.
         dashboard.isOnBattery = { PowerSource.isOnBattery }
@@ -75,6 +75,6 @@ final class AppDependencies {
     let setup: SetupModel
     let localReviews: LocalReviewStore
     let dashboard: DashboardModel
-    let schedules: ScheduledPromptsModel
+    let prompts: PromptsModel
     let store: MetadataStore
 }

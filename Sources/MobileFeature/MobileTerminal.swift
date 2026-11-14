@@ -254,11 +254,16 @@
 
         var agent: AgentKind? {
             didSet {
-                guard oldValue != agent, inputView != nil else {
+                guard oldValue != agent else {
                     return
                 }
 
-                inputView = PhoneKeyboard(terminal: self, expanded: true)
+                if inputAccessoryView != nil {
+                    inputAccessoryView = PhoneKeyboard(terminal: self)
+                }
+                if inputView != nil {
+                    inputView = PhoneKeyboard(terminal: self, expanded: true)
+                }
                 reloadInputViews()
             }
         }

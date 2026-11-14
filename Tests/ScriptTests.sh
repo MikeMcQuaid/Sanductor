@@ -297,6 +297,9 @@ PLISTS
 printf 'only_rules: [trailing_newline]\nanalyzer_rules: [unused_import]\n' >"${scratch}/.swiftlint.yml"
 mkdir -p "${scratch}/App" "${scratch}/iOSApp" "${scratch}/Sources/Interface/"{macOS,iOS}
 touch "${scratch}/Sources/Interface/"{macOS,iOS}/Font.swift
+tooltip_source="$(rg --files Sources/SanductorInterface -g '*TooltipSurface*.swift')"
+mkdir -p "${scratch}/$(dirname "${tooltip_source}")"
+cp "${tooltip_source}" "${scratch}/${tooltip_source}"
 printf 'exit 0\n' >"${scratch}/Tests/ScriptTests.sh"
 printf '#!/bin/bash\nexit 0\n' >"${scratch}/bin/ps"
 cat >"${scratch}/bin/swift" <<'SWIFT'
@@ -378,6 +381,11 @@ CONFIG
       grep -q -- '--compiler-log-path .build/analyze-ios-build.log' "${scratch}/swiftlint-invocations"
       grep -Fxq "${scratch}/Sources/Interface/macOS/Font.swift" "${scratch}/.build/analyze-mac-sources.xcfilelist"
       grep -Fxq "${scratch}/Sources/Interface/iOS/Font.swift" "${scratch}/.build/analyze-ios-sources.xcfilelist"
+      grep -Fxq "${scratch}/${tooltip_source}" "${scratch}/.build/analyze-mac-sources.xcfilelist"
+      if grep -Fxq "${scratch}/${tooltip_source}" "${scratch}/.build/analyze-ios-sources.xcfilelist"; then
+        echo 'iOS analysis included the AppKit tooltip implementation' >&2
+        exit 1
+      fi
       if grep -q '/iOS/' "${scratch}/.build/analyze-mac-sources.xcfilelist" ||
         grep -q '/macOS/' "${scratch}/.build/analyze-ios-sources.xcfilelist"; then
         echo 'Analysis mixed platform-specific sources' >&2

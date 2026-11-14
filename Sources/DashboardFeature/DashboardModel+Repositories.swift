@@ -65,6 +65,13 @@ public extension DashboardModel {
         return fresh
     }
 
+    /// The repository's security advisories in triage or draft, read
+    /// afresh each time: never cached, since their titles describe
+    /// unpublished vulnerabilities.
+    func securityAdvisories(repository: Repository) async -> [SecurityAdvisorySummary] {
+        await service.securityAdvisories(repository: repository)
+    }
+
     /// The cached open issues and pull requests for the pickers.
     func cachedOpenSources(repository: Repository) -> (issues: [IssueSummary], pullRequests: [PullRequestSummary]) {
         let metadata = store.load()

@@ -1,6 +1,6 @@
 import Foundation
 
-/// A local-time visibility schedule; it never controls agent or job execution.
+/// Working hours and holidays for repository visibility, alerts and scheduled jobs.
 public struct WorkMode: Codable, Equatable, Sendable {
     // MARK: Lifecycle
 
@@ -8,10 +8,25 @@ public struct WorkMode: Codable, Equatable, Sendable {
         // Weekdays, 09:00–17:00 by default.
     }
 
+    public init(from decoder: any Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        isEnabled = try container.decode(Bool.self, forKey: .isEnabled)
+        organisations = try container.decode(Set<String>.self, forKey: .organisations)
+        repositories = try container.decodeIfPresent(Set<String>.self, forKey: .repositories) ?? []
+        weekdays = try container.decode(Set<Int>.self, forKey: .weekdays)
+        startMinute = try container.decode(Int.self, forKey: .startMinute)
+        endMinute = try container.decode(Int.self, forKey: .endMinute)
+        holidayUntil = try container.decodeIfPresent(Date.self, forKey: .holidayUntil)
+        snoozeUntil = try container.decodeIfPresent(Date.self, forKey: .snoozeUntil)
+    }
+
     // MARK: Public
 
     public var isEnabled = false
     public var organisations: Set<String> = []
+    public var repositories: Set<String> = []
+    public var holidayUntil: Date?
+    public var snoozeUntil: Date?
     // swiftlint:disable:next no_magic_numbers - Calendar weekday numbering.
     public var weekdays: Set<Int> = [2, 3, 4, 5, 6]
     // swiftlint:disable:next no_magic_numbers - Default working hours.
@@ -35,8 +50,16 @@ public struct WorkMode: Codable, Equatable, Sendable {
     }
 
     public func hiddenOrganisations(at date: Date, calendar: Calendar = .current) -> Set<String> {
-        if isEnabled, isWorking(at: date, calendar: calendar) == false {
+        if hidesWork(at: date, calendar: calendar) {
             Set(organisations.map { $0.lowercased() })
+        } else {
+            []
+        }
+    }
+
+    public func hiddenRepositories(at date: Date, calendar: Calendar = .current) -> Set<String> {
+        if hidesWork(at: date, calendar: calendar) {
+            Set(repositories.map { $0.lowercased() })
         } else {
             []
         }
@@ -47,19 +70,42 @@ public struct WorkMode: Codable, Equatable, Sendable {
             return nil
         }
 
-        return [0, startMinute, endMinute]
-            .compactMap { minute in
-                calendar.nextDate(
-                    after: date,
-                    matching: DateComponents(hour: minute / Self.minutesPerHour, minute: minute % Self.minutesPerHour),
-                    matchingPolicy: .nextTime,
-                    repeatedTimePolicy: .first,
-                )
-            }
-            .min()
+        let deadlines = [holidayUntil, snoozeUntil].compactMap(\.self).filter { $0 > date }
+        let hours = [0, startMinute, endMinute].compactMap { minute in
+            calendar.nextDate(
+                after: date,
+                matching: DateComponents(hour: minute / Self.minutesPerHour, minute: minute % Self.minutesPerHour),
+                matchingPolicy: .nextTime,
+                repeatedTimePolicy: .first,
+            )
+        }
+        return (deadlines + hours).min()
+    }
+
+    /// Matches both whole organisations and individual repositories, regardless of case.
+    public func includes(_ repository: Repository) -> Bool {
+        organisations.contains { $0.caseInsensitiveCompare(repository.owner ?? "") == .orderedSame }
+            || repositories.contains { $0.caseInsensitiveCompare(repository.fullName ?? "") == .orderedSame }
+    }
+
+    public func isOnHoliday(at date: Date) -> Bool {
+        isEnabled && (holidayUntil ?? .distantPast) > date
+    }
+
+    /// Snooze reveals repositories without restoring interruptions.
+    public func silences(_ repository: Repository, at date: Date, calendar: Calendar = .current) -> Bool {
+        isEnabled && includes(repository)
+            && (isOnHoliday(at: date) || isWorking(at: date, calendar: calendar) == false)
     }
 
     // MARK: Private
 
     private static let minutesPerHour = 60
+
+    private func hidesWork(at date: Date, calendar: Calendar) -> Bool {
+        if let snoozeUntil, date < snoozeUntil {
+            return false
+        }
+        return isEnabled && (isOnHoliday(at: date) || isWorking(at: date, calendar: calendar) == false)
+    }
 }

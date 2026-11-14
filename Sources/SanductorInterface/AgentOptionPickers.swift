@@ -1,6 +1,5 @@
 import SanductorDomain
 import SwiftUI
-import TerminalUI
 
 /// The agent, model and effort dropdowns shared by every session
 /// creation surface. Each opens on something: the last pick where it
@@ -29,36 +28,49 @@ public struct AgentOptionPickers: View {
     // MARK: Public
 
     public var body: some View {
-        HStack(spacing: Self.spacing) {
-            if showsAgent {
-                agentPicker
-            }
-            Picker("Model", selection: $model) {
-                ForEach(choices(agent).models, id: \.self) { name in
-                    Text(AgentOptionName.display(name, named: choices(agent).names)).tag(name)
-                }
-            }
-            .hoverHelp("The model the agent uses")
-            Picker("Effort", selection: $effort) {
-                ForEach(choices(agent).efforts, id: \.self) { name in
-                    Text(AgentOptionName.display(name, named: choices(agent).names)).tag(name)
-                }
-            }
-            .hoverHelp("How much reasoning the agent spends")
+        Group {
+            #if os(iOS)
+                pickers
+            #else
+                HStack(spacing: Self.spacing) { pickers }.labelsHidden()
+            #endif
         }
-        .labelsHidden()
         // On appearance as well as on change: the agent, model and
         // effort all persist across launches now, but discovery can
         // change what a CLI offers between runs, and a persisted pair
         // must never combine a model one agent knows with another.
         .onAppear { resetUnavailableChoices() }
         .onChange(of: agent) { resetUnavailableChoices() }
+        .onChange(of: model) { resetUnavailableChoices() }
+        .onChange(of: choices(agent)) { resetUnavailableChoices() }
     }
 
     // MARK: Internal
 
     let choices: (AgentKind) -> AgentChoices
     let showsAgent: Bool
+
+    func agentIcon(_ image: Image) -> some View {
+        #if os(iOS)
+            // Native picker labels need the image itself sized, including its trailing space.
+            Image(size: CGSize(
+                width: mobileAgentIconSize + Self.spacing, height: mobileAgentIconSize,
+            )) { context in
+                context.draw(
+                    image,
+                    in: CGRect(x: 0, y: 0, width: mobileAgentIconSize, height: mobileAgentIconSize),
+                )
+            }
+            .accessibilityHidden(true)
+        #else
+            image
+                .resizable()
+                .scaledToFit()
+                .frame(width: Self.agentIconSize, height: Self.agentIconSize)
+                .foregroundStyle(Color.primary)
+                .accessibilityHidden(true)
+        #endif
+    }
 
     // MARK: Private
 
@@ -68,6 +80,35 @@ public struct AgentOptionPickers: View {
     @Binding private var agent: AgentKind
     @Binding private var model: String
     @Binding private var effort: String
+
+    #if os(iOS)
+        @ScaledMetric(relativeTo: .body)
+        private var mobileAgentIconSize = 14.0
+    #endif
+
+    @ViewBuilder private var pickers: some View {
+        if showsAgent {
+            agentPicker
+        }
+        Picker("Model", selection: $model) {
+            ForEach(choices(agent).models, id: \.self) { name in
+                Text(AgentOptionName.display(name, named: choices(agent).names)).tag(name)
+            }
+        }
+        .hoverHelp("The model the agent uses")
+        .disabled(choices(agent).models.isEmpty)
+        if choices(agent).models.isEmpty {
+            Text("Waiting for model discovery…").foregroundStyle(.secondary)
+        }
+        if choices(agent).supportedEfforts(for: model).isEmpty == false {
+            Picker("Effort", selection: $effort) {
+                ForEach(choices(agent).supportedEfforts(for: model), id: \.self) { name in
+                    Text(AgentOptionName.display(name, named: choices(agent).names)).tag(name)
+                }
+            }
+            .hoverHelp("How much reasoning the agent spends")
+        }
+    }
 
     private var agentPicker: some View {
         Picker("Agent", selection: $agent) {
@@ -80,10 +121,7 @@ public struct AgentOptionPickers: View {
                         .foregroundStyle(.secondary))
                     """)
                 } icon: {
-                    Image(kind.iconAssetName)
-                        .resizable()
-                        .scaledToFit()
-                        .frame(width: Self.agentIconSize, height: Self.agentIconSize)
+                    agentIcon(Image(kind.iconAssetName))
                 }
                 .tag(kind)
                 .disabled(choices(kind).isAvailable == false)
@@ -103,12 +141,8 @@ public struct AgentOptionPickers: View {
         {
             agent = available
         }
-        let available = choices(agent)
-        if available.models.contains(model) == false {
-            model = available.defaultModel
-        }
-        if available.efforts.contains(effort) == false {
-            effort = available.defaultEffort
-        }
+        let selected = choices(agent).selection(model: model, effort: effort)
+        model = selected.model
+        effort = selected.effort
     }
 }

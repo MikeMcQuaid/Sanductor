@@ -5,70 +5,47 @@ import SanductorDomain
 /// and nothing to ask where it has none. Split from the sources for
 /// length.
 public extension SessionService {
-    // nil means "keep the fallback list", which callers treat
-    // differently from an empty answer.
-    // swiftlint:disable discouraged_optional_collection
-
     /// Asks the agent's CLI for its current models; nil when the
     /// command fails or yields nothing. The CLI runs inside the
     /// sandbox, where sessions run it anyway; running it as the host
     /// user made macOS prompt for broad disk access.
-    func discoverModels(for agent: AgentKind) async -> [String]? {
-        // swiftlint:enable discouraged_optional_collection
+    func discoverModels(for agent: AgentKind) async -> AgentModelCatalogue? {
         let runner = runner(for: agent)
-        if runner.modelListingCommand.isEmpty {
-            forgetDiscoveredModels(for: agent)
-        }
-        // An agent with no listing command has a curated list and
-        // nothing to discover; asking anyway starts a session.
-        guard runner.modelListingCommand.isEmpty == false else {
-            return nil
-        }
-
-        // A cache an older client wrote says what the server gives
-        // that client, which is less than the installed one gets: a
-        // session started before an upgrade kept rewriting Codex's
-        // cache with its own list, and a model the new client knew
-        // vanished from the picker each time. Such a cache is left
-        // unread, and the last list accepted stands.
-        if let file = runner.modelCacheFile,
-           let data = FileManager.default.contents(atPath: paths.sandboxHome + "/" + file),
-           let written = Self.clientVersion(inModelCache: data),
-           let installed = await probeVersion(of: agent),
-           ToolVersion.isOlder(written, than: installed)
-        {
-            return nil
-        }
-
         let argv = launcher.command(
-            payload: runner.modelListingCommand.joined(separator: " ") + " </dev/null",
+            payload: runner.modelListingCommand.joined(separator: " "),
             initialDirectory: launcher.sharedWorkspace,
             sessionID: UUID().uuidString,
             sessionName: "sanductor-model-listing",
         )
         let result = try? await processes.run(argv, workingDirectory: nil, environment: [:])
-        guard let result, result.succeeded else {
+        guard let result, result.succeeded,
+              let catalogue = runner.modelCatalogue(from: result.standardOutput), catalogue.models.isEmpty == false
+        else {
             return nil
         }
 
-        let models = runner.parseModelList(result.standardOutput)
-        return models.isEmpty ? nil : models
+        return catalogue
     }
 
-    /// The version of the client that wrote a model cache, when the
-    /// cache says; separated for tests.
-    static func clientVersion(inModelCache data: Data) -> String? {
-        let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
-        return object?["client_version"] as? String
+    /// Watches agent installations and the server-managed Codex catalogue.
+    func makeModelWatcher() -> WorkspaceWatcher {
+        WorkspaceWatcher(
+            roots: Quarantine.homebrewBinaries + [paths.sandboxHome + "/.local", paths.sandboxHome + "/.codex"],
+        )
     }
 
-    /// Throws away what was once discovered for an agent, so a list
-    /// scraped before the app knew better stops being offered.
-    func forgetDiscoveredModels(for agent: AgentKind) {
-        store.update { metadata in
-            metadata.discoveredModels[agent.rawValue] = nil
-            metadata.discoveredModelsVersion[agent.rawValue] = nil
+    /// File identity is cheap to check even when an unrelated CLI file changes.
+    func modelFilesStamp() -> String {
+        let binaries = Quarantine.homebrewBinaries.flatMap { prefix in
+            AgentKind.allCases.map { prefix + "/" + $0.rawValue }
+        } + AgentKind.allCases.map { paths.sandboxHome + "/.local/bin/" + $0.rawValue }
+        let files = binaries + [paths.sandboxHome + "/.codex/models_cache.json"]
+        return files.map { path in
+            let resolved = URL(filePath: path).resolvingSymlinksInPath().path
+            let attributes = try? FileManager.default.attributesOfItem(atPath: resolved)
+            return resolved + "#" + ((attributes?[.modificationDate] as? Date)?.description ?? "")
         }
+        .joined(separator: "\n")
     }
 
     /// What identifies the answer a listing would give: the CLI's
@@ -77,7 +54,9 @@ public extension SessionService {
     /// version alone, a model added server-side stayed missing from
     /// the picker until the CLI itself was upgraded.
     func modelListingStamp(for agent: AgentKind) async -> String? {
-        let version = await probeVersion(of: agent)
+        _ = Quarantine.clear(for: agent)
+        // Invalidate catalogues from the earlier cache parser, including missing effort lists.
+        let version = await probeVersion(of: agent).map { $0 + "#catalogue2" }
         guard let file = runner(for: agent).modelCacheFile else {
             return version
         }
@@ -92,6 +71,9 @@ public extension SessionService {
     /// rather than written here, so a new version names itself the
     /// first time it is used.
     func modelNames(for agent: AgentKind) -> [String: String] {
+        if let catalogue = store.load().modelCatalogues[agent.rawValue] {
+            return catalogue.names
+        }
         guard let file = runner(for: agent).modelNamesFile,
               let data = FileManager.default.contents(atPath: paths.sandboxHome + "/" + file),
               let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
@@ -121,13 +103,25 @@ public extension SessionService {
     /// opens on nothing makes the first thing anyone does a choice
     /// between names they have to look up.
     func launchDefaults(for agent: AgentKind, models: [String]) -> (model: String, effort: String) {
-        let runner = runner(for: agent)
-        return (models.first ?? runner.models.first ?? "", runner.defaultEffort ?? runner.efforts.first ?? "")
+        let model = models.first ?? ""
+        let catalogue = store.load().modelCatalogues[agent.rawValue]
+        let levels = catalogue?.efforts[model] ?? []
+        let preferred = catalogue?.defaultEfforts[model] ?? runner(for: agent).defaultEffort ?? ""
+        return (model, levels.contains(preferred) ? preferred : levels.first ?? "")
     }
 
-    /// Whether an agent has a listing of its own at all; one that
-    /// does not is offered its curated models and nothing else.
-    func reportsModels(_ agent: AgentKind) -> Bool {
-        runner(for: agent).modelListingCommand.isEmpty == false
+    /// Rejects stale saved settings as well as combinations submitted outside the pickers.
+    internal func validate(_ options: AgentLaunchOptions, for agent: AgentKind) throws {
+        if options.model == nil, options.effort == nil {
+            return
+        }
+        guard let catalogue = store.load().modelCatalogues[agent.rawValue] else {
+            throw SessionServiceError("Wait for " + agent.displayName
+                + " model discovery before choosing a model or effort.")
+        }
+        guard catalogue.supports(model: options.model, effort: options.effort) else {
+            throw SessionServiceError("The selected " + agent.displayName
+                + " model and effort are not supported together. Choose a current model and effort in Settings.")
+        }
     }
 }

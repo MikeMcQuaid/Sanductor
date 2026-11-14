@@ -210,13 +210,10 @@ struct GitHubClientTests {
         let claude = ClaudeCodeRunner()
         #expect(claude.optionArguments(model: "fable", effort: "max") == "--model fable --effort max")
         #expect(claude.optionArguments(model: nil, effort: nil).isEmpty)
-        #expect(claude.models.contains("fable"))
 
         let codex = CodexRunner()
-        #expect(codex.optionArguments(model: "sol", effort: "high")
-            == "--model sol -c model_reasoning_effort=high")
-        #expect(codex.models.contains("gpt-5.6-sol"))
-        #expect(codex.models.contains("gpt-5.4"))
+        #expect(codex.optionArguments(model: "gpt-6.1-sol", effort: "high")
+            == "--model gpt-6.1-sol -c model_reasoning_effort=high")
     }
 
     @Test

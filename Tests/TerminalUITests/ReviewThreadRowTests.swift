@@ -21,8 +21,8 @@ struct ReviewThreadRowTests {
                     resolveID: resolveID,
                     outsideDiffReviewID: resolveID.isEmpty ? 7 : nil,
                 ),
-                onToggleResolved: actions ? { Issue.record("Unexpected button press") } : nil,
-                onToggleResolveOnPush: actions ? { Issue.record("Must not mark a summary finding") } : nil,
+                onToggleResolved: actions ? { @MainActor in Issue.record("Unexpected button press") } : nil,
+                onToggleResolveOnPush: actions ? { @MainActor in Issue.record("Cannot mark a summary finding") } : nil,
             )
             .frame(width: 640)
         }

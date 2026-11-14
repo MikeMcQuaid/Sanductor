@@ -25,7 +25,7 @@ struct BranchSwitchPopover: View {
                 }
                 if let branches {
                     if branches.isEmpty {
-                        Text("Every other local branch is checked out elsewhere.")
+                        Text("No other local branches can be checked out here.")
                             .interfaceFont(.callout)
                             .foregroundStyle(.secondary)
                     } else {

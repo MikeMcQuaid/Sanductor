@@ -151,6 +151,12 @@ ask_choice() {
   label="$1"
   default="$2"
   shift 2
+  if [ "$#" -gt 0 ]; then
+    case " $* " in
+      *" ${default} "*) ;;
+      *) default="" ;;
+    esac
+  fi
   index=0
   line=""
   plain=""
@@ -400,14 +406,40 @@ sanductor_new() {
     agent="$(ask_choice Agent "$(default_for agent "${defaults}")" claude codex)"
     [ -n "${agent}" ] || agent=claude
 
-    efforts="$(default_for "${agent}-efforts" "${defaults}")"
     models="$(default_for "${agent}-models" "${defaults}")"
-    # shellcheck disable=SC2086
-    effort="$(ask_choice Effort "$(default_for "${agent}-effort" "${defaults}")" ${efforts})"
+    [ -n "${models}" ] || fail "open Sanductor on your Mac to discover models" 69
     # shellcheck disable=SC2086
     model="$(ask_choice Model "$(default_for "${agent}-model" "${defaults}")" ${models})"
+    efforts="$(default_for "${agent}-${model}-efforts" "${defaults}")"
+    effort=""
+    if [ -n "${efforts}" ]; then
+      effort_default="$(default_for "${agent}-effort" "${defaults}")"
+      case " ${efforts} " in
+        *" ${effort_default} "*) ;;
+        *) effort_default="$(default_for "${agent}-${model}-default-effort" "${defaults}")" ;;
+      esac
+      # shellcheck disable=SC2086
+      effort="$(ask_choice Effort "${effort_default}" ${efforts})"
+    fi
 
     prompt="$(ask_text Prompt)"
+  fi
+
+  if [ -n "${model}" ]; then
+    models="$(default_for "${agent}-models" "${defaults}")"
+    case " ${models} " in
+      *" ${model} "*) ;;
+      *) fail "model is unavailable; open Sanductor on your Mac to refresh the choices" ;;
+    esac
+  elif [ -n "${effort}" ]; then
+    fail "choose a model before its effort"
+  fi
+  if [ -n "${effort}" ]; then
+    efforts="$(default_for "${agent}-${model}-efforts" "${defaults}")"
+    case " ${efforts} " in
+      *" ${effort} "*) ;;
+      *) fail "effort is not supported by the selected model" ;;
+    esac
   fi
 
   repository_path="${repositories_root}/${repository}"

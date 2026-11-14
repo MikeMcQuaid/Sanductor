@@ -158,9 +158,13 @@ public extension SessionService {
     /// included, already holds — git would refuse those anyway.
     func availableBranches(worktree: Worktree) async -> [String] {
         let repository = Repository(name: worktree.repositoryName, path: worktree.repositoryPath)
-        let held = await (try? git.worktrees(of: repository))?.map(\.branch) ?? [worktree.branch]
-        let all = await git.branches(worktreePath: worktree.path)
-        return all.filter { held.contains($0) == false }
+        var held = await (try? git.worktrees(of: repository))?.map(\.branch) ?? [worktree.branch]
+        if let main = await git.currentBranch(worktreePath: repository.path) {
+            held.append(main)
+        }
+        let all = await git.branches(worktreePath: worktree.path, newestFirst: true)
+        let defaultBranch = await defaultBranchName(of: repository)
+        return all.filter { held.contains($0) == false && worktree.allowsSwitch(to: $0, defaultBranch: defaultBranch) }
     }
 
     /// Local branches a new session could start on, bar the default.
@@ -172,6 +176,15 @@ public extension SessionService {
     /// Checks out another local branch in place; git reports a
     /// conflicting dirty file rather than losing it.
     func switchBranch(_ branch: String, worktree: Worktree) async throws {
+        let repository = Repository(name: worktree.repositoryName, path: worktree.repositoryPath)
+        guard await worktree.allowsSwitch(to: branch, defaultBranch: defaultBranchName(of: repository)) else {
+            throw CommandError(command: "switch branch", result: ProcessResult(
+                status: 1,
+                standardOutput: "",
+                standardError: "Switch to the default branch in the repository checkout.",
+            ))
+        }
+
         try await git.checkout(branch: branch, worktreePath: worktree.path)
     }
 }

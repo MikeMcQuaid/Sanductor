@@ -7,23 +7,16 @@ import Testing
 @MainActor
 extension SessionNavigationTests {
     @Test
-    func `work settings retain canonical names without duplicating saved lowercase selections`() {
-        let fixture = Fixture()
-        defer { try? FileManager.default.removeItem(atPath: fixture.root) }
-        MetadataStore(file: fixture.root + "/state.json").update { metadata in
-            metadata.organisations = ["Homebrew", "Administrate"]
-        }
-        fixture.model.groups = ["homebrew", "ADMINISTRATE", "OtherOrg"].map { owner in
-            RepositoryGroup(
-                repository: Repository(name: "repo", path: "/" + owner, fullName: owner + "/repo"), items: [],
-            )
-        }
-        #expect(fixture.model.workModeOrganisations(selected: ["homebrew", "administrate", "SavedOrg"])
-            == ["Administrate", "Homebrew", "OtherOrg", "SavedOrg"])
+    func `work organisations exclude users and retain selected outside organisations`() async {
+        let fixture = Fixture(runner: WorkOrganisationRunner())
+        defer { fixture.close() }
+        let found = await fixture.model.workModeOrganisations(selected: ["mikemcquaid", "OtherUser", "OutsideOrg"])
+        #expect(found.choices == ["Homebrew", "OutsideOrg"])
+        #expect(found.users == ["MikeMcQuaid", "OtherUser"])
     }
 
-    @Test
-    func `work mode hides repositories and selection without dropping running state`() throws {
+    @Test(arguments: [false, true])
+    func `work mode hides repositories and selection without dropping running state`(individual: Bool) throws {
         let saved = AppSettings.workMode
         defer { AppSettings.workMode = saved }
         let fixture = Fixture()
@@ -39,7 +32,8 @@ extension SessionNavigationTests {
         model.selection = original.items.first
         var mode = WorkMode()
         mode.isEnabled = true
-        mode.organisations = ["work"]
+        mode.organisations = individual ? [] : ["work"]
+        mode.repositories = individual ? ["work/repo"] : []
         mode.weekdays = []
         AppSettings.workMode = mode
         model.refreshWorkMode()
@@ -54,5 +48,25 @@ extension SessionNavigationTests {
         model.refreshWorkMode()
         #expect(model.visibleGroups == model.groups)
         #expect(model.publishedSidebar.first?.isHidden == false)
+    }
+}
+
+// MARK: - WorkOrganisationRunner
+
+private struct WorkOrganisationRunner: ProcessRunner {
+    func run(
+        _ arguments: [String], workingDirectory _: String?, environment _: [String: String], outputLimit _: Int?,
+    ) -> ProcessResult {
+        let output =
+            if arguments.contains("user") {
+                "MikeMcQuaid"
+            } else if arguments.contains("user/orgs?per_page=100") {
+                "Homebrew"
+            } else if arguments.contains("users/OutsideOrg") {
+                "Organization"
+            } else {
+                "User"
+            }
+        return ProcessResult(status: 0, standardOutput: output, standardError: "")
     }
 }

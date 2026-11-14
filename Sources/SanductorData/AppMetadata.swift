@@ -82,8 +82,8 @@ public struct AppMetadata: Codable, Equatable, Sendable {
     /// Local tool defaults for new feedback contexts, by repository path.
     public var repositoryFeedbackDefaults: [String: RepositoryFeedbackDefaults] = [:]
 
-    /// Repository schedules and their durable launch claims.
-    public var scheduledPrompts: [ScheduledPrompt] = []
+    /// Reusable prompts, optional schedules and their durable launch claims.
+    public var savedPrompts: [SavedPrompt] = []
 
     /// Directories of your own listed under a repository: paths on
     /// the Mac that get a shell, an editor and a diff but never an
@@ -111,6 +111,7 @@ public struct AppMetadata: Codable, Equatable, Sendable {
     /// is asked again in the background: asking took twenty seconds
     /// of sandbox launch on every start.
     public var discoveredModels: [String: [String]] = [:]
+    public var modelCatalogues: [String: AgentModelCatalogue] = [:]
 
     /// The CLI version each model list came from: a list is asked
     /// for again only when the CLI has changed, since the answer
@@ -297,11 +298,17 @@ public struct AppMetadata: Codable, Equatable, Sendable {
 
     // MARK: Private
 
+    private enum LegacyKeys: String, CodingKey {
+        case schedules = "scheduledPrompts"
+    }
+
     private struct Ledgers: Decodable {
         // MARK: Lifecycle
 
         init(from decoder: any Decoder) throws {
             let container = try decoder.container(keyedBy: CodingKeys.self)
+            modelCatalogues = try container
+                .decodeIfPresent([String: AgentModelCatalogue].self, forKey: .modelCatalogues) ?? [:]
             discoveredModels = try container.decodeIfPresent([String: [String]].self, forKey: .discoveredModels) ?? [:]
             discoveredModelsVersion = try container
                 .decodeIfPresent([String: String].self, forKey: .discoveredModelsVersion) ?? [:]
@@ -313,7 +320,9 @@ public struct AppMetadata: Codable, Equatable, Sendable {
                 .decodeIfPresent([String: [String]].self, forKey: .requiredChecksCache) ?? [:]
             labelsCache = try container.decodeIfPresent([String: [String]].self, forKey: .labelsCache) ?? [:]
             stackFacts = try container.decodeIfPresent([String: CachedStackFacts].self, forKey: .stackFacts) ?? [:]
-            scheduledPrompts = try container.decodeIfPresent([ScheduledPrompt].self, forKey: .scheduledPrompts) ?? []
+            scheduledPrompts = try decoder.container(keyedBy: LegacyKeys.self)
+                .decodeIfPresent([SavedPrompt].self, forKey: .schedules) ?? []
+            savedPrompts = try container.decodeIfPresent([SavedPrompt].self, forKey: .savedPrompts) ?? []
             pullRequestAutomation = (try? container
                 .decodeIfPresent([String: AutomationEntry].self, forKey: .pullRequestAutomation))?
                             .compactMapValues(\.state) ?? [:]
@@ -326,6 +335,7 @@ public struct AppMetadata: Codable, Equatable, Sendable {
         // MARK: Internal
 
         var discoveredModels: [String: [String]] = [:]
+        var modelCatalogues: [String: AgentModelCatalogue] = [:]
         var discoveredModelsVersion: [String: String] = [:]
         var etags: [String: String] = [:]
         var pendingChecks: [String: String] = [:]
@@ -334,7 +344,8 @@ public struct AppMetadata: Codable, Equatable, Sendable {
         var requiredChecksCache: [String: [String]] = [:]
         var labelsCache: [String: [String]] = [:]
         var stackFacts: [String: CachedStackFacts] = [:]
-        var scheduledPrompts: [ScheduledPrompt] = []
+        var scheduledPrompts: [SavedPrompt] = []
+        var savedPrompts: [SavedPrompt] = []
         var pullRequestAutomation: [String: PullRequestAutomation] = [:]
         var repositoryFeedbackDefaults: [String: RepositoryFeedbackDefaults] = [:]
         var resolvedOutsideDiff: [String: Set<String>] = [:]
@@ -370,6 +381,7 @@ public struct AppMetadata: Codable, Equatable, Sendable {
     /// Takes the second batch of fields as the decoder read them.
     private mutating func adopt(_ ledgers: Ledgers) {
         discoveredModels = ledgers.discoveredModels
+        modelCatalogues = ledgers.modelCatalogues
         discoveredModelsVersion = ledgers.discoveredModelsVersion
         etags = ledgers.etags
         pendingChecks = ledgers.pendingChecks
@@ -378,7 +390,8 @@ public struct AppMetadata: Codable, Equatable, Sendable {
         requiredChecksCache = ledgers.requiredChecksCache
         labelsCache = ledgers.labelsCache
         stackFacts = ledgers.stackFacts
-        scheduledPrompts = ledgers.scheduledPrompts
+        let savedIDs = Set(ledgers.savedPrompts.map(\.id))
+        savedPrompts = ledgers.savedPrompts + ledgers.scheduledPrompts.filter { savedIDs.contains($0.id) == false }
         pullRequestAutomation = ledgers.pullRequestAutomation
         repositoryFeedbackDefaults = ledgers.repositoryFeedbackDefaults
         resolvedOutsideDiff = ledgers.resolvedOutsideDiff

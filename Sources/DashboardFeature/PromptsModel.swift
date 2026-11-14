@@ -4,17 +4,17 @@ import SanductorData
 import SanductorDomain
 import TerminalUI
 
-/// Owns schedule editing and a single timer for the next due launch.
+/// Owns reusable prompts and a single timer for their optional schedules.
 @preconcurrency
 @Observable
 @MainActor
-public final class ScheduledPromptsModel {
+public final class PromptsModel {
     // MARK: Lifecycle
 
-    /// Loads saved schedules without starting any work.
+    /// Loads saved prompts without starting any work.
     public init(store: MetadataStore, service: SessionService) {
         self.store = store
-        prompts = store.load().scheduledPrompts
+        prompts = store.load().savedPrompts
         launch = { try await service.launchScheduledPrompt($0, due: $1) }
     }
 
@@ -24,27 +24,32 @@ public final class ScheduledPromptsModel {
 
     // MARK: Public
 
-    /// The in-memory schedules rendered by Settings.
-    public private(set) var prompts: [ScheduledPrompt]
+    /// The in-memory library shared by Settings and prompt menus.
+    public private(set) var prompts: [SavedPrompt]
     /// The schedule whose agent is currently being launched.
     public private(set) var runningID: UUID?
     /// The last persistence failure, also preventing unrecorded launches.
     public private(set) var error: String?
 
     /// Edits preserve launch results, including a launch that finished
-    /// while the editor was open. Only recurrence changes reset the due date.
+    /// while the editor was open. Schedule configuration changes reset the due date.
     @discardableResult
-    public func save(_ draft: ScheduledPrompt) -> Bool {
-        guard draft.isValid, let next = draft.schedule.nextRun(after: now()) else {
+    public func save(_ draft: SavedPrompt) -> Bool {
+        let next = draft.schedule?.nextRun(after: now())
+        guard draft.isValid, draft.schedule == nil || next != nil else {
             return false
         }
 
         var prompt = draft
+        if prompt.schedule == nil {
+            prompt.repositoryPath = ""
+        }
         if let previous = prompts.first(where: { $0.id == draft.id }) {
             prompt.lastRun = previous.lastRun
             prompt.lastSession = previous.lastSession
             prompt.lastError = previous.lastError
-            prompt.nextRun = previous.schedule == draft.schedule && previous.isEnabled == draft.isEnabled
+            prompt.nextRun = draft.schedule != nil && previous.schedule == draft.schedule
+                && previous.repositoryPath == draft.repositoryPath && previous.isEnabled == draft.isEnabled
                 ? previous.nextRun : next
         } else {
             prompt.nextRun = next
@@ -56,7 +61,7 @@ public final class ScheduledPromptsModel {
     }
 
     /// Removes future runs while preserving existing sessions.
-    public func delete(_ prompt: ScheduledPrompt) {
+    public func delete(_ prompt: SavedPrompt) {
         _ = persist { $0.removeAll { $0.id == prompt.id } }
     }
 
@@ -69,15 +74,26 @@ public final class ScheduledPromptsModel {
 
         timer?.invalidate()
         defer { armTimer() }
-        let dueIDs = prompts.filter { $0.isEnabled && ($0.nextRun ?? .distantFuture) <= now() }.map(\.id)
+        let dueIDs = prompts.filter { prompt in
+            prompt.schedule != nil && prompt.isEnabled && (prompt.nextRun ?? .distantFuture) <= now()
+        }
+        .map(\.id)
         for id in dueIDs {
-            guard let prompt = prompts.first(where: { $0.id == id }), prompt.isEnabled,
+            guard let prompt = prompts.first(where: { $0.id == id }), prompt.isEnabled, prompt.schedule != nil,
                   let due = prompt.nextRun, due <= now()
             else {
                 continue
             }
 
-            await run(prompt, due: due, advancesSchedule: true)
+            if isOnWorkHoliday(prompt) {
+                _ = persist { prompts in
+                    if let index = prompts.firstIndex(where: { $0.id == id }) {
+                        prompts[index].nextRun = prompt.schedule?.nextRun(after: now())
+                    }
+                }
+            } else {
+                await run(prompt, due: due, advancesSchedule: true)
+            }
             if error != nil {
                 return
             }
@@ -85,8 +101,10 @@ public final class ScheduledPromptsModel {
     }
 
     /// Starts the latest saved job without moving a future occurrence or unpausing it.
-    public func start(_ savedPrompt: ScheduledPrompt) async {
-        guard runningID == nil, let prompt = prompts.first(where: { $0.id == savedPrompt.id }), prompt.isValid else {
+    public func start(_ savedPrompt: SavedPrompt) async {
+        guard runningID == nil, let prompt = prompts.first(where: { $0.id == savedPrompt.id }), prompt.isValid,
+              prompt.schedule != nil, isOnWorkHoliday(prompt) == false
+        else {
             return
         }
 
@@ -101,7 +119,26 @@ public final class ScheduledPromptsModel {
     // MARK: Internal
 
     var now: () -> Date = Date.init
-    var launch: (ScheduledPrompt, Date) async throws -> String
+    var workMode: () -> WorkMode = { AppSettings.workMode }
+    var launch: (SavedPrompt, Date) async throws -> String
+
+    func availablePrompts(repositoryPath: String?) -> [SavedPrompt] {
+        prompts.filter { $0.isValid && ($0.schedule == nil || $0.repositoryPath == repositoryPath) }
+            .sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
+    }
+
+    func isOnWorkHoliday(_ prompt: SavedPrompt) -> Bool {
+        let settings = workMode()
+        guard settings.isOnHoliday(at: now()),
+              let repository = store.load().cachedSidebar.first(where: { $0.path == prompt.repositoryPath })
+        else {
+            return false
+        }
+
+        return settings.includes(Repository(
+            name: repository.name, path: repository.path, fullName: repository.fullName,
+        ))
+    }
 
     // MARK: Private
 
@@ -110,7 +147,7 @@ public final class ScheduledPromptsModel {
     private let store: MetadataStore
     private var timer: Timer?
 
-    private func run(_ prompt: ScheduledPrompt, due: Date, advancesSchedule: Bool) async {
+    private func run(_ prompt: SavedPrompt, due: Date, advancesSchedule: Bool) async {
         runningID = prompt.id
         timer?.invalidate()
         defer { runningID = nil; armTimer() }
@@ -120,7 +157,7 @@ public final class ScheduledPromptsModel {
             }
 
             if advancesSchedule {
-                prompts[index].nextRun = prompt.schedule.nextRun(after: now())
+                prompts[index].nextRun = prompt.schedule?.nextRun(after: now())
             }
             prompts[index].lastRun = max(now(), due)
             prompts[index].lastSession = nil
@@ -151,22 +188,22 @@ public final class ScheduledPromptsModel {
         UtilityTabTarget.requestSidebarRefresh()
     }
 
-    private func persist(_ change: (inout [ScheduledPrompt]) -> Void) -> Bool {
+    private func persist(_ change: (inout [SavedPrompt]) -> Void) -> Bool {
         var firstFailure: String?
         for _ in 0 ..< Self.saveAttempts {
             do {
-                try store.updatePersisting { change(&$0.scheduledPrompts) }
-                prompts = store.load().scheduledPrompts
+                try store.updatePersisting { change(&$0.savedPrompts) }
+                prompts = store.load().savedPrompts
                 error = nil
                 armTimer()
                 return true
             } catch {
                 if let firstFailure {
-                    self.error = "Could not save scheduled prompts: " + firstFailure
+                    self.error = "Could not save prompts: " + firstFailure
                         + "; then again: " + error.localizedDescription
                 } else {
                     firstFailure = error.localizedDescription
-                    PerformanceLog.recordMessage("Saving schedules: " + error.localizedDescription, isError: true)
+                    PerformanceLog.recordMessage("Saving prompts: " + error.localizedDescription, isError: true)
                 }
             }
         }
@@ -180,7 +217,7 @@ public final class ScheduledPromptsModel {
         timer?.invalidate()
         timer = nil
         guard runningID == nil, error == nil,
-              let next = prompts.filter(\.isEnabled).compactMap(\.nextRun).min()
+              let next = prompts.filter({ $0.schedule != nil && $0.isEnabled }).compactMap(\.nextRun).min()
         else {
             return
         }

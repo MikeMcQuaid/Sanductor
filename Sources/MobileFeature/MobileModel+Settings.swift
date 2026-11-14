@@ -10,27 +10,29 @@ extension MobileModel {
         do {
             publicKey = try SSHCredentials.publicKey()
         } catch {
-            self.error = configuration.errorMessage(error)
+            self.error = (activeConfiguration ?? configuration).errorMessage(error)
         }
     }
 
     func trustHost(_ key: String) {
         do {
-            try SSHCredentials.trust(key, for: configuration.hostIdentity)
+            try SSHCredentials.trust(key, for: (activeConfiguration ?? configuration).hostIdentity)
             pendingHostKey = nil
             reconnect()
         } catch {
-            self.error = configuration.errorMessage(error)
+            self.error = (activeConfiguration ?? configuration).errorMessage(error)
         }
     }
 
     func forgetHost() {
         deactivate()
         do {
-            try SSHCredentials.forgetHost(configuration.hostIdentity)
-            error = "The saved host key was removed. Reconnect to verify the new key."
+            for endpoint in configuration.connectionCandidates {
+                try SSHCredentials.forgetHost(endpoint.hostIdentity)
+            }
+            error = "The saved host keys were removed. Reconnect to verify the new key."
         } catch {
-            self.error = configuration.errorMessage(error)
+            self.error = (activeConfiguration ?? configuration).errorMessage(error)
         }
     }
 }

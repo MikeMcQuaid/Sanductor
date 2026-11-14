@@ -61,6 +61,7 @@ public extension SessionService {
     ) async throws -> String {
         let sessionName = SessionName.make(repository: worktree.repositoryName, branch: worktree.branch, agent: agent)
         // Cleared first and probed beside the kill, as creation does.
+        try validate(options, for: agent)
         await clearQuarantine(for: agent)
         async let probed = probeVersion(of: agent)
         await killSession(name: sessionName)
@@ -82,7 +83,7 @@ public extension SessionService {
     /// has not (yet) answered.
     func launchChoices(for agent: AgentKind) -> (models: [String], efforts: [String]) {
         let runner = runner(for: agent)
-        return (runner.models, runner.efforts)
+        return (store.load().modelCatalogues[agent.rawValue]?.models ?? [], runner.efforts)
     }
 
     /// Creates a session whose prompt is a GitHub issue plus the
@@ -95,6 +96,7 @@ public extension SessionService {
         options: AgentLaunchOptions = AgentLaunchOptions(),
         baseBranch: String? = nil,
     ) async throws -> String {
+        try validate(options, for: agent)
         await clearQuarantine(for: agent)
         async let probed = probeVersion(of: agent)
         let issue = try await github.issue(repositoryPath: repository.path, number: number)

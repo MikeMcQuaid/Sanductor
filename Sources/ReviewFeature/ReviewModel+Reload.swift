@@ -39,7 +39,13 @@ extension ReviewModel {
             if let commitTarget {
                 try await loadCommit(commitTarget, generation: generation)
             } else if let stackTarget {
-                try await loadStackEntry(parent: stackTarget.parent, branch: stackTarget.branch, generation: generation)
+                if scope == .lastCommit {
+                    try await loadCommit(stackTarget.branch, generation: generation)
+                } else {
+                    try await loadStackEntry(
+                        parent: stackTarget.parent, branch: stackTarget.branch, generation: generation,
+                    )
+                }
             } else {
                 try await loadScope(generation: generation)
                 try checkReload(generation)
@@ -181,6 +187,8 @@ extension ReviewModel {
     /// One stack entry's own changes, read-only.
     private func loadStackEntry(parent: String, branch: String, generation: Int) async throws {
         branchCommits = []
+        threads = []
+        threadPullRequestNumber = nil
         showsUncommitted = false
         let context = try await git.reviewCommitContext(
             worktreePath: worktreePath, revisions: [parent + ".." + branch],
@@ -204,6 +212,8 @@ extension ReviewModel {
     /// One commit's diff and message, neither of which the pane writes back.
     private func loadCommit(_ commit: String, generation: Int) async throws {
         branchCommits = []
+        threads = []
+        threadPullRequestNumber = nil
         showsUncommitted = false
         let files = try await DiffParser.parse(git.commitDiff(
             worktreePath: worktreePath,
