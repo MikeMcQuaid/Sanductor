@@ -609,8 +609,9 @@ transcripts live (per working directory for Claude Code; one flat date
 tree for Codex, which `CodexTranscriptIndex` attributes by the directory
 each rollout records, keyed by file name stem because subagent rollouts
 share their parent's embedded id); the models and efforts it offers; its
-version and model listing command. Agent state (working, idle, done,
-blocked) comes from herdr, the same for every agent, so no runner detects
+version and model listing command; account quota requests and decoding.
+Agent state (working, idle, done, blocked) comes from herdr, the same for
+every agent, so no runner detects
 anything. Foreign-session discovery is reconciliation in
 `SanductorData`, outside the protocol.
 
@@ -1457,6 +1458,30 @@ reads additional source files.
    read, including new entries while the pane is visible. A collapsed
    utility pane or a hidden window leaves errors unread, and reading
    never clears the log.
+   A compact footer below the log shows Codex usage, Claude usage and,
+   only on plans reporting its allowance, Fable usage, with coloured
+   agent icons, percentages and reset times. Allowances with the
+   same period and reset second share a row and show the reset once,
+   keeping Claude and Fable together despite fractional-second offsets.
+   Both adapters read their usage endpoints as the sandbox user,
+   using its existing agent sign-in.
+   Tokens stay inside the sandbox and travel to curl through standard
+   input, never arguments or logs. Claude checks only explicitly
+   unlocked sandbox keychains, falling back to its credentials file;
+   Codex uses its auth file.
+   Requests use explicit shell separators: sudo's login shell removes
+   escaped newlines, so line breaks cannot separate commands there.
+   Each complete quota command has a 30-second deadline inside the
+   sandbox, including credential helpers. Expiry kills its own process
+   group, so stalled helpers cannot hold pipes open or prevent later
+   refreshes. The supervisor exits with the command on normal completion.
+   The agents remain responsible for refreshing their own credentials.
+   `AgentQuotaModel` retains readings across tab and worktree switches,
+   coalesces requests and refreshes every ten minutes while Messages
+   is visible, through `RefreshCadence`. Hidden panes do no quota work.
+   Missing limits are unavailable, never zero; a failed refresh keeps
+   the last reading with a stale indicator and its timestamp in hover help.
+   Quota failures stay in that section and never add unread errors.
    Every line reads the same: `repository: branch: what
    happened`, the repository bold and the branch monospaced, with
    any other identifier the line names in backticks drawn the same

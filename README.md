@@ -23,7 +23,7 @@ No Sanductor account, subscription or hosted relay exists or is planned.
 - Signs and pushes from any published stack layer, with rebasing, labels, merge queues, automerge and branch and temporary file cleanup.
 - Keeps agents running and reachable over SSH after quitting, with private backups and 30-day retention that preserves ongoing work.
 - Saves reusable prompts and schedules recurring repository tasks.
-- Tracks agents, PRs and blockers by repository or status, with bulk worktree actions and notifications.
+- Tracks agents, PRs and blockers by repository or status, with bulk actions, notifications and account quota usage in Messages.
 - Edits code with syntax highlighting, fuzzy file search and shell tabs.
 - Starts tasks and checks blockers through Shortcuts and Siri, with an [iPhone companion](#-iphone-companion-app) and agent shortcut keys.
 

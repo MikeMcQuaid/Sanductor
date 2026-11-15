@@ -1,20 +1,21 @@
 import SanductorDomain
 import SwiftUI
 
-/// The same monochrome agent mark in desktop and phone session rows.
+/// The shared agent mark, monochrome unless its original colours are requested.
 public struct AgentIcon: View {
     // MARK: Lifecycle
 
-    public init(_ agent: AgentKind, size: CGFloat) {
+    public init(_ agent: AgentKind, size: CGFloat, coloured: Bool = false) {
         self.agent = agent
         self.size = size
+        self.coloured = coloured
     }
 
     // MARK: Public
 
     public var body: some View {
-        Image(agent.iconAssetName)
-            .renderingMode(.template)
+        Image(coloured ? agent.connectedIconAssetName : agent.iconAssetName)
+            .renderingMode(coloured ? .original : .template)
             .resizable()
             .scaledToFit()
             .frame(width: size, height: size)
@@ -25,4 +26,5 @@ public struct AgentIcon: View {
 
     private let agent: AgentKind
     private let size: CGFloat
+    private let coloured: Bool
 }

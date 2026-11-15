@@ -15,6 +15,12 @@ public protocol AgentRunner: Sendable {
     /// Reads local sign-in state without starting an interactive session.
     func authenticationCommand(paths: WorkspacePaths) -> String?
 
+    /// Reads account usage inside the sandbox without exposing credentials.
+    var quotaCommand: String? { get }
+
+    /// Normalises the provider's usage response into displayable allowances.
+    func parseQuota(_ data: Data) throws -> [AgentQuota]
+
     /// The shell command that starts the agent interactively, with
     /// caller-supplied extra arguments appended verbatim and the
     /// prompt file's content as the initial message when given.
