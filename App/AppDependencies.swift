@@ -2,6 +2,7 @@ import DashboardFeature
 import ReviewFeature
 import SanductorData
 import SanductorInterface
+import TerminalUI
 
 /// Builds every adapter once and hands them to the features; the
 /// app's only wiring.
@@ -38,6 +39,7 @@ final class AppDependencies {
         git = gitClient
         github = githubClient
         service = sessionService
+        agentQuota = AgentQuotaModel(read: sessionService.quota)
         setup = SetupModel(check: SetupChecker(service: sessionService).check)
         localReviews = LocalReviewStore(service: sessionService)
         store = metadataStore
@@ -72,6 +74,7 @@ final class AppDependencies {
     let git: GitClient
     let github: GitHubClient
     let service: SessionService
+    let agentQuota: AgentQuotaModel
     let setup: SetupModel
     let localReviews: LocalReviewStore
     let dashboard: DashboardModel

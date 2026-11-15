@@ -9,6 +9,9 @@ import Foundation
 /// every tick that asks herdr is a `sudo` login shell, and a machine
 /// on battery with nothing happening should cost nothing.
 public enum RefreshCadence {
+    /// Account usage has no local change event; ask only while its pane is visible.
+    public static let agentQuotaSeconds: TimeInterval = 600
+
     /// Age-based expiry has no filesystem event; maintenance runs daily while open.
     public static let conversationMaintenanceSeconds: TimeInterval = 86_400
 

@@ -115,7 +115,10 @@ extension RootView {
             pullRequestsPane(for: item, target: target)
                 .hidden(shown != .pullRequests)
             if shown == .errors {
-                ErrorsPane(isVisible: dependencies.dashboard.isWindowVisible)
+                ErrorsPane(
+                    isVisible: dependencies.dashboard.isWindowVisible && showsUtility && isCovered == false,
+                    quota: dependencies.agentQuota,
+                )
             }
         }
     }

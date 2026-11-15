@@ -29,6 +29,10 @@ struct PromptCaptureRunner: AgentRunner {
         nil
     }
 
+    func parseQuota(_: Data) -> [AgentQuota] {
+        []
+    }
+
     /// The prompt travels exactly as it does for a real agent, after
     /// `--` and through the pane's shell, into a command standing in
     /// for the agent, so whatever the shell would do to it on the

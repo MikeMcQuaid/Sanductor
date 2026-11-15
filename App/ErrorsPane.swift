@@ -8,21 +8,11 @@ struct ErrorsPane: View {
     // MARK: Internal
 
     let isVisible: Bool
+    let quota: AgentQuotaModel
 
     var body: some View {
         VStack(spacing: 0) {
-            HStack {
-                Spacer()
-                Button("Copy all") { copyAll() }
-                    .controlSize(.small)
-                    .disabled(log.entries.isEmpty)
-                    .hoverHelp("Copy every logged message to the clipboard")
-                Button("Clear") { log.clear() }
-                    .controlSize(.small)
-                    .disabled(log.entries.isEmpty)
-                    .hoverHelp("Empty the log; the tab stays for this session")
-            }
-            .padding(Self.padding)
+            controls
             Divider()
             if log.entries.isEmpty {
                 Text("No messages since the last clear.")
@@ -44,6 +34,8 @@ struct ErrorsPane: View {
                     ),
                 ))
             }
+            Divider()
+            AgentQuotaView(model: quota, isVisible: isVisible)
         }
         .onChange(of: isVisible ? log.entries.last?.id : nil, initial: true) {
             if isVisible {
@@ -59,6 +51,21 @@ struct ErrorsPane: View {
     private var log: ErrorLog = .shared
     private var interfaceStyle: InterfaceStyle = .init()
     private var nameStyle: NameStyle = .init()
+
+    private var controls: some View {
+        HStack {
+            Spacer()
+            Button("Copy all") { copyAll() }
+                .controlSize(.small)
+                .disabled(log.entries.isEmpty)
+                .hoverHelp("Copy every logged message to the clipboard")
+            Button("Clear") { log.clear() }
+                .controlSize(.small)
+                .disabled(log.entries.isEmpty)
+                .hoverHelp("Empty the log; the tab stays for this session")
+        }
+        .padding(Self.padding)
+    }
 
     private func copyAll() {
         let text = log.entries

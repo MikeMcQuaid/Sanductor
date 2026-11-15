@@ -59,7 +59,7 @@ enum UtilityTab: String, CaseIterable {
             "An embedded browser for dev servers the agent starts and pull request pages; logins persist"
 
         case .errors:
-            "Every failure and status message this session, in full and copyable"
+            "Account quota usage and this session's full failure and status messages. Messages can be copied."
         }
     }
 }
