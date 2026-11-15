@@ -17,9 +17,10 @@
             rows.distribution = .fillEqually
             rows.translatesAutoresizingMaskIntoConstraints = false
             addSubview(rows)
+            let horizontalPadding = expanded ? Self.padding : Self.spacing
             NSLayoutConstraint.activate([
-                rows.leadingAnchor.constraint(equalTo: leadingAnchor, constant: Self.padding),
-                rows.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -Self.padding),
+                rows.leadingAnchor.constraint(equalTo: leadingAnchor, constant: horizontalPadding),
+                rows.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -horizontalPadding),
                 rows.topAnchor.constraint(equalTo: topAnchor, constant: Self.padding),
                 rows.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -Self.padding),
                 heightAnchor.constraint(equalToConstant: intrinsicContentSize.height),
@@ -68,6 +69,7 @@
         private static let keyHeight: CGFloat = 44
         private static let padding: CGFloat = 8
         private static let spacing: CGFloat = 4
+        private static let accessorySpacing: CGFloat = 2
         private static let extraRowCount: CGFloat = 4
         private static let repeatDelayMilliseconds = 600
         private static let repeatInterval: Duration = .milliseconds(100)
@@ -79,11 +81,15 @@
         private var repeatTask: Task<Void, Never>?
 
         private func accessoryRow() -> UIStackView {
-            row([
+            let stack = row([
                 key("Esc", bytes: EscapeSequences.cmdEsc),
                 key("Tab", bytes: EscapeSequences.cmdTab, image: "arrow.right.to.line.compact"),
                 key("Up", bytes: EscapeSequences.moveUpNormal, image: "arrow.up", repeats: true),
                 key("Down", bytes: EscapeSequences.moveDownNormal, image: "arrow.down", repeats: true),
+                (terminal?.agent?.answerQuestionInput).flatMap { bytes in
+                    bytes.isEmpty ? nil
+                        : key("Answer question", bytes: bytes, image: "questionmark.bubble", modifiers: false)
+                },
                 key("Return", bytes: Array("\r".utf8), image: "return"),
                 button("Agent keys", image: "ellipsis") { [weak self] _ in
                     guard let target = self?.terminal else {
@@ -98,7 +104,9 @@
                     self?.terminal?.resetModifiers()
                     _ = self?.terminal?.resignFirstResponder()
                 },
-            ])
+            ].compactMap(\.self))
+            stack.spacing = Self.accessorySpacing
+            return stack
         }
 
         private func extraRows() -> [UIStackView] {

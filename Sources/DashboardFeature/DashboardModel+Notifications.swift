@@ -1,5 +1,6 @@
 import AppKit
 import Foundation
+import SanductorData
 import SanductorDomain
 import TerminalUI
 import UserNotifications
@@ -21,7 +22,7 @@ extension DashboardModel {
             let completedTurn = previous.session?.activity == .working && session.activity == .done
             if completedTurn {
                 if feedbackStatus(for: item) == nil {
-                    post(.done, title: "Agent finished", body: body)
+                    post(.done, repositoryPath: item.worktree.repositoryPath, title: "Agent finished", body: body)
                 }
                 // The turn is assumed to have committed, so the
                 // branch's pull request stamps are forgotten here,
@@ -32,7 +33,7 @@ extension DashboardModel {
                     branch: item.worktree.branch,
                 )
             } else if previous.session?.activity != .blocked, session.activity == .blocked {
-                post(.blocked, title: "Agent needs input", body: body)
+                post(.blocked, repositoryPath: item.worktree.repositoryPath, title: "Agent needs input", body: body)
             }
         }
         updateDockBadge(for: new)
@@ -51,6 +52,7 @@ extension DashboardModel {
                     : ": " + URL(fileURLWithPath: state.localWorktreePath ?? state.repositoryPath).lastPathComponent)
             post(
                 notice == .finished ? .done : .blocked,
+                repositoryPath: state.repositoryPath,
                 title: notice == .finished ? "Autofix finished" : "Autofix needs attention",
                 body: name + "\n" + (state.isLoopRunning
                     ? state.activityStatus : state.lastResult),
@@ -58,17 +60,26 @@ extension DashboardModel {
         }
     }
 
-    // MARK: Private
-
-    private func updateDockBadge(for groups: [RepositoryGroup]) {
+    func updateDockBadge(for groups: [RepositoryGroup]) {
         let attention = groups.flatMap(\.items).count { item in
             item.session?.activity == .blocked && NotificationPreferences.badges
+                && silencesWork(repositoryPath: item.worktree.repositoryPath) == false
         }
-        NSApp.dockTile.badgeLabel = attention > 0 ? String(attention) : nil
+        NSApp?.dockTile.badgeLabel = attention > 0 ? String(attention) : nil
     }
 
-    private func post(_ event: NotificationPreferences.Event, title: String, body: String) {
-        guard NotificationPreferences.notifies(event) else {
+    // MARK: Private
+
+    private func silencesWork(repositoryPath: String) -> Bool {
+        guard let repository = groups.first(where: { $0.repository.path == repositoryPath })?.repository else {
+            return false
+        }
+
+        return AppSettings.workMode.silences(repository, at: Date())
+    }
+
+    private func post(_ event: NotificationPreferences.Event, repositoryPath: String, title: String, body: String) {
+        guard NotificationPreferences.notifies(event), silencesWork(repositoryPath: repositoryPath) == false else {
             return
         }
 

@@ -102,6 +102,12 @@ public struct GitHubClient: Sendable {
             .filter { $0.isEmpty == false }
     }
 
+    /// Distinguishes user accounts from organisations, including owners outside memberships.
+    public func isOrganisation(owner: String, directory: String) async throws -> Bool {
+        let result = try await gh(["api", "users/" + owner, "--cache", "1h", "--jq", ".type"], in: directory)
+        return result.standardOutput.trimmingCharacters(in: .whitespacesAndNewlines) == "Organization"
+    }
+
     /// Every repository under one owner, as `owner/name`, most
     /// recently pushed first.
     public func repositories(owner: String, directory: String) async throws -> [String] {

@@ -110,6 +110,7 @@ public struct SessionService: Sendable {
         // takes the probe with it, and after the quarantine is
         // cleared, since Gatekeeper kills the probe on an install
         // Homebrew left quarantined just as it would the agent.
+        try validate(options, for: agent)
         await clearQuarantine(for: agent)
         async let probed = probeVersion(of: agent)
         await progress("Naming the branch from the prompt, and asking the CLI its version beside it")
@@ -228,6 +229,7 @@ public struct SessionService: Sendable {
     ) async throws -> String {
         try requireSandboxWorkspace(slot.path)
 
+        try validate(options, for: agent)
         let sessionName = SessionName.make(repository: slot.repository.name, branch: slot.branch, agent: agent)
         let arguments = runner(for: agent).optionArguments(model: options.model, effort: options.effort)
         await progress("Writing the prompt file")

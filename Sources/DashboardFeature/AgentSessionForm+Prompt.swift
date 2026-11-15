@@ -2,6 +2,7 @@ import AppKit
 import SwiftUI
 
 extension AgentSessionForm {
+    static let spacing: CGFloat = 10
     static let promptHeight: CGFloat = 140
     static let contextHeight: CGFloat = 70
 
@@ -31,6 +32,21 @@ extension AgentSessionForm {
         }
 
         // MARK: Internal
+
+        func prepend(_ prefix: String) -> String? {
+            guard let editor = textView else {
+                return nil
+            }
+
+            let existing = editor.string
+            editor.unmarkText()
+            _ = unsafe editor.window?.makeFirstResponder(editor)
+            editor.insertText(
+                prefix + (existing.isEmpty ? "" : "\n\n" + existing),
+                replacementRange: NSRange(location: 0, length: editor.string.utf16.count),
+            )
+            return editor.string
+        }
 
         func capture() -> String? {
             var editor = textView

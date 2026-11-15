@@ -5,22 +5,10 @@ import TerminalUI
 
 /// The one session-creation form, shared by the New Session sheet and
 /// the per-worktree pane: source (typed prompt, or an open issue, pull
-/// request or security advisory picked from the repository), agent,
+/// request, discussion or security advisory), agent,
 /// model and effort.
 struct AgentSessionForm: View {
     // MARK: Internal
-
-    /// What the user chose, handed to the submit action.
-    struct Submission {
-        let source: PromptSource
-        /// The picked issues or pull requests, one launch each.
-        let numbers: [Int]
-        let ghsaID: String?
-        let prompt: String
-        let context: String
-        let agent: AgentKind
-        let options: AgentLaunchOptions
-    }
 
     /// Where the draft is kept between forms and launches.
     static let promptKey = "newSessionPrompt"
@@ -64,8 +52,6 @@ struct AgentSessionForm: View {
 
     // MARK: Private
 
-    private static let spacing: CGFloat = 10
-
     @State private var source: PromptSource = .prompt
     /// The last agent, model and effort come back next time: the
     /// agent persists by name beside the model and effort that
@@ -80,6 +66,7 @@ struct AgentSessionForm: View {
     @State private var issueNumbers: Set<Int> = []
     @State private var pullRequestNumbers: Set<Int> = []
     @State private var ghsaID: String?
+    @State private var discussionURL: String?
 
     /// Guards against double submission: creating a worktree takes
     /// seconds, and a second click during it started a second
@@ -89,10 +76,6 @@ struct AgentSessionForm: View {
     @State private var pullRequests: [PullRequestSummary] = []
     /// Until the fetch answers, an empty list is not yet proven empty.
     @State private var isLoadingSources = false
-    /// Read only while the Advisory source shows, and never cached:
-    /// the titles describe unpublished vulnerabilities.
-    @State private var advisories: [SecurityAdvisorySummary] = []
-    @State private var isLoadingAdvisories = false
     /// The one thing typed here, whichever source is chosen: the
     /// whole prompt when there is no issue or pull request, and what
     /// to say about one when there is. Two fields meant choosing an
@@ -120,7 +103,9 @@ struct AgentSessionForm: View {
     }
 
     private var submitDisabled: Bool {
-        guard repository != nil, agentModel.isEmpty == false, agentEffort.isEmpty == false else {
+        guard repository != nil,
+              model.launchChoices(for: agent.wrappedValue).supports(model: agentModel, effort: agentEffort)
+        else {
             return true
         }
 
@@ -134,6 +119,9 @@ struct AgentSessionForm: View {
 
         case .advisory:
             return ghsaID == nil
+
+        case .discussion:
+            return discussionURL == nil
         }
     }
 
@@ -146,6 +134,7 @@ struct AgentSessionForm: View {
             pullRequestNumbers
 
         case .advisory,
+             .discussion,
              .prompt:
             []
         }
@@ -169,7 +158,7 @@ struct AgentSessionForm: View {
             .pickerStyle(.segmented)
             .labelsHidden()
             .hoverHelp(
-                "Where the prompt comes from: typed text, an open issue or pull request,"
+                "Where the prompt comes from: typed text, an open issue, pull request or discussion,"
                     + " or a security advisory in triage or draft",
             )
             AgentOptionPickers(
@@ -179,6 +168,14 @@ struct AgentSessionForm: View {
             ) { model.launchChoices(for: $0) }
             sourceFields
             HStack {
+                SavedPromptMenu(model: model, repositoryPath: repository?.path) { saved in
+                    guard let text = promptEditor.prepend(saved) else {
+                        ErrorLog.shared.report("Could not read the prompt editor. Your draft has been kept.")
+                        return
+                    }
+
+                    prompt = text
+                }
                 Spacer()
                 submitButton
             }
@@ -203,24 +200,23 @@ struct AgentSessionForm: View {
                 .border(.separator)
 
         case .advisory,
+             .discussion,
              .issue,
              .pullRequest:
             SourcePicker(
+                model: model,
                 source: source,
                 repository: repository,
                 picksSeveral: picksSeveral,
                 issueNumbers: $issueNumbers,
                 pullRequestNumbers: $pullRequestNumbers,
                 ghsaID: $ghsaID,
+                discussionURL: $discussionURL,
                 issues: issues,
                 pullRequests: pullRequests,
-                advisories: advisories,
                 isLoadingSources: isLoadingSources,
-                isLoadingAdvisories: isLoadingAdvisories,
-                reloadAdvisories: reloadAdvisories,
-                searchIssues: lookUp(issues, search: model.searchOpenIssues(repository:query:)),
-                searchPullRequests: lookUp(pullRequests, search: model.searchOpenPullRequests(repository:query:)),
             )
+            .id(repository?.id ?? "")
             PromptEditor(text: $prompt, view: promptEditor)
                 .frame(minHeight: Self.contextHeight)
                 .border(.separator)
@@ -232,7 +228,7 @@ struct AgentSessionForm: View {
         issueNumbers = []
         pullRequestNumbers = []
         ghsaID = nil
-        advisories = []
+        discussionURL = nil
         applyRetry()
         guard let repository else {
             issues = []
@@ -264,21 +260,6 @@ struct AgentSessionForm: View {
         isLoadingSources = false
     }
 
-    private func reloadAdvisories() async {
-        guard let repository else {
-            return
-        }
-
-        isLoadingAdvisories = true
-        let fresh = await model.securityAdvisories(repository: repository)
-        guard Task.isCancelled == false else {
-            return
-        }
-
-        advisories = fresh
-        isLoadingAdvisories = false
-    }
-
     /// Takes back a failed launch's draft meant for this form: its
     /// text, source and pick.
     private func applyRetry() {
@@ -294,6 +275,7 @@ struct AgentSessionForm: View {
         issueNumbers = retry.draft.source == .issue ? picks : []
         pullRequestNumbers = retry.draft.source == .pullRequest ? picks : []
         ghsaID = retry.draft.ghsaID
+        discussionURL = retry.draft.discussionURL
         prompt = retry.draft.text
         agentKindName = retry.draft.agent.rawValue
         let choices = model.launchChoices(for: retry.draft.agent)
@@ -322,6 +304,7 @@ struct AgentSessionForm: View {
                 model: agentModel.isEmpty ? nil : agentModel,
                 effort: agentEffort.isEmpty ? nil : agentEffort,
             ),
+            discussionURL: discussionURL,
         )
         // Cleared now, not once the launch lands: the next form
         // opened while this launch runs must not start from the

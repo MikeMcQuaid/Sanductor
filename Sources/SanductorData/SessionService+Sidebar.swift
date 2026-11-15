@@ -204,6 +204,7 @@ public extension SessionService {
         metadata: AppMetadata,
     ) async -> RepositoryGroup {
         async let fullName = git.fullName(of: repository)
+        async let localBranches = git.branches(worktreePath: repository.path, newestFirst: true)
         async let worktrees = (try? git.worktrees(of: repository)) ?? []
         let baseRef = await git.defaultBaseRef(of: repository)
         // One read for every branch's counts and dates, rather than
@@ -249,6 +250,7 @@ public extension SessionService {
             repository: Repository(name: repository.name, path: repository.path, fullName: fullName),
             items: sorted,
             defaultBranch: baseRef.map(Self.branchName(fromBaseRef:)),
+            localBranches: localBranches,
         )
     }
 

@@ -34,6 +34,14 @@ public extension SSHConfiguration {
         }
     }
 
+    /// Only network failures can try another endpoint; authentication and trust never fall through.
+    static func canTryAnotherEndpoint(after error: any Error) -> Bool {
+        if case ChannelError.connectTimeout = error {
+            return true
+        }
+        return error is IOError || error is NIOConnectionError || error is SocketAddressError.UnknownHost
+    }
+
     // MARK: Private
 
     private var destination: String {

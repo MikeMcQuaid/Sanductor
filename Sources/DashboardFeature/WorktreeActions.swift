@@ -81,6 +81,7 @@ struct WorktreeActions: View {
         Button("Stack…") { pendingStack = item }
             .hoverHelp("Show which branches are stacked in this worktree, drop any that are not, or cut a new one")
         Button("Switch branch…") { pendingBranchSwitch = item }
+            .disabled(model.groups.group(holding: item)?.canSwitchBranch(in: item.worktree) == false)
             .hoverHelp("Check out another local branch here; branches held by other worktrees are not offered")
         // The default branch is what every session starts from
         // anyway, and a row still being created has no branch yet.

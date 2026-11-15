@@ -5,7 +5,7 @@ import TerminalUI
 
 // MARK: - ReferencedItemPicker
 
-/// A pop-up for an open issue, pull request or security advisory
+/// A pop-up for an open issue, pull request, discussion or security advisory
 /// that searches as you type: opening it focuses a field over the
 /// list, digits jump to a number and anything else matches a GHSA
 /// id or a title. Arrows move the highlight, return or a click picks

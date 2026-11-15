@@ -1,7 +1,7 @@
 import SanductorData
 import SanductorDomain
+import SanductorInterface
 import SwiftUI
-import TerminalUI
 
 // MARK: - LaunchDraft
 
@@ -14,6 +14,7 @@ struct LaunchDraft: Equatable {
     var number: Int?
     var ghsaID: String?
     var base: String?
+    var discussionURL: String?
 }
 
 // MARK: - LaunchRetry
@@ -242,6 +243,9 @@ public extension DashboardModel {
         case .pullRequest:
             await createSession(fromPullRequestIn: draft, repository: repository, reveals: reveals)
 
+        case .discussion:
+            await retryDiscussion(draft, repository: repository, reveals: reveals)
+
         case .advisory:
             guard let ghsaID = draft.ghsaID else {
                 return
@@ -284,6 +288,9 @@ public extension DashboardModel {
 
         case .pullRequest:
             await createSession(fromPullRequestIn: draft, repository: repository, reveals: reveals)
+
+        case .discussion:
+            await retryDiscussion(draft, repository: repository, reveals: reveals, worktree: worktree)
 
         case .advisory:
             guard let ghsaID = draft.ghsaID else {

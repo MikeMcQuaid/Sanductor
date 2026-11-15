@@ -3,7 +3,7 @@ import Foundation
 import SanductorDomain
 import Testing
 
-extension ScheduledPromptsModelTests {
+extension PromptsModelTests {
     @Test(arguments: [false, true], [false, true])
     func `start uses the saved job and preserves future dates and pauses`(enabled: Bool, overdue: Bool) async throws {
         let fixture = SessionNavigationTests.Fixture()
@@ -16,14 +16,14 @@ extension ScheduledPromptsModelTests {
         saved.isEnabled = enabled
         #expect(model.save(saved))
         saved.nextRun = model.now().addingTimeInterval(overdue ? -3_600 : 3_600)
-        fixture.model.store.update { $0.scheduledPrompts = [saved] }
+        fixture.model.store.update { $0.savedPrompts = [saved] }
         let loaded = makeModel(fixture)
         var launches = 0
         loaded.launch = { launched, due in
             launches += 1
             #expect(launched == saved)
             #expect(due == loaded.now())
-            #expect(fixture.model.store.load().scheduledPrompts.first?.lastRun == due)
+            #expect(fixture.model.store.load().savedPrompts.first?.lastRun == due)
             await loaded.start(saved)
             await loaded.runDue()
             return "manual-session"
@@ -35,7 +35,7 @@ extension ScheduledPromptsModelTests {
         #expect(launches == 1)
         let result = try #require(loaded.prompts.first)
         #expect(result.isEnabled == enabled)
-        #expect(result.nextRun == (enabled && overdue ? saved.schedule.nextRun(after: loaded.now()) : saved.nextRun))
+        #expect(result.nextRun == (enabled && overdue ? saved.schedule?.nextRun(after: loaded.now()) : saved.nextRun))
         #expect(result.lastSession == "manual-session")
         #expect(result.lastError == nil)
         #expect(loaded.runningID == nil)

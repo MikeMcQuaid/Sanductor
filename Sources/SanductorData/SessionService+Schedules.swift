@@ -4,7 +4,7 @@ import SanductorDomain
 public extension SessionService {
     /// A background launch shares the normal sandbox funnel without
     /// writing into a foreground launch's progress. Retries reuse its worktree.
-    func launchScheduledPrompt(_ prompt: ScheduledPrompt, due: Date) async throws -> String {
+    func launchScheduledPrompt(_ prompt: SavedPrompt, due: Date) async throws -> String {
         let service = reporting(to: silentLaunchReporter)
         let repository = Repository(
             name: URL(filePath: prompt.repositoryPath).lastPathComponent,

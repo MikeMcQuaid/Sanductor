@@ -15,7 +15,7 @@ actor SSHConnection {
 
     // MARK: Internal
 
-    func connect(_ configuration: SSHConfiguration) async throws {
+    func connect(_ configuration: SSHConfiguration, timeoutSeconds: Int64? = nil) async throws {
         guard configuration.isValid else {
             throw RemoteError("Enter a host and sandbox username.")
         }
@@ -24,14 +24,17 @@ actor SSHConnection {
             configuration,
             key: SSHCredentials.privateKey().rawRepresentation,
             pinned: SSHCredentials.hostKey(for: configuration.hostIdentity),
+            timeoutSeconds: timeoutSeconds,
         )
     }
 
-    func connect(_ configuration: SSHConfiguration, key: Data, pinned: String?) async throws {
+    func connect(
+        _ configuration: SSHConfiguration, key: Data, pinned: String?, timeoutSeconds: Int64? = nil,
+    ) async throws {
         let loop = MultiThreadedEventLoopGroup.singleton.next()
         let authenticated = loop.makePromise(of: Void.self)
         let connecting = ClientBootstrap(group: loop)
-            .connectTimeout(.seconds(Self.connectTimeout))
+            .connectTimeout(.seconds(timeoutSeconds ?? Self.connectTimeout))
             .channelOption(ChannelOptions.socketOption(.so_keepalive), value: 1)
             .channelOption(ChannelOptions.socket(IPPROTO_TCP, TCP_KEEPALIVE), value: Self.keepaliveSeconds)
             .channelOption(ChannelOptions.socket(IPPROTO_TCP, TCP_KEEPINTVL), value: Self.keepaliveSeconds)

@@ -5,6 +5,18 @@ import TerminalUI
 import Testing
 
 extension SessionNavigationTests {
+    @Test
+    func `a base branch is kept only until another opener opens the form`() {
+        let fixture = Fixture()
+        defer { fixture.close() }
+
+        fixture.model.openNewSession(for: fixture.repository, base: "part_one")
+        #expect(fixture.model.newSessionBase == "part_one")
+
+        fixture.model.openNewSession(for: fixture.repository)
+        #expect(fixture.model.newSessionBase == nil)
+    }
+
     @Test(arguments: ["typed", "pasted", "marked"], [false, true])
     func `command return submits every edit before the next render`(input: String, settledFocus: Bool) async throws {
         let fixture = Fixture()
@@ -106,6 +118,7 @@ extension SessionNavigationTests {
         #expect(submitted?.prompt == expected)
     }
 
+    // swiftformat:disable:next testSuiteAccessControl -- Shared with the prompt capture tests.
     func textViews(in view: NSView) -> [NSTextView] {
         if let editor = view as? NSTextView {
             return [editor]

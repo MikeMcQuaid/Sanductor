@@ -2,12 +2,8 @@
 /// model identifiers Claude Code itself has recorded rather than from
 /// a list written here.
 ///
-/// `claude --model` takes an alias (`fable`, `opus`), which says
-/// nothing about which version it stands for, and Claude Code has no
-/// listing subcommand to ask. What it does have is its own record of
-/// the identifiers it has used, and those carry the version:
-/// `claude-fable-5-1` is Fable 5.1. A version nobody has used does not
-/// appear, which is the honest answer: the alias alone is then shown.
+/// A fallback before the first successful SDK discovery: recorded
+/// identifiers carry versions an alias alone does not name.
 public enum ClaudeModelNames {
     // MARK: Public
 

@@ -9,6 +9,37 @@
         // MARK: Internal
 
         @Test(arguments: AgentKind.allCases)
+        func `main toolbar follows the agent and opens questions without submitting`(agent: AgentKind) throws {
+            let terminal = PhoneTerminalView(frame: .zero, font: .monospacedSystemFont(ofSize: 13, weight: .regular))
+            terminal.inputAccessoryView = PhoneKeyboard(terminal: terminal)
+            terminal.agent = .codexCLI
+            terminal.agent = agent
+            let keyboard = try #require(terminal.inputAccessoryView as? PhoneKeyboard)
+            #expect(terminal.inputView == nil)
+            keyboard.frame.size.width = 375
+            keyboard.layoutIfNeeded()
+            let keys = buttons(in: keyboard)
+            #expect(keys.allSatisfy { $0.frame.width >= 44 })
+            let answer = keys.first { $0.accessibilityLabel == "Answer question" }
+            let bytes = agent.answerQuestionInput
+            guard bytes.isEmpty == false else {
+                #expect(answer == nil)
+                return
+            }
+
+            let capture = InputCapture()
+            terminal.terminalDelegate = capture
+            terminal.controlModifier = true
+            terminal.shiftModifier = true
+            let button = try #require(answer)
+            button.sendActions(for: .touchDown)
+            button.sendActions(for: .primaryActionTriggered)
+            #expect(capture.bytes == bytes)
+            #expect(terminal.controlModifier == false)
+            #expect(terminal.shiftModifier == false)
+        }
+
+        @Test(arguments: AgentKind.allCases)
         func `queue ignores latched modifiers and sends only once`(agent: AgentKind) throws {
             let terminal = PhoneTerminalView(frame: .zero, font: .monospacedSystemFont(ofSize: 13, weight: .regular))
             terminal.agent = agent

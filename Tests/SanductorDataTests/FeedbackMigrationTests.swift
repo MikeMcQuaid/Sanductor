@@ -62,14 +62,17 @@ struct FeedbackMigrationTests {
     @Test
     func `a malformed automation entry preserves other claims and schedules`() throws {
         var metadata = try JSONDecoder().decode(AppMetadata.self, from: Data(Self.legacy.utf8))
-        metadata.scheduledPrompts = [ScheduledPrompt(repositoryPath: "/repo")]
+        var prompt = SavedPrompt()
+        prompt.repositoryPath = "/repo"
+        prompt.schedule = PromptSchedule()
+        metadata.savedPrompts = [prompt]
         var json = try #require(JSONSerialization.jsonObject(with: JSONEncoder().encode(metadata)) as? [String: Any])
         var states = try #require(json["pullRequestAutomation"] as? [String: Any])
         states["broken"] = ["repositoryPath": "/repo", "number": "invalid"]
         json["pullRequestAutomation"] = states
         let restored = try JSONDecoder().decode(AppMetadata.self, from: JSONSerialization.data(withJSONObject: json))
         #expect(restored.pullRequestAutomation == metadata.pullRequestAutomation)
-        #expect(restored.scheduledPrompts == metadata.scheduledPrompts)
+        #expect(restored.savedPrompts == metadata.savedPrompts)
         #expect(restored.prompts == metadata.prompts)
     }
 

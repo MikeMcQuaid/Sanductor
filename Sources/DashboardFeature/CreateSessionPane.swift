@@ -1,6 +1,6 @@
 import SanductorDomain
+import SanductorInterface
 import SwiftUI
-import TerminalUI
 
 /// Starts an agent in a worktree that has none, using the same form
 /// as the New Session sheet with the repository fixed. Issue and
@@ -153,6 +153,9 @@ public struct CreateSessionPane: View {
                 agent: submission.agent,
                 options: submission.options,
             )
+
+        case .discussion:
+            await submission.startDiscussion(model: model, repository: repository, worktree: worktree)
 
         case .advisory:
             guard let ghsaID = submission.ghsaID else {

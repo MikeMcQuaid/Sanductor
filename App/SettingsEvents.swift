@@ -9,15 +9,15 @@ struct SettingsEvents: ViewModifier {
 
     func body(content: Content) -> some View {
         content
-            .task { await dependencies.schedules.runDue() }
+            .task { await dependencies.prompts.runDue() }
             .onReceive(NotificationCenter.default.publisher(for: .NSSystemClockDidChange)) { _ in
                 Task {
-                    await dependencies.schedules.runDue()
+                    await dependencies.prompts.runDue()
                 }
             }
             .onReceive(NSWorkspace.shared.notificationCenter.publisher(for: NSWorkspace.didWakeNotification)) { _ in
                 Task {
-                    await dependencies.schedules.runDue()
+                    await dependencies.prompts.runDue()
                 }
             }
             .onChange(of: closeBrowserRequest) {

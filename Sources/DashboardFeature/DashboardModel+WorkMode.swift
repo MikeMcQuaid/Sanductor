@@ -5,15 +5,42 @@ import SanductorDomain
 public extension DashboardModel {
     /// Repositories visible during the current working hours.
     var visibleGroups: [RepositoryGroup] {
-        groups.filter { hiddenOrganisations.contains($0.repository.owner?.lowercased() ?? "") == false }
+        groups.filter { isWorkHidden($0.repository) == false }
     }
 
-    /// Known organisation names and saved selections for Work settings.
-    func workModeOrganisations(selected: Set<String>) -> [String] {
-        let owners = cachedOrganisations() + groups.compactMap(\.repository.owner) + selected.sorted()
-        return Dictionary(owners.map { ($0.lowercased(), $0) }) { first, _ in first }
+    /// Whether the current visibility rules hide this repository.
+    func isWorkHidden(_ repository: Repository) -> Bool {
+        hiddenOrganisations.contains(repository.owner?.lowercased() ?? "")
+            || hiddenRepositories.contains(repository.fullName?.lowercased() ?? "")
+    }
+
+    /// Individual repository choices, retaining saved selections.
+    func workModeRepositories(selected: Set<String>) -> [String] {
+        let names = groups.compactMap(\.repository.fullName) + selected.sorted()
+        return Dictionary(names.map { ($0.lowercased(), $0) }) { first, _ in first }
             .values
             .sorted { $0.localizedCaseInsensitiveCompare($1) == .orderedAscending }
+    }
+
+    /// Includes selected organisations outside memberships and identifies saved user accounts.
+    func workModeOrganisations(selected: Set<String>) async -> (choices: [String], users: Set<String>) {
+        let owners = await organisations()
+        var choices = Array(owners.dropFirst())
+        var users = Set(owners.prefix(1))
+        for owner in selected where owners.contains(where: { known in
+            known.caseInsensitiveCompare(owner) == .orderedSame
+        }) == false {
+            guard let isOrganisation = try? await service.isOrganisation(owner: owner) else {
+                continue
+            }
+
+            if isOrganisation {
+                choices.append(owner)
+            } else {
+                users.insert(owner)
+            }
+        }
+        return (choices.sorted { $0.localizedCaseInsensitiveCompare($1) == .orderedAscending }, users)
     }
 
     /// Rechecks visibility and schedules the next local-time boundary.
@@ -24,13 +51,21 @@ public extension DashboardModel {
         }
 
         workModeSettings = settings
+        updateDockBadge(for: groups)
         let hidden = settings.hiddenOrganisations(at: Date())
-        if hiddenOrganisations != hidden {
+        let repositories = settings.hiddenRepositories(at: Date())
+        if hiddenOrganisations != hidden || hiddenRepositories != repositories {
             hiddenOrganisations = hidden
+            hiddenRepositories = repositories
             cacheSidebar(groups)
         }
-        if let selection, hidden.contains(groups.group(holding: selection)?.repository.owner?.lowercased() ?? "") {
+        if let selection, let group = groups.group(holding: selection), isWorkHidden(group.repository) {
             self.selection = nil
+            showsNewSession = false
+        }
+        if let newSessionRepository, isWorkHidden(newSessionRepository) {
+            self.newSessionRepository = nil
+            showsNewSession = false
         }
         workModeTimer?.invalidate()
         workModeTimer = nil

@@ -68,7 +68,8 @@ public struct RepositoryFinderPane: View {
             return []
         }
         let source = owner == nil
-            ? owners.filter { model.hiddenOrganisations.contains($0.lowercased()) == false } : repositories
+            ? owners.filter { model.hiddenOrganisations.contains($0.lowercased()) == false }
+            : repositories.filter { model.hiddenRepositories.contains($0.lowercased()) == false }
         return query.isEmpty
             ? Array(source.prefix(Self.resultLimit))
             : Array(FuzzyMatcher.rank(source, query: query).prefix(Self.resultLimit))

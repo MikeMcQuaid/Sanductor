@@ -57,6 +57,7 @@ public extension SessionService {
     ) async throws -> LocalReview {
         try requireSandboxWorkspace(worktreePath)
         let options = AppSettings.reviewOptions(for: reviewer)
+        try validate(options, for: reviewer)
         let input = try LocalReviewInput.prompt(
             instructions: instructions,
             snapshot: LocalReviewInput.snapshot(files: files),

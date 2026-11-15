@@ -2,9 +2,9 @@ import AppKit
 import DashboardFeature
 import SanductorData
 import SanductorDomain
+import SanductorInterface
 import SessionFeature
 import SwiftUI
-import TerminalUI
 
 // MARK: - SettingsView
 
@@ -23,9 +23,9 @@ struct SettingsView: View {
             WorkModeSettingsPane(dashboard: dependencies.dashboard)
                 .tabItem { Label("Work", systemImage: "briefcase") }
                 .tag("workMode")
-            ScheduledPromptsView(model: dependencies.schedules, dashboard: dependencies.dashboard)
-                .tabItem { Label("Schedules", systemImage: "calendar") }
-                .tag("schedules")
+            PromptsView(model: dependencies.prompts, dashboard: dependencies.dashboard)
+                .tabItem { Label("Prompts", systemImage: "text.bubble") }
+                .tag("prompts")
             SessionManagerView(service: dependencies.service) { path in
                 UserDefaults.standard.set(path, forKey: "closeBrowserPath")
                 closeBrowserRequest += 1
@@ -48,12 +48,18 @@ struct SettingsView: View {
                 .tabItem { Label("Advanced", systemImage: "wrench.and.screwdriver") }
                 .tag("advanced")
         }
-        .frame(width: Self.width)
+        .frame(width: Self.width, height: Self.height)
+        .onAppear {
+            if pane == "schedules" {
+                pane = "prompts"
+            }
+        }
     }
 
     // MARK: Private
 
-    private static let width: CGFloat = 760
+    private static let width: CGFloat = 840
+    private static let height: CGFloat = 720
 
     @AppStorage("settingsPane")
     private var pane = "general"

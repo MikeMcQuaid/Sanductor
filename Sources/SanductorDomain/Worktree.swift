@@ -49,4 +49,9 @@ public struct Worktree: Identifiable, Hashable, Sendable {
         let name = URL(filePath: path).lastPathComponent
         return name.removingPercentEncoding ?? name
     }
+
+    /// The default branch belongs in the repository checkout, not a linked worktree.
+    public func allowsSwitch(to branch: String, defaultBranch: String?) -> Bool {
+        path == repositoryPath || branch != defaultBranch
+    }
 }

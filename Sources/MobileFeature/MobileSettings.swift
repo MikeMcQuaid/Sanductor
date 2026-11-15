@@ -37,7 +37,7 @@
                             .keyboardShortcut(.return, modifiers: .command)
                         }
                     }
-                    .onAppear { focus = true }
+                    .onAppear { focus = "Home" }
             }
         }
 
@@ -48,7 +48,7 @@
         @Environment(\.dismiss)
         private var dismiss
         @State private var configuration: SSHConfiguration
-        @FocusState private var focus: Bool
+        @FocusState private var focus: String?
         @AppStorage(CodeStyle.fontSizeKey)
         private var terminalSize: Double = CodeStyle.defaultPointSize
 
@@ -57,6 +57,15 @@
 
         private var form: some View {
             Form {
+                Section("Connection") {
+                    Picker("Address", selection: $configuration.route) {
+                        ForEach(SSHConfiguration.Route.allCases, id: \.self) { route in
+                            Text(route.rawValue).tag(route)
+                        }
+                    }
+                }
+                endpoint("Home", host: $configuration.host, port: $configuration.port)
+                endpoint("Away (optional)", host: $configuration.awayHost, port: $configuration.awayPort)
                 connection
                 Section("Terminal") {
                     Stepper("Font size: " + String(Int(terminalSize)), value: $terminalSize, in: Self.terminalSizeRange)
@@ -76,7 +85,7 @@
                         + "The private key stays in this phone's Keychain.")
                 }
                 Section {
-                    Button("Forget saved host key", role: .destructive) { model.forgetHost() }
+                    Button("Forget saved host keys", role: .destructive) { model.forgetHost() }
                 } footer: { Text("Use this only after verifying that your Mac's SSH host key has changed.") }
             }
             .textInputAutocapitalization(.never)
@@ -85,13 +94,6 @@
 
         private var connection: some View {
             Section {
-                TextField("IP address or hostname", text: $configuration.host)
-                    .keyboardType(.URL)
-                    .focused($focus)
-                LabeledContent("SSH port") {
-                    TextField("22", value: $configuration.port, format: .number.grouping(.never))
-                        .keyboardType(.numberPad)
-                }
                 LabeledContent("Sandbox username") {
                     HStack(spacing: 0) {
                         Text(SSHConfiguration.usernamePrefix).foregroundStyle(.secondary)
@@ -102,7 +104,19 @@
                     }
                 }
             } header: { Text("SSH connection") } footer: {
-                Text("Use your Mac's IP address or hostname. Enter your Mac username after the fixed sandbox prefix.")
+                Text("Automatic tries Home, then Away when Home cannot be reached. "
+                    + "Both addresses use the same sandbox username and herdr session.")
+            }
+        }
+
+        private func endpoint(_ title: String, host: Binding<String>, port: Binding<Int>) -> some View {
+            Section(title) {
+                TextField("IP address or hostname", text: host)
+                    .keyboardType(.URL)
+                    .focused($focus, equals: title)
+                LabeledContent("SSH port") {
+                    TextField("22", value: port, format: .number.grouping(.never)).keyboardType(.numberPad)
+                }
             }
         }
     }

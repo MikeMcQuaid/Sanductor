@@ -15,8 +15,8 @@ public actor RemoteHerdr {
     // MARK: Public
 
     /// Authenticates without opening a terminal.
-    public func connect() async throws {
-        try await connection.connect(configuration)
+    public func connect(timeoutSeconds: Int64? = nil) async throws {
+        try await connection.connect(configuration, timeoutSeconds: timeoutSeconds)
         let help = try await connection.execute(configuration.command(Self.helpCommand(Self.command)))
         try Self.validateCommandHelp(help)
     }

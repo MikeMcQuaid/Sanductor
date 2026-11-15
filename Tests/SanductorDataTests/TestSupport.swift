@@ -255,6 +255,12 @@ struct World {
             isInsideSandbox: true,
             configHome: home,
         )
+        let store = MetadataStore(file: workspace.metadataFile)
+        store.update { metadata in
+            metadata.modelCatalogues[AgentKind.claudeCode.rawValue] = AgentModelCatalogue(
+                models: ["fable"], efforts: ["fable": ["max"]],
+            )
+        }
         let sessionService = SessionService(
             paths: workspace,
             git: GitClient(runner: runner),
@@ -262,7 +268,7 @@ struct World {
             github: GitHubClient(runner: runner),
             transcripts: TranscriptReader(),
             spool: EventSpool(directory: workspace.eventsDirectory),
-            store: MetadataStore(file: workspace.metadataFile),
+            store: store,
             runners: [PromptCaptureRunner()],
             // Disabled so branch names always come from the
             // deterministic prompt fallback, whatever this machine's

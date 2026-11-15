@@ -15,6 +15,12 @@ extension DashboardModel {
             let choices = launchChoices(for: agent)
             values.append((agent.rawValue + "-models", choices.models.joined(separator: " ")))
             values.append((agent.rawValue + "-efforts", choices.efforts.joined(separator: " ")))
+            for model in choices.models {
+                let prefix = agent.rawValue + "-" + model
+                values.append((prefix + "-efforts", choices.supportedEfforts(for: model).joined(separator: " ")))
+                values.append((prefix + "-default-effort", choices.selection(model: model, effort: "").effort))
+                values.append((prefix + "-name", choices.names[model] ?? AgentOptionName.display(model)))
+            }
         }
         service.publishSessionChoices(values)
         // Paths, one per line, since a path can hold anything a

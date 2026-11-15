@@ -3,7 +3,7 @@
 Sanductor (formerly AgentIDE) is a free, native macOS app for running parallel coding agents and maintaining GitHub projects.
 [`sandvault`][sv] runs agents as a non-admin macOS user without permission prompts or access to your home, credentials or environment.
 Agents can read public repositories but have no GitHub credentials.
-On the happy path, go from a GitHub issue or security advisory to a merged pull request with clicks alone.
+Go from a GitHub issue or advisory to a merged PR with clicks alone.
 
 ## 💡 Motivation
 
@@ -22,7 +22,7 @@ No Sanductor account, subscription or hosted relay exists or is planned.
 - Opt-in autofix feeds reviews, CI failures and merge conflicts back to agents, resumes after relaunch and never signs or pushes.
 - Signs and pushes from any published stack layer, with rebasing, labels, merge queues, automerge and branch and temporary file cleanup.
 - Keeps agents running and reachable over SSH after quitting, with private backups and 30-day retention that preserves ongoing work.
-- Schedules repository prompts daily, weekly or monthly while open.
+- Saves reusable prompts and schedules recurring repository tasks.
 - Tracks agents, PRs and blockers by repository or status, with bulk worktree actions and notifications.
 - Edits code with syntax highlighting, fuzzy file search and shell tabs.
 - Starts tasks and checks blockers through Shortcuts and Siri, with an [iPhone companion](#-iphone-companion-app) and agent shortcut keys.
@@ -53,7 +53,7 @@ This creates the non-admin account `sandvault-<you>` and shared workspace `/User
 Run [`gh auth login`][gh] as yourself, then [`sv codex`][sv] or [`sv claude`][sv] to sign in; quit the agent and click "Recheck".
 [`sv`][sv] uses the sandbox account, with its own agent login.
 
-Add a repository in the sidebar, then start from a prompt, issue, branch, existing PR or unpublished security advisory.
+Add a repository in the sidebar, then start from a prompt, issue, open discussion, branch, existing PR or unpublished security advisory.
 Choose repository paths inside the workspace in Settings → Advanced.
 Symlinks can point here but cannot grant access outside the workspace.
 Install shared dependencies yourself in Shell from the main checkout; agents cannot run `brew install`.
@@ -69,8 +69,8 @@ Upgrading from the former app preserves settings and conversations; keep old ses
 Settings (Cmd-,):
 
 - **General**: Choose session defaults, signing and the browser.
-- **Work**: Hide selected organisations on Mac and iPhone outside working hours while schedules continue.
-- **Schedules**: Manage jobs, preview masked tokens or start jobs now.
+- **Work**: Hide and silence work outside working hours, pause work schedules for holidays and snooze hiding for 15 minutes.
+- **Prompts**: Save reusable text and optionally schedule it for a repository.
 - **Sessions**: Inspect and stop agents and browser pages.
 - **Review**: Choose reviewers, models, effort and review or fix prompts.
 - **Notifications**: Set alerts, private sounds and a Dock badge.
@@ -109,8 +109,9 @@ For iOS 26+, run `script/bootstrap` and `script/install` in a source checkout an
        SetEnv SHARED_WORKSPACE=/Users/Shared/sv-<you>
    ```
 
-3. Enter your Mac's address and username; `sandvault-` is added.
-   Use port `22` locally or via VPN; for public access, forward another external router port to Mac port `22` with key-only authentication.
+3. Set Home and optional Away addresses; Automatic tries both.
+   Enter your Mac username; `sandvault-` is added.
+   Use port `22` locally or a router port forwarded to key-only SSH.
    Select `sanductor` (installed app) or `sanductor-dev` (development).
    Choose **Connect** and verify the host key against `ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub` on your Mac.
    A changed key must be explicitly replaced in Settings.

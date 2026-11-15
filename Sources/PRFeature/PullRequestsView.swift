@@ -69,8 +69,7 @@ public struct PullRequestsView: View {
             // Shown only by a stack, so a lone branch's tab is the
             // one it always was.
             if model.stack.isStacked {
-                BranchStackStrip(stack: model.stack, selected: model.listedBranch ?? "") { model.show(branch: $0) }
-                    .disabled(model.isBranchActionRunning || model.isOpening)
+                stackStrip
                 Divider()
             }
             if let selected = model.selected {
@@ -185,6 +184,21 @@ public struct PullRequestsView: View {
         } else {
             "Worktree"
         }
+    }
+
+    private var stackStrip: some View {
+        BranchStackStrip(
+            stack: model.stack,
+            selected: model.listedBranch ?? "",
+            worktree: Worktree(
+                repositoryName: model.repository.name,
+                repositoryPath: model.repository.path,
+                branch: model.stack.checkedOut,
+                path: model.worktreePath ?? model.repository.path,
+            ),
+            service: service,
+        ) { model.show(branch: $0) }
+            .disabled(model.isBranchActionRunning || model.isOpening)
     }
 
     private var listView: some View {

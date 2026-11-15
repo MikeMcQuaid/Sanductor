@@ -133,10 +133,13 @@ public struct RepositoryGroup: Identifiable, Hashable, Sendable {
 
     /// Creates a group; `defaultBranch` is nil when the repository
     /// has no resolvable default (never pushed, no `main`).
-    public init(repository: Repository, items: [WorktreeItem], defaultBranch: String? = nil) {
+    public init(
+        repository: Repository, items: [WorktreeItem], defaultBranch: String? = nil, localBranches: [String] = [],
+    ) {
         self.repository = repository
         self.items = items
         self.defaultBranch = defaultBranch
+        self.localBranches = localBranches
     }
 
     // MARK: Public
@@ -152,9 +155,23 @@ public struct RepositoryGroup: Identifiable, Hashable, Sendable {
     /// without asking git.
     public let defaultBranch: String?
 
+    /// Local branches in newest-first order, read with the repository's other git state.
+    public let localBranches: [String]
+
     /// The stable identity, the repository's.
     public var id: String {
         repository.id
+    }
+
+    public func canSwitchBranch(in worktree: Worktree) -> Bool {
+        guard worktree.repositoryPath == repository.path, let defaultBranch, localBranches.isEmpty == false else {
+            return true
+        }
+
+        let branches = Set(localBranches + [worktree.branch] + items
+            .filter { $0.worktree.isHostDirectory == false && $0.worktree.repositoryPath == repository.path }
+            .map(\.worktree.branch))
+        return branches != [defaultBranch]
     }
 }
 

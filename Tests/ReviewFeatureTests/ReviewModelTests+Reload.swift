@@ -5,6 +5,33 @@ import Testing
 
 extension ReviewModelTests {
     @Test
+    func `last commit on another stack layer excludes earlier commits in that layer`() async throws {
+        let path = FileManager.default.currentDirectoryPath + "/.test-scratch/review-stack-" + UUID().uuidString
+        defer { try? FileManager.default.removeItem(atPath: path) }
+        try await makeRepository(at: path)
+        try await runGit(["checkout", "-b", "layer"], in: path)
+        for name in ["first", "second"] {
+            try name.write(toFile: path + "/" + name, atomically: true, encoding: .utf8)
+            try await runGit(["add", name], in: path)
+            try await runGit(["commit", "-m", name], in: path)
+        }
+        try await runGit(["checkout", "-b", "top"], in: path)
+        try await runGit(["commit", "--allow-empty", "-m", "top"], in: path)
+        let model = ReviewModel(
+            worktreePath: path, repositoryName: path, git: GitClient(runner: FoundationProcessRunner()),
+        )
+        model.stackTarget = (parent: "main", branch: "layer")
+        model.scope = .lastCommit
+        await model.reload()
+        #expect(model.files.map(\.path) == ["second"])
+        #expect(model.commitMessage == "second")
+        #expect(model.isReadOnly)
+        model.scope = .branch
+        await model.reload()
+        #expect(model.files.map(\.path) == ["first", "second"])
+    }
+
+    @Test
     func `refreshing uncommitted edits keeps the draft and excluded files`() async throws {
         let path = FileManager.default.currentDirectoryPath + "/.test-scratch/review-refresh-" + UUID().uuidString
         defer { try? FileManager.default.removeItem(atPath: path) }

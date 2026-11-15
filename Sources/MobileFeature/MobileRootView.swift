@@ -38,7 +38,8 @@
                         }
                         Button("Trust") { model.trustHost(hostKey) }
                     } message: { key in
-                        Text("Verify this fingerprint on your Mac:\n" + SSHCredentials.fingerprint(key))
+                        Text("Verify " + (model.activeConfiguration ?? model.configuration).hostIdentity
+                            + " on your Mac:\n" + SSHCredentials.fingerprint(key))
                     }
             }
             .interfaceFont(.body)

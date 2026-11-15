@@ -24,12 +24,7 @@ public struct NewSessionMenu: View {
                             Label {
                                 Text(repository.name)
                             } icon: {
-                                if let image = avatars.images[owner] {
-                                    Image(decorative: image, scale: CGFloat(image.width) / Self.avatarSize)
-                                        .renderingMode(.original)
-                                } else {
-                                    Image(systemName: "folder.fill")
-                                }
+                                OwnerAvatar(owner: owner, size: Self.avatarSize).menuImage
                             }
                             .labelStyle(.titleAndIcon)
                         }
@@ -43,9 +38,7 @@ public struct NewSessionMenu: View {
         .menuOrder(.fixed)
         // Native menu labels need an Image ready before the menu opens.
         .task(id: grouped.keys.sorted()) {
-            for owner in grouped.keys where owner.isEmpty == false {
-                avatars.load(owner)
-            }
+            OwnerAvatar.preload(Array(grouped.keys))
         }
     }
 
@@ -55,5 +48,4 @@ public struct NewSessionMenu: View {
 
     private let repositories: [Repository]
     private let select: (Repository) -> Void
-    private var avatars: OwnerAvatarStore = .shared
 }

@@ -100,6 +100,16 @@ public struct OwnerAvatar: View {
 
     // MARK: Public
 
+    /// A native menu image using the same cache as sidebar rows.
+    public var menuImage: Image {
+        if let image = owner.flatMap({ store.images[$0] }) {
+            Image(decorative: image, scale: CGFloat(image.width) / size).renderingMode(.original)
+        } else {
+            // swiftlint:disable:next accessibility_label_for_image - Native menu labels supply the accessible title.
+            Image(systemName: placeholder)
+        }
+    }
+
     public var body: some View {
         Group {
             if let image = owner.flatMap({ store.images[$0] }) {
@@ -114,6 +124,13 @@ public struct OwnerAvatar: View {
             if let owner {
                 store.load(owner)
             }
+        }
+    }
+
+    /// Native menus need their images loaded before opening.
+    public static func preload(_ owners: [String]) {
+        for login in Set(owners.map { $0.lowercased() }) {
+            OwnerAvatarStore.shared.load(login)
         }
     }
 

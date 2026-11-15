@@ -17,10 +17,6 @@ struct PromptCaptureRunner: AgentRunner {
         true
     }
 
-    var models: [String] {
-        ["fable"]
-    }
-
     var efforts: [String] {
         ["max"]
     }

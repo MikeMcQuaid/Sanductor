@@ -163,6 +163,15 @@ public struct ReviewView: View {
     private let makeModel: () -> ReviewModel
     private let makeLocalReview: () -> LocalReviewModel
 
+    private var stackStrip: some View {
+        BranchStackStrip(
+            stack: stack, selected: selectedBranch, worktree: worktree, service: service,
+        ) { branch in
+            show(branch)
+        }
+        .disabled(localReview.isBusy)
+    }
+
     private var codeReview: some View {
         VStack(spacing: 0) {
             toolbar
@@ -170,10 +179,7 @@ public struct ReviewView: View {
             // Only a stack shows it, so a branch standing on its own
             // reviews exactly as it always did.
             if stack.isStacked {
-                BranchStackStrip(stack: stack, selected: selectedBranch) { branch in
-                    show(branch)
-                }
-                .disabled(localReview.isBusy)
+                stackStrip
                 Divider()
             }
             if showsFind {
@@ -275,6 +281,9 @@ public struct ReviewView: View {
         model.stackTarget = branch == stack.checkedOut
             ? nil
             : stack.parent(of: branch).map { (parent: $0, branch: branch) }
+        if model.stackTarget != nil, model.scope == .uncommitted || model.scope == .upstream {
+            model.scope = .lastCommit
+        }
         Task {
             await model.reload()
         }

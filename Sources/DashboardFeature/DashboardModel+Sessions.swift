@@ -203,7 +203,7 @@ public extension DashboardModel {
     /// failure waits there with its draft for a retry, since another
     /// form or launch may have taken the screen since.
     @discardableResult
-    private func run(
+    internal func run(
         _ draft: LaunchDraft,
         in repository: Repository? = nil,
         placeholder: String? = nil,
