@@ -218,8 +218,8 @@ public struct SessionService: Sendable {
         }
     }
 
-    /// Launches an agent in a prepared worktree slot: symlink, prompt
-    /// file, herdr workspace, paste, metadata.
+    /// Launches an agent in a prepared worktree slot: prompt file,
+    /// herdr workspace, paste, metadata.
     func start(
         prompt: String,
         agent: AgentKind,
@@ -258,10 +258,7 @@ public struct SessionService: Sendable {
         return sessionName
     }
 
-    /// The repository's worktree directory, a layout the app owns
-    /// now the tooling that grouped worktrees by uuid is retired;
-    /// worktrees in that older layout keep working because every
-    /// listing derives from `git worktree list`.
+    /// The repository's worktree directory.
     func worktreeContainer(repository: Repository) -> String {
         paths.worktreesDirectory + "/" + repository.name
     }

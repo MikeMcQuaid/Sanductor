@@ -214,9 +214,13 @@ public extension SessionService {
         // with no worktrees and orphaned conversations stay
         // reachable.
         let mainCheckout = await mainCheckout(of: repository, baseRef: baseRef)
-        var seenPaths = Set<String>()
-        var candidates = await ([mainCheckout] + worktrees).filter { seenPaths.insert($0.path).inserted }
-        candidates += strayWorktrees(of: repository).filter { seenPaths.insert($0.path).inserted }
+        var seenPaths: Set = [mainCheckout.path]
+        var candidates = await [mainCheckout] + worktrees.filter { worktree in
+            worktree.isAgentToolWorktree == false && seenPaths.insert(worktree.path).inserted
+        }
+        candidates += strayWorktrees(of: repository).filter { worktree in
+            worktree.isAgentToolWorktree == false && seenPaths.insert(worktree.path).inserted
+        }
         let items = await withTaskGroup(of: (Int, WorktreeItem).self) { tasks in
             for (index, worktree) in candidates.enumerated() {
                 tasks.addTask {

@@ -63,9 +63,8 @@ public struct WorkspacePaths: Sendable {
         Self.overridden(AppSettings.repositoriesDirectoryKey) ?? sharedWorkspace + "/repositories"
     }
 
-    /// Where canonical worktrees live, grouped by repository (or
-    /// by uuid, in the layout an older release inherited); Settings
-    /// can point this elsewhere too.
+    /// Where canonical worktrees live, grouped by repository;
+    /// Settings can point this elsewhere too.
     public var worktreesDirectory: String {
         Self.overridden(AppSettings.worktreesDirectoryKey) ?? sharedWorkspace + "/worktrees"
     }
@@ -83,12 +82,6 @@ public struct WorkspacePaths: Sendable {
     /// Where hook events are spooled.
     public var eventsDirectory: String {
         sanductorDirectory + "/events"
-    }
-
-    /// Where earlier releases kept human-friendly worktree
-    /// symlinks; only their cleanup reads this now.
-    public var friendlyWorktreesDirectory: String {
-        sanductorDirectory + "/worktrees"
     }
 
     /// The template directory sandvault copies into the sandbox home.

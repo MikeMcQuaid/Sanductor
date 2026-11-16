@@ -41,7 +41,8 @@ public extension DashboardModel {
                     return false
                 }
                 guard row.element.isPlaceholder else {
-                    return stillExists(row.element.worktree.path)
+                    return row.element.worktree.isAgentToolWorktree == false
+                        && stillExists(row.element.worktree.path)
                 }
 
                 // A failed launch's row waits to be dismissed or
@@ -56,7 +57,13 @@ public extension DashboardModel {
             return RepositoryGroup(repository: fresh.repository, items: items, defaultBranch: fresh.defaultBranch)
         }
         let listed = Set(next.map(\.repository.path))
-        merged += previous.filter { listed.contains($0.repository.path) == false && stillExists($0.repository.path) }
+        merged += previous
+            .filter { listed.contains($0.repository.path) == false && stillExists($0.repository.path) }
+            .map { group in
+                var kept = group
+                kept.items.removeAll(where: \.worktree.isAgentToolWorktree)
+                return kept
+            }
         return merged
     }
 

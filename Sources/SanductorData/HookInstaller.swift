@@ -24,7 +24,7 @@ struct HookInstaller {
     /// settings template entries all exist. Idempotent.
     func ensureInstalled() throws {
         let manager = FileManager.default
-        for directory in [paths.eventsDirectory, paths.promptsDirectory, paths.friendlyWorktreesDirectory] {
+        for directory in [paths.eventsDirectory, paths.promptsDirectory] {
             try manager.createDirectory(atPath: directory, withIntermediateDirectories: true)
         }
         try PromptPayload.adoptExisting(paths: paths, store: MetadataStore(file: paths.metadataFile))
