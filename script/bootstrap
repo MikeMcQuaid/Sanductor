@@ -11,4 +11,5 @@ elif ! brew bundle check &>/dev/null; then
 fi
 
 script/version --xcconfig .build/version.xcconfig
+script/signing >/dev/null
 script/package-pins

@@ -26,6 +26,17 @@ public enum NotificationPreferences {
             }
         }
 
+        /// The Send to iPhone toggle's storage key; off until chosen.
+        public var phoneKey: String {
+            switch self {
+            case .done:
+                "sendFinishedToPhone"
+
+            case .blocked:
+                "sendNeedsInputToPhone"
+            }
+        }
+
         /// The sound path's storage key. The completed turn keeps
         /// the key the original picker wrote.
         public var soundKey: String {
@@ -62,6 +73,12 @@ public enum NotificationPreferences {
     /// Whether an event posts at all; absent means on.
     public static func notifies(_ event: Event) -> Bool {
         boolDefaultingTrue(event.enabledKey)
+    }
+
+    /// Whether the event also goes to the iPhone while its user is
+    /// away; absent means off.
+    public static func sendsToPhone(_ event: Event) -> Bool {
+        UserDefaults.standard.bool(forKey: event.phoneKey)
     }
 
     /// The event's chosen sound path; the empty string is silence.

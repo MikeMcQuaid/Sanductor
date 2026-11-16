@@ -144,6 +144,7 @@ jobs:
           NOTARIZATION_KEY: ${{ secrets.NOTARIZATION_KEY }}
           NOTARIZATION_KEY_ID: ${{ secrets.NOTARIZATION_KEY_ID }}
           NOTARIZATION_ISSUER_ID: ${{ secrets.NOTARIZATION_ISSUER_ID }}
+          SANDUCTOR_DEVELOPER_ID_PROFILE: ${{ secrets.SANDUCTOR_DEVELOPER_ID_PROFILE }}
         run: script/package
 
       - name: Zip

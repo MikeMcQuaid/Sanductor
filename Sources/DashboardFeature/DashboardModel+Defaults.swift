@@ -1,5 +1,6 @@
 import Foundation
 import SanductorDomain
+import TerminalUI
 
 extension DashboardModel {
     /// Hands `sanductor new` what only the app can know: which
@@ -21,6 +22,10 @@ extension DashboardModel {
                 values.append((prefix + "-default-effort", choices.selection(model: model, effort: "").effort))
                 values.append((prefix + "-name", choices.names[model] ?? AgentOptionName.display(model)))
             }
+        }
+        // What the phone should expect from the Mac, for its Settings.
+        for event in NotificationPreferences.Event.allCases {
+            values.append((event.phoneKind.defaultsKey, PhoneAlerts.sends(event) ? "1" : "0"))
         }
         service.publishSessionChoices(values)
         // Paths, one per line, since a path can hold anything a

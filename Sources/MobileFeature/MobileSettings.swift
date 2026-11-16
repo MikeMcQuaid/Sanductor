@@ -1,4 +1,5 @@
 #if os(iOS)
+    import SanductorCloud
     import SanductorInterface
     import SanductorRemote
     import SwiftUI
@@ -51,6 +52,10 @@
         @FocusState private var focus: String?
         @AppStorage(CodeStyle.fontSizeKey)
         private var terminalSize: Double = CodeStyle.defaultPointSize
+        @AppStorage(MobileModel.receiveKey(.done))
+        private var receivesFinished = true
+        @AppStorage(MobileModel.receiveKey(.blocked))
+        private var receivesNeedsInput = true
 
         private let model: MobileModel
         private var nameStyle: NameStyle = .init()
@@ -67,9 +72,7 @@
                 endpoint("Home", host: $configuration.host, port: $configuration.port)
                 endpoint("Away (optional)", host: $configuration.awayHost, port: $configuration.awayPort)
                 connection
-                Section("Terminal") {
-                    Stepper("Font size: " + String(Int(terminalSize)), value: $terminalSize, in: Self.terminalSizeRange)
-                }
+                terminalAndAlerts
                 Section {
                     Picker("Herdr session", selection: $configuration.session) {
                         Text("sanductor").tag("sanductor")
@@ -90,6 +93,24 @@
             }
             .textInputAutocapitalization(.never)
             .autocorrectionDisabled()
+        }
+
+        @ViewBuilder private var terminalAndAlerts: some View {
+            Section("Terminal") {
+                Stepper("Font size: " + String(Int(terminalSize)), value: $terminalSize, in: Self.terminalSizeRange)
+            }
+            Section {
+                Toggle("Agent finished", isOn: $receivesFinished)
+                    .disabled(MobileModel.macWithholds(.done, in: model.defaults))
+                Toggle("Agent needs input", isOn: $receivesNeedsInput)
+                    .disabled(MobileModel.macWithholds(.blocked, in: model.defaults))
+            } header: { Text("Mac alerts") } footer: {
+                Text(model.notificationError
+                    ?? "Your Mac sends these through iCloud while you're away from it, once Send to iPhone "
+                    + "is on in its Settings → Notifications. Each applies to every iPhone on this iCloud account.")
+            }
+            .onChange(of: receivesFinished) { model.updateNotifications() }
+            .onChange(of: receivesNeedsInput) { model.updateNotifications() }
         }
 
         private var connection: some View {

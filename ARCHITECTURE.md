@@ -22,7 +22,8 @@ machines. The host app coordinates independent local reviews, GitHub
 bot feedback and all CI results with local fixes; commit signing,
 restacking and pushes remain explicit user actions. App Intents and the
 iPhone's direct SSH connection expose the local workflow without a
-Sanductor account, subscription or hosted relay. Unpublished advisory
+Sanductor account, subscription or hosted relay; the Mac's alerts reach
+the iPhone through the user's own iCloud. Unpublished advisory
 sessions use neutral branch names and ask agents to keep advisory
 details out of public commit messages and pull requests.
 
@@ -533,9 +534,11 @@ flowchart TD
     Mobile["MobileFeature"]
     Remote["SanductorRemote"]
     Interface["SanductorInterface"]
+    Cloud["SanductorCloud"]
 
     App --> Dashboard & Session & Review & PR & Data
     Dashboard & Session & Review & PR --> Domain & Data & Terminal
+    Dashboard & Mobile --> Cloud
     Phone --> Mobile
     Mobile --> Remote & Interface & Domain
     Remote & Interface --> Domain
@@ -579,6 +582,8 @@ flowchart TD
   `LaunchProgress`; TerminalUI re-exports these for the Mac's features.
 - **SanductorRemote**: SwiftNIO SSH command channels, device Keychain
   credentials, host verification and the remote herdr adapter.
+- **SanductorCloud**: `PhoneNotifications`, the one CloudKit client,
+  which the Mac sends alerts through and the phone subscribes with.
 - **MobileFeature**: repository navigation, session creation and a UIKit
   SwiftTerm wrapper. It does not import the macOS data or feature targets.
 - **SanductorApp**: builds adapters, injects the service, owns navigation,
@@ -2489,7 +2494,8 @@ The variables shell files and scripts can read or set:
 | `SANDUCTOR_EDITS` | the app, in shell panes | where `sanductor --wait` spools the edit it is waiting on |
 | `SANDUCTOR_COLOR` | you | forces colour in `sanductor`'s output where no terminal is detected |
 | `SANDUCTOR_PERFORMANCE_LOG` | you | turns the performance log on, as `script/performance-log on` does |
-| `SANDUCTOR_DEVELOPMENT_TEAM` | you, running `script/test` | the Apple team id signing the app and the App Intents runner alike, which the framework requires; unset, the bundle is skipped |
+| `SANDUCTOR_DEVELOPMENT_TEAM` | you, running `script/build`, `script/install` or `script/test` | the Apple team id: `script/build` signs the app for iCloud with it, which iPhone alerts need, and `script/test` signs the app and the App Intents runner alike, which the framework requires; unset, `script/build` uses the team `script/signing` finds, while `script/test` skips the bundle; set empty, builds stay ad hoc |
+| `SANDUCTOR_DEVELOPER_ID_PROFILE` | the release workflow, running `script/package` | a base64 encoded Developer ID provisioning profile with iCloud; set, the packaged app is signed for iCloud and embeds it |
 | `SANDUCTOR_SKIP_INTENT_TESTS` | you, running `script/test` | leaves the App Intents bundle out even with a team set |
 | `SANDUCTOR_DRY_RUN` | you, running `sanductor new` | prints what it would make instead of making it |
 
@@ -2702,6 +2708,88 @@ until the user chooses Connect. Host-key messages take precedence over
 the generic disconnected page. A failed connection does not enable
 automatic reconnection on the next visit.
 
+#### Alerts on the iPhone
+
+The phone keeps no connection while it is in the background, and the
+project runs no server, so the Mac's alerts travel through CloudKit in
+the user's own private database (`SanductorCloud`). The host app does
+every write: the sandbox user has no iCloud account, so an agent can
+neither send an alert nor read one. Settings → Notifications adds a
+Send to iPhone toggle to each event, off by default. The Mac sends an
+alert it would post anyway (a finished turn, input needed, autofix
+finishing or needing attention), only outside silenced working hours
+and only while its user is away: the screen locked, the display asleep
+or no input for five minutes, read when the alert fires rather than
+watched. Sending does not depend on the Mac's own banner toggle.
+Beside each toggle, Send Test saves that kind's alert at once, away or
+not, and reports the outcome in Settings. Its path is empty, naming no
+worktree, so tapping it only opens the app. It arrives once the phone
+has connected since the toggle went on, since only then does the phone
+subscribe to that kind.
+
+Each alert saves one `AgentNotification` record per worktree and event
+kind, named from a digest of the path, so records stay bounded and
+every save fires again: the phone's subscriptions fire on creation and
+on update. A record carries the alert's title and body, the worktree
+path and the herdr session; CloudKit's own modification time says when
+it was sent. Saves overwrite without
+reading first and are tried twice before the Messages pane hears of a
+failure. Alert text is what the Mac's own banner says, which is stored
+in iCloud unencrypted, since CloudKit builds the alert from plain
+fields; advisory sessions already use neutral branch names.
+
+The phone learns what the Mac sends from `phone-notify-done` and
+`phone-notify-blocked` in `session-defaults`, published with the other
+session choices and true only when the Mac's toggle is on and the build
+can reach iCloud. Its Settings show a receive toggle per event, on by
+default and disabled while the connected Mac is known not to send it.
+Whenever the wanted set changes, the phone asks for notification
+permission, registers for remote notifications and saves one query
+subscription per wanted kind (`agent-done`, `agent-blocked`), deleting
+the other. Changes run one at a time and a superseded one is skipped,
+since an earlier save landing after a later delete would leave iCloud
+sending what was turned off. Subscriptions belong to the iCloud
+account, so the choice covers every phone signed into it. Until the
+Mac's choices have been read the phone changes nothing. Tapping an
+alert reads its record from iCloud, since an alert's copy of a long
+path may be cut short, and if it came from the herdr session chosen
+when the session list holds its worktree, selects that worktree's
+pane; otherwise the app opens without changing the selection. Alerts
+also show while the app is in front.
+
+Both apps name the container `iCloud.<bundle identifier>`. Local
+builds use its Development environment and releases its Production
+one, since CloudKit pushes each environment's alerts only through the
+matching push service and an iPhone app run from Xcode registers with
+the development one: the Mac's `App/Sanductor-iCloud.entitlements`
+says Development and `script/package` sets Production, while the
+iPhone target follows its configuration, Debug Development and Release
+(TestFlight) Production. A local build therefore relays only to a
+local build and a release only to a release. The iPhone
+target always carries its iCloud and push entitlements, so building it
+needs a paid team. The Mac's ad hoc build has neither, and `CKContainer`
+traps without its entitlement, so the Mac checks its own signature
+(`SecTaskCopyValueForEntitlement`) before touching CloudKit, and its
+Settings explain the missing signing instead of offering the toggles.
+The team lives in no committed file. `script/signing` reads it from
+the gitignored `Signing.xcconfig`, first writing that file when it is
+missing from Xcode's provisioning profiles for
+`com.mikemcquaid.Sanductor` (under `~/Library/Developer/Xcode/UserData`
+or, before Xcode 16, `~/Library/MobileDevice`), but only when they name
+exactly one team; several print each and leave the choice to the user.
+A profile proves the team may provision the identifier where a
+certificate does not, so a contributor whose only certificate belongs
+to another team keeps building ad hoc rather than failing to provision.
+The version xcconfig includes the file optionally, so Xcode's
+iPhone builds take the same team, and `script/bootstrap` and
+`script/build` both run it, outside the sandbox only, which must not
+touch keychains or the host's profiles. `script/build` signs for iCloud with
+`App/Sanductor-iCloud.entitlements` whenever a team is found;
+`SANDUCTOR_DEVELOPMENT_TEAM` names another, or keeps the build ad hoc
+when set empty. A checkout without such a profile stays ad hoc.
+`script/package` signs for Developer ID when
+`SANDUCTOR_DEVELOPER_ID_PROFILE` holds a profile.
+
 Sessions are reachable over SSH as the sandbox user; the
 [iPhone setup instructions](README.md#-iphone-companion) cover building,
 installing the public key, naming the shared workspace and connecting.
@@ -2756,6 +2844,9 @@ after transient resizes).
    an empty value is the empty command, which git forks.
 5. **Transcripts**: sandvault applies inheriting group-read ACLs; the
    app relies on read and never widens it.
+6. **iCloud**: only the host app writes alerts, into the user's own
+   private database; the sandbox user has no iCloud account. Alert
+   text is the Mac banner's own and is not end-to-end encrypted.
 
 The embedded browser uses the shared persistent data store so a GitHub
 login survives restarts; it holds no app state and no token.
@@ -2978,7 +3069,8 @@ so that only the last needs credentials:
   only thing that does. It prints them for `script/build` and writes
   them as `.build/version.xcconfig`, which the generated project takes
   as its base configuration, so a build started in Xcode is versioned
-  exactly as a scripted one; `script/bootstrap` writes it before
+  exactly as a scripted one, and which includes `Signing.xcconfig`
+  when it exists; `script/bootstrap` writes it before
   generating the project, and `script/build` and `script/analyze`
   refresh it before building. The file is rewritten only when its
   contents change, so Xcode does not rebuild the world for it.
@@ -3001,8 +3093,13 @@ so that only the last needs credentials:
   cannot be stopped, installation fails without replacing its bundle.
   It ignores SIGHUP so closing an Sanductor shell pane cannot interrupt
   installation.
-  Zipping and distribution signing always use Release. Sandboxed builds
-  only compile, so they cannot install an app bundle.
+  When `script/signing` finds a team, or `SANDUCTOR_DEVELOPMENT_TEAM`
+  names one, the host build signs automatically with that team's
+  identity and the iCloud entitlements, allowing provisioning updates
+  and registering this Mac as a device, which a command-line build
+  otherwise refuses; Xcode must be signed into that team's account. The build says which
+  it chose. Zipping and distribution signing always use Release. Sandboxed builds only compile, so they cannot
+  install an app bundle.
 - `script/zip` verifies the built app's signature, then zips it with
   `ditto` as `.build/Sanductor-<version>.zip`, the version read from the
   built `Info.plist`, with `Sanductor.app` as the only top-level entry.
@@ -3014,7 +3111,11 @@ so that only the last needs credentials:
   temporary keychain. The script selects its one valid Developer ID
   Application identity, signs the app from
   `App/Sanductor.entitlements` with a hardened runtime and secure
-  timestamp, and restores the user's keychain list on exit.
+  timestamp, and restores the user's keychain list on exit. With
+  `SANDUCTOR_DEVELOPER_ID_PROFILE` set, it embeds that profile and signs
+  from `App/Sanductor-iCloud.entitlements` instead, naming the
+  container, application and team identifiers from the profile, which
+  `codesign` cannot expand itself.
   `NOTARIZATION_KEY`, the contents of an App Store Connect API key's
   `.p8` file, `NOTARIZATION_KEY_ID` and `NOTARIZATION_ISSUER_ID` send
   the zip to `notarytool`. The script saves the submission ID before
@@ -3323,6 +3424,38 @@ Every release is Developer ID signed with the hardened runtime,
 notarised and stapled so Homebrew's signing audit and Gatekeeper accept
 it. Releases are full releases, never drafts or prereleases, which lets
 `brew livecheck` discover the next version without a custom strategy.
+
+#### iCloud for iPhone alerts
+
+Once per team, before the first build that carries the entitlements:
+
+1. In **Certificates, Identifiers & Profiles**, open the
+   `com.mikemcquaid.Sanductor` App ID, enable **iCloud** with CloudKit
+   and **Push Notifications**, and assign it a new iCloud container,
+   `iCloud.com.mikemcquaid.Sanductor`.
+2. In the CloudKit Console, under **Settings → Tokens**, create a
+   management token and save it on the host with
+   `xcrun cktool save-token --type management`, then run
+   `script/cloudkit-schema`. It imports `CloudKit/Schema.ckdb` into
+   the container's Development environment (`kind` is queryable for
+   the phone's subscriptions, `recordName` for browsing records; the
+   built-in `Users` type is listed because an import replaces the
+   whole schema). In the Console, choose **Deploy Schema Changes** to
+   copy it to Production, which releases use and which never creates a
+   type or field on first use, so any later field goes into the file,
+   is imported and deployed before a release saves it.
+3. Regenerate the App Store Connect profile so it includes both
+   capabilities and replace `SANDUCTOR_APP_STORE_IOS_PROFILE` with it.
+4. Create a **Developer ID** provisioning profile for macOS on the same
+   App ID with the Developer ID Application certificate, base64 encode
+   it and save it as the `SANDUCTOR_DEVELOPER_ID_PROFILE` Actions
+   secret. Without it releases stay as they were and hide the toggles.
+
+Local builds need Xcode signed into the team (**Settings → Accounts**)
+so `-allowProvisioningUpdates` and
+`-allowProvisioningDeviceRegistration` can register the Mac and make
+its development profile; the iPhone target signs automatically as before,
+and building it once creates the profile `script/signing` reads.
 
 ## Pull request automation
 

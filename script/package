@@ -7,6 +7,8 @@
 #   DEVELOPER_ID_APPLICATION_CERTIFICATE_PASSWORD
 # - NOTARIZATION_KEY, the contents of an App Store Connect API .p8 key,
 #   with NOTARIZATION_KEY_ID and NOTARIZATION_ISSUER_ID
+# - optionally SANDUCTOR_DEVELOPER_ID_PROFILE, a base64 encoded Developer
+#   ID provisioning profile with iCloud, for iPhone alerts
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
@@ -53,11 +55,29 @@ if [[ ! "${identity}" =~ ^[[:xdigit:]]{40}$ ]]; then
   exit 1
 fi
 
+entitlements=App/Sanductor.entitlements
+# iPhone alerts need iCloud, which a Developer ID app reaches only with
+# its provisioning profile embedded. codesign expands no build settings,
+# so the identifiers are written out from the profile, and releases use
+# CloudKit's Production environment where local builds use Development.
+if [[ -n "${SANDUCTOR_DEVELOPER_ID_PROFILE:-}" ]]; then
+  base64 --decode <<<"${SANDUCTOR_DEVELOPER_ID_PROFILE}" >"${scratch}/profile.provisionprofile"
+  security cms -D -i "${scratch}/profile.provisionprofile" >"${scratch}/profile.plist"
+  team="$(/usr/libexec/PlistBuddy -c 'Print :TeamIdentifier:0' "${scratch}/profile.plist")"
+  bundle_id="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "${app}/Contents/Info.plist")"
+  cp "${scratch}/profile.provisionprofile" "${app}/Contents/embedded.provisionprofile"
+  entitlements="${scratch}/Sanductor.entitlements"
+  sed "s/\$(PRODUCT_BUNDLE_IDENTIFIER)/${bundle_id}/" App/Sanductor-iCloud.entitlements >"${entitlements}"
+  /usr/libexec/PlistBuddy -c "Add :com.apple.application-identifier string ${team}.${bundle_id}" \
+    -c "Add :com.apple.developer.team-identifier string ${team}" \
+    -c "Set :com.apple.developer.icloud-container-environment Production" "${entitlements}"
+fi
+
 # The ad hoc build carries the get-task-allow entitlement, which
 # notarisation rejects, so sign again from the source entitlements with
 # the hardened runtime and secure timestamp notarisation requires.
 codesign --force --sign "${identity}" --keychain "${keychain}" \
-  --options runtime --timestamp --entitlements App/Sanductor.entitlements "${app}"
+  --options runtime --timestamp --entitlements "${entitlements}" "${app}"
 
 zip="$(script/zip)"
 key="${scratch}/notarization.p8"
