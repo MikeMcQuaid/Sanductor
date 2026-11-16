@@ -18,4 +18,13 @@ extension SessionServiceIntegrationTests {
         }
         #expect(FileManager.default.fileExists(atPath: world.paths.worktreesDirectory) == false)
     }
+
+    @Test
+    func `undiscovered models start on the CLI's own defaults`() async throws {
+        let world = try await World.make()
+        defer { world.tearDown() }
+        let options = try world.service.validate(AgentLaunchOptions(model: "gpt-6-sol", effort: "max"), for: .codexCLI)
+        #expect(options.model == nil)
+        #expect(options.effort == nil)
+    }
 }

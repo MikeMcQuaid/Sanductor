@@ -5,11 +5,11 @@ import SanductorDomain
 /// and nothing to ask where it has none. Split from the sources for
 /// length.
 public extension SessionService {
-    /// Asks the agent's CLI for its current models; nil when the
-    /// command fails or yields nothing. The CLI runs inside the
-    /// sandbox, where sessions run it anyway; running it as the host
-    /// user made macOS prompt for broad disk access.
-    func discoverModels(for agent: AgentKind) async -> AgentModelCatalogue? {
+    /// Asks the agent's CLI for its current models, throwing why
+    /// when the command fails or yields nothing. The CLI runs inside
+    /// the sandbox, where sessions run it anyway; running it as the
+    /// host user made macOS prompt for broad disk access.
+    func discoverModels(for agent: AgentKind) async throws -> AgentModelCatalogue {
         let runner = runner(for: agent)
         let argv = launcher.command(
             payload: runner.modelListingCommand.joined(separator: " "),
@@ -17,11 +17,14 @@ public extension SessionService {
             sessionID: UUID().uuidString,
             sessionName: "sanductor-model-listing",
         )
-        let result = try? await processes.run(argv, workingDirectory: nil, environment: [:])
-        guard let result, result.succeeded,
-              let catalogue = runner.modelCatalogue(from: result.standardOutput), catalogue.models.isEmpty == false
+        let result = try await processes.run(argv, workingDirectory: nil, environment: [:])
+        guard result.succeeded else {
+            let detail = result.standardError.trimmingCharacters(in: .whitespacesAndNewlines)
+            throw SessionServiceError(detail.isEmpty ? "exit status " + String(result.status) : detail)
+        }
+        guard let catalogue = runner.modelCatalogue(from: result.standardOutput), catalogue.models.isEmpty == false
         else {
-            return nil
+            throw SessionServiceError("its answer listed no models")
         }
 
         return catalogue
@@ -110,18 +113,20 @@ public extension SessionService {
         return (model, levels.contains(preferred) ? preferred : levels.first ?? "")
     }
 
-    /// Rejects stale saved settings as well as combinations submitted outside the pickers.
-    internal func validate(_ options: AgentLaunchOptions, for agent: AgentKind) throws {
-        if options.model == nil, options.effort == nil {
-            return
-        }
+    /// Rejects stale saved settings as well as combinations submitted
+    /// outside the pickers, and returns the options to launch with:
+    /// the CLI's own defaults while its models were never discovered,
+    /// so a broken listing cannot stop an agent starting.
+    @discardableResult
+    internal func validate(_ options: AgentLaunchOptions, for agent: AgentKind) throws -> AgentLaunchOptions {
         guard let catalogue = store.load().modelCatalogues[agent.rawValue] else {
-            throw SessionServiceError("Wait for " + agent.displayName
-                + " model discovery before choosing a model or effort.")
+            return AgentLaunchOptions()
         }
         guard catalogue.supports(model: options.model, effort: options.effort) else {
             throw SessionServiceError("The selected " + agent.displayName
                 + " model and effort are not supported together. Choose a current model and effort in Settings.")
         }
+
+        return options
     }
 }

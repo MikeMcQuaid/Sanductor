@@ -1,6 +1,7 @@
 import Foundation
 import SanductorData
 import SanductorDomain
+import TerminalUI
 
 /// The sidebar the last run left behind: written on every
 /// reading and painted before the first one, so the window opens
@@ -40,34 +41,10 @@ extension DashboardModel {
         isDiscoveringModels = true
 
         let known = store.load()
-        await withTaskGroup(of: (AgentKind, String?, AgentModelCatalogue?).self) { tasks in
+        await withDiscardingTaskGroup { tasks in
             for agent in AgentKind.allCases {
                 tasks.addTask {
-                    let stamp = await self.service.modelListingStamp(for: agent)
-                    guard stamp == nil || stamp != known.discoveredModelsVersion[agent.rawValue]
-                        || known.modelCatalogues[agent.rawValue] == nil
-                    else {
-                        return (agent, stamp, nil)
-                    }
-
-                    return await (agent, stamp, self.service.discoverModels(for: agent))
-                }
-            }
-            for await (agent, stamp, catalogue) in tasks {
-                if let version = stamp?.split(separator: "#").first, version.isEmpty == false {
-                    installedVersions[agent] = String(version)
-                }
-                guard let catalogue else {
-                    continue
-                }
-
-                discoveredModels[agent] = catalogue.models
-                modelNames[agent] = catalogue.names
-                modelCatalogues[agent] = catalogue
-                store.update { metadata in
-                    metadata.discoveredModels[agent.rawValue] = catalogue.models
-                    metadata.discoveredModelsVersion[agent.rawValue] = stamp
-                    metadata.modelCatalogues[agent.rawValue] = catalogue
+                    await self.refreshModels(for: agent, known: known)
                 }
             }
         }
@@ -75,6 +52,47 @@ extension DashboardModel {
         publishSessionChoices()
         if service.modelFilesStamp() != filesStamp {
             await discoverModels(ifFilesChanged: true)
+        }
+    }
+
+    /// Asks one CLI its models when its stamp moved. Uninstalled
+    /// agents and failures already reported get one quiet try.
+    private func refreshModels(for agent: AgentKind, known: AppMetadata) async {
+        let stamp = await service.modelListingStamp(for: agent)
+        // Kept empty: a failed probe leaves the stamp leading with "#".
+        if let version = stamp?.split(separator: "#", omittingEmptySubsequences: false).first,
+           version.isEmpty == false
+        {
+            installedVersions[agent] = String(version)
+        }
+        guard stamp == nil || stamp != known.discoveredModelsVersion[agent.rawValue]
+            || known.modelCatalogues[agent.rawValue] == nil
+        else {
+            return
+        }
+
+        let discover = { try await self.service.discoverModels(for: agent) }
+        let catalogue: AgentModelCatalogue?
+        if availableAgents.contains(agent), reportedModelDiscoveryFailures.contains(agent) == false {
+            catalogue = await ErrorLog.shared.attemptingTwice(agent.displayName + " model discovery", discover)
+            if catalogue == nil {
+                reportedModelDiscoveryFailures.insert(agent)
+            }
+        } else {
+            catalogue = try? await discover()
+        }
+        guard let catalogue else {
+            return
+        }
+
+        reportedModelDiscoveryFailures.remove(agent)
+        discoveredModels[agent] = catalogue.models
+        modelNames[agent] = catalogue.names
+        modelCatalogues[agent] = catalogue
+        store.update { metadata in
+            metadata.discoveredModels[agent.rawValue] = catalogue.models
+            metadata.discoveredModelsVersion[agent.rawValue] = stamp
+            metadata.modelCatalogues[agent.rawValue] = catalogue
         }
     }
 

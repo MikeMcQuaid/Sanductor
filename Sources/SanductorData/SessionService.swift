@@ -229,9 +229,9 @@ public struct SessionService: Sendable {
     ) async throws -> String {
         try requireSandboxWorkspace(slot.path)
 
-        try validate(options, for: agent)
+        let launch = try validate(options, for: agent)
         let sessionName = SessionName.make(repository: slot.repository.name, branch: slot.branch, agent: agent)
-        let arguments = runner(for: agent).optionArguments(model: options.model, effort: options.effort)
+        let arguments = runner(for: agent).optionArguments(model: launch.model, effort: launch.effort)
         await progress("Writing the prompt file")
         let promptFile = try PromptPayload.write(prompt, paths: paths, store: store)
 

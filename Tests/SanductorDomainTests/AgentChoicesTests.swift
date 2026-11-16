@@ -25,6 +25,13 @@ struct AgentChoicesTests {
     }
 
     @Test
+    func `agents without discovered models start on the CLI's own default`() {
+        let choices = AgentChoices(models: [], efforts: ["high"], defaultModel: "", defaultEffort: "")
+        #expect(choices.supports(model: "", effort: ""))
+        #expect(choices.supports(model: "", effort: "high") == false)
+    }
+
+    @Test
     func `phone choices use the published per-model catalogue`() {
         let choices = AgentChoices(agent: .claudeCode, defaults: [
             "claude-models": "fable haiku", "claude-model": "fable", "claude-effort": "max",

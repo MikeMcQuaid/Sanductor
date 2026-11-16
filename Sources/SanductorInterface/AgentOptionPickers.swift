@@ -98,7 +98,9 @@ public struct AgentOptionPickers: View {
         .hoverHelp("The model the agent uses")
         .disabled(choices(agent).models.isEmpty)
         if choices(agent).models.isEmpty {
-            Text("Waiting for model discovery…").foregroundStyle(.secondary)
+            Text(agent.displayName + "'s default model")
+                .foregroundStyle(.secondary)
+                .hoverHelp("Model discovery has not answered, so the agent starts on the model its CLI chooses")
         }
         if choices(agent).supportedEfforts(for: model).isEmpty == false {
             Picker("Effort", selection: $effort) {

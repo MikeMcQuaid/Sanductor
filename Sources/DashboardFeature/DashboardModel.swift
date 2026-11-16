@@ -340,6 +340,9 @@ public final class DashboardModel {
     var discoveredModels: [AgentKind: [String]] = [:]
     var modelCatalogues: [AgentKind: AgentModelCatalogue] = [:]
     @ObservationIgnored var isDiscoveringModels = false
+    /// Agents whose discovery failure is already in the Messages pane,
+    /// so a listing that keeps failing reports once until it answers.
+    @ObservationIgnored var reportedModelDiscoveryFailures: Set<AgentKind> = []
 
     /// See `SessionService.modelNames`: read beside the models, so a
     /// picker draws from memory rather than a file.

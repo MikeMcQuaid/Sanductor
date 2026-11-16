@@ -63,8 +63,14 @@ public struct AgentChoices: Hashable, Sendable {
         modelEfforts[model] ?? []
     }
 
+    /// No model means the CLI's own default, so an agent whose
+    /// models were never discovered can still start.
     public func supports(model: String, effort: String) -> Bool {
-        models.contains(model) && (effort.isEmpty || supportedEfforts(for: model).contains(effort))
+        if model.isEmpty {
+            effort.isEmpty
+        } else {
+            models.contains(model) && (effort.isEmpty || supportedEfforts(for: model).contains(effort))
+        }
     }
 
     /// Model changes cannot carry an unsupported effort across families.
