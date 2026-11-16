@@ -59,7 +59,10 @@ extension DashboardModel {
     /// agents and failures already reported get one quiet try.
     private func refreshModels(for agent: AgentKind, known: AppMetadata) async {
         let stamp = await service.modelListingStamp(for: agent)
-        if let version = stamp?.split(separator: "#").first, version.isEmpty == false {
+        // Kept empty: a failed probe leaves the stamp leading with "#".
+        if let version = stamp?.split(separator: "#", omittingEmptySubsequences: false).first,
+           version.isEmpty == false
+        {
             installedVersions[agent] = String(version)
         }
         guard stamp == nil || stamp != known.discoveredModelsVersion[agent.rawValue]

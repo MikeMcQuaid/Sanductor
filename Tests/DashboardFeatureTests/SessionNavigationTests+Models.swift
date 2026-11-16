@@ -66,6 +66,21 @@ extension SessionNavigationTests {
         #expect(await runner.listings == 6)
         #expect(reports().count == 2)
     }
+
+    @Test
+    func `a failed version probe keeps the last version rather than the cache time`() async throws {
+        let runner = ModelCatalogueRunner()
+        let fixture = Fixture(runner: runner, agents: [ClaudeCodeRunner(), CodexRunner()])
+        defer { try? FileManager.default.removeItem(atPath: fixture.root) }
+        await fixture.model.discoverModels()
+        #expect(fixture.model.launchChoices(for: .codexCLI).version == "1.0")
+        let codexHome = fixture.root + "/home/.codex"
+        try FileManager.default.createDirectory(atPath: codexHome, withIntermediateDirectories: true)
+        try Data("{}".utf8).write(to: URL(filePath: codexHome + "/models_cache.json"))
+        await runner.failVersionProbe()
+        await fixture.model.discoverModels()
+        #expect(fixture.model.launchChoices(for: .codexCLI).version == "1.0")
+    }
 }
 
 // MARK: - ModelCatalogueRunner
@@ -74,6 +89,10 @@ private actor ModelCatalogueRunner: ProcessRunner {
     // MARK: Internal
 
     private(set) var listings = 0
+
+    func failVersionProbe() {
+        version = ""
+    }
 
     func upgrade(failing: Bool, reason: String = "") {
         version = "2.0"
