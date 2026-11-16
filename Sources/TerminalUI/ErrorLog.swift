@@ -96,22 +96,21 @@ public final class ErrorLog {
     /// Runs work that can simply be tried again, once more before
     /// its failure is reported: the second try is the recovery, so
     /// the first failure goes only to the messages log, and a second
-    /// reports both. Whether either try succeeded.
-    public func attemptingTwice(_ what: String, _ work: () async throws -> Void) async -> Bool {
+    /// reports both. What the succeeding try returned, nil when neither did.
+    @discardableResult
+    public func attemptingTwice<Value>(_ what: String, _ work: () async throws -> Value) async -> Value? {
         let first: String
         do {
-            try await work()
-            return true
+            return try await work()
         } catch {
             first = error.localizedDescription
         }
         PerformanceLog.recordMessage(what + ": " + first + " (trying once more)", isError: true)
         do {
-            try await work()
-            return true
+            return try await work()
         } catch {
             report(what + ": " + first + "; then again: " + error.localizedDescription)
-            return false
+            return nil
         }
     }
 

@@ -179,7 +179,7 @@ final class RepositorySessionsModel {
         _ work: () async throws -> Void,
         onResumed: @MainActor () async -> Void,
     ) async {
-        if await ErrorLog.shared.attemptingTwice("Resuming " + name, work) {
+        if await ErrorLog.shared.attemptingTwice("Resuming " + name, work) != nil {
             await onResumed()
         }
         isResuming = false

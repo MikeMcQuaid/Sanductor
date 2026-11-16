@@ -202,6 +202,8 @@ substitutes the payload and refuses interactive password prompts.
 Payload variables use `${name}` so sudo's login shell leaves their
 expansion to the sandbox shell; bare `$name` expands before the payload
 runs.
+Payloads separate commands with `;` rather than line breaks, which that
+shell removes as escaped newlines.
 `env -i` gives a clean environment, `GIT_CONFIG_*` injects `safe.directory`
 (shared repositories are owned by the other user) and `sandbox-exec`
 confines everything downstream, including the herdr server. Claude
@@ -620,7 +622,11 @@ initialisation and Codex's app-server `model/list`, without sending a
 prompt.
 Successful catalogues persist under the CLI version, schema and cache stamp;
 installation changes trigger another check while the app is open.
-Failed checks retain the last good catalogue. Models sort by capability
+Failed checks retain the last good catalogue. A check that fails twice
+for an installed agent reaches the Messages pane once, then retries
+quietly until it answers. Until an agent has a catalogue, its sessions
+and reviews start on the CLI's own default model and effort, so a broken
+listing never stops an agent starting. Models sort by capability
 family (Fable/Astra, Opus/Sol, Sonnet/Terra, Haiku/Luna), then newest
 version first. Pickers and PR template disclosures share those names.
 Pickers offer only discovered models and their reported effort levels;
@@ -1022,7 +1028,8 @@ reads git before offering branches not held by other worktrees.
   then reported once naming both; a success in between makes the
   first not news, and one nobody reads again within a minute and a
   half is reported as it stands, saying so. Resuming a session is
-  tried twice the same way (`ErrorLog.attemptingTwice`). A
+  tried twice the same way (`ErrorLog.attemptingTwice`), as is model
+  discovery. A
   conversation that fell back to REST is a recovery that worked, and
   goes only to the messages log.
   Working agents use a blue filled play circle and completed turns a

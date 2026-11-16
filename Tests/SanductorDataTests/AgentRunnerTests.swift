@@ -14,6 +14,33 @@ struct AgentRunnerTests {
     }
 
     @Test
+    func `the Codex model listing survives sudo login escaping`() async throws {
+        let directory = try TestSupport.temporaryDirectory("codex-model-listing")
+        defer { try? FileManager.default.removeItem(atPath: directory) }
+        let codex = directory + "/codex"
+        try #"""
+        #!/bin/zsh -f
+        [[ "$1" == app-server ]] || exit 2
+        while IFS= read -r line; do
+            case "$line" in
+                (*'"id":1,'*) print -r -- '{"id":1,"result":{}}' ;;
+                (*'"id":2,'*) print -r -- '{"method":"note"}'
+                    print -r -- '{"id":2,"result":{"data":[{"model":"gpt-test","hidden":false}]}}' ;;
+            esac
+        done
+        """#.write(toFile: codex, atomically: true, encoding: .utf8)
+        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: codex)
+        let runner = CodexRunner()
+        let result = try await FoundationProcessRunner().run(
+            TestSupport.sudoLoginArguments(["/bin/zsh", "-c", runner.modelListingCommand.joined(separator: " ")]),
+            workingDirectory: directory,
+            environment: ["PATH": directory + ":/usr/bin:/bin"],
+        )
+        #expect(result.succeeded, Comment(rawValue: result.standardError))
+        #expect(runner.modelCatalogue(from: result.standardOutput)?.models == ["gpt-test"])
+    }
+
+    @Test
     func `versions come out of whatever the CLI wraps them in`() {
         #expect(ClaudeCodeRunner().parseVersion("2.1.238 (Claude Code)") == "2.1.238")
         #expect(CodexRunner().parseVersion("codex-cli 0.149.0\n") == "0.149.0")

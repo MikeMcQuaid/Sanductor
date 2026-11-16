@@ -13,13 +13,14 @@ struct ErrorLogRetryTests {
         let log = ErrorLog()
         let what = "Trying " + UUID().uuidString
         var tries = 0
-        let succeeded = await log.attemptingTwice(what) {
+        let value = await log.attemptingTwice(what) {
             tries += 1
             if tries == 1 {
                 throw Failure(errorDescription: "first")
             }
+            return tries
         }
-        #expect(succeeded)
+        #expect(value == 2)
         #expect(tries == 2)
         #expect(log.entries.contains { $0.message.contains(what) } == false)
     }
@@ -29,11 +30,11 @@ struct ErrorLogRetryTests {
         let log = ErrorLog()
         let what = "Trying " + UUID().uuidString
         var tries = 0
-        let succeeded = await log.attemptingTwice(what) {
+        let value: Void? = await log.attemptingTwice(what) {
             tries += 1
             throw Failure(errorDescription: "try " + String(tries))
         }
-        #expect(succeeded == false)
+        #expect(value == nil)
         #expect(tries == 2)
         let about = log.entries.filter { $0.message.contains(what) }
         #expect(about.count == 1)

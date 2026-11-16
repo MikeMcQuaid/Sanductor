@@ -2,6 +2,7 @@
 import Foundation
 import SanductorData
 import SanductorDomain
+import TerminalUI
 import Testing
 
 extension SessionNavigationTests {
@@ -48,6 +49,23 @@ extension SessionNavigationTests {
         fixture.model.restoreDiscoveredModels()
         #expect(fixture.model.launchChoices(for: .codexCLI).modelEfforts["gpt-6-sol"] == ["ultra", "max"])
     }
+
+    @Test
+    func `failed model discovery retries once and then reports once`() async {
+        let reason = UUID().uuidString
+        let runner = ModelCatalogueRunner()
+        await runner.upgrade(failing: true, reason: reason)
+        let fixture = Fixture(runner: runner, agents: [ClaudeCodeRunner(), CodexRunner()])
+        defer { try? FileManager.default.removeItem(atPath: fixture.root) }
+        let reports = { ErrorLog.shared.entries.filter { $0.message.contains(reason) }.map(\.message) }
+        await fixture.model.discoverModels()
+        #expect(await runner.listings == 4)
+        #expect(reports().count == 2)
+        #expect(reports().contains { $0.hasPrefix("Codex model discovery") })
+        await fixture.model.discoverModels()
+        #expect(await runner.listings == 6)
+        #expect(reports().count == 2)
+    }
 }
 
 // MARK: - ModelCatalogueRunner
@@ -57,9 +75,10 @@ private actor ModelCatalogueRunner: ProcessRunner {
 
     private(set) var listings = 0
 
-    func upgrade(failing: Bool) {
+    func upgrade(failing: Bool, reason: String = "") {
         version = "2.0"
         self.failing = failing
+        self.reason = reason
     }
 
     func run(
@@ -79,11 +98,12 @@ private actor ModelCatalogueRunner: ProcessRunner {
             output = #"{"result":{"data":[{"model":"gpt-6-sol","hidden":false,"supportedReasoningEfforts":["#
                 + #"{"reasoningEffort":"max"},{"reasoningEffort":"ultra"}]}]}}"#
         }
-        return ProcessResult(status: failing ? 1 : 0, standardOutput: output, standardError: "")
+        return ProcessResult(status: failing ? 1 : 0, standardOutput: output, standardError: failing ? reason : "")
     }
 
     // MARK: Private
 
     private var version = "1.0"
     private var failing = false
+    private var reason = ""
 }
