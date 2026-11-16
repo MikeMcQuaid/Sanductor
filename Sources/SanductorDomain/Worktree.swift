@@ -39,6 +39,13 @@ public struct Worktree: Identifiable, Hashable, Sendable {
     /// ever runs, since the sandbox user must never write there.
     public let isHostDirectory: Bool
 
+    /// Whether Claude Code or Codex cut this worktree for its own
+    /// throwaway work, under `.claude` or `.codex`, rather than a
+    /// person or Sanductor making it; the sidebar leaves these out.
+    public var isAgentToolWorktree: Bool {
+        URL(filePath: path).pathComponents.contains { $0 == ".claude" || $0 == ".codex" }
+    }
+
     /// The stable identity, the worktree path.
     public var id: String {
         path

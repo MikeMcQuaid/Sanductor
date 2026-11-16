@@ -119,10 +119,7 @@ struct SessionServiceIntegrationTests {
         let arguments = try String(contentsOfFile: worktreePath + "/agent-arguments.txt", encoding: .utf8)
         #expect(arguments == "--model fable --effort max")
 
-        // The canonical path is the readable one now; no symlink
-        // stands beside it.
         #expect(worktreePath.contains("/worktrees/repo/do_the_thing"))
-        #expect(FileManager.default.fileExists(atPath: world.paths.friendlyWorktreesDirectory) == false)
     }
 
     @Test

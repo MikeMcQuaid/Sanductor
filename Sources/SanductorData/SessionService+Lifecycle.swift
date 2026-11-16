@@ -16,9 +16,9 @@ public extension SessionService {
     }
 
     /// Kills any session, records its resume id, then removes the
-    /// worktree, its branch and any symlink an earlier release left
-    /// beside it. The recorded session mapping survives, which is
-    /// how the conversation stays attributed to the repository.
+    /// worktree and its branch. The recorded session mapping
+    /// survives, which is how the conversation stays attributed to
+    /// the repository.
     func deleteWorktree(item: WorktreeItem) async throws {
         // The conversation is being thrown away deliberately, so its
         // copy goes too rather than lingering in the host’s app directory.
@@ -59,7 +59,6 @@ public extension SessionService {
             try await removeAsSandboxUser(path: worktree.path)
             try await git.forgetWorktree(repository: repository, branch: worktree.branch)
         }
-        removeFriendlySymlink(worktree: worktree)
         try await git.removeUnusedForkRemotes(repositoryPath: repository.path)
     }
 
@@ -178,15 +177,6 @@ public extension SessionService {
         await git.trackedFile(worktreePath: worktreePath, path: path)
     }
 
-    /// Removes the symlink an earlier release kept beside a
-    /// uuid-layout worktree; the canonical path is what git knows,
-    /// so this is cosmetic cleanup of the old layout.
-    internal func removeFriendlySymlink(worktree: Worktree) {
-        let link = paths.friendlyWorktreesDirectory + "/" + worktree.repositoryName
-            + "/" + worktree.branch.replacing("/", with: "-")
-        try? FileManager.default.removeItem(atPath: link)
-    }
-
     /// Why a merge-safe cleanup refused a worktree, so the caller can
     /// name what a forced deletion would destroy.
     enum CleanupRefusal: Equatable, Sendable {
@@ -225,7 +215,6 @@ public extension SessionService {
         rememberResumeID(sessionName: sessionName, worktreePath: worktree.path)
         await killSession(name: sessionName)
         try await git.removeMergedWorktree(repository: repository, worktreePath: worktree.path)
-        removeFriendlySymlink(worktree: worktree)
         backup.forget(worktree: worktree)
         do {
             let cleanup = try await git.deleteMergedBranches(worktreePath: repository.path, into: baseRef)
@@ -313,9 +302,8 @@ public extension SessionService {
     }
 
     /// The `worktrees/<repository>` directories the paths live
-    /// under (an older release's `worktrees/<uuid>` ones included):
-    /// a repository's worktrees share their container, so the
-    /// containers attribute conversations to the repository.
+    /// under: a repository's worktrees share their container, so
+    /// the containers attribute conversations to the repository.
     internal func worktreeContainers(of worktreePaths: [String]) -> [String] {
         let prefix = paths.worktreesDirectory + "/"
         var containers = [String]()

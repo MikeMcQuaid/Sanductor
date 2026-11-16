@@ -100,6 +100,27 @@ struct RowRetentionTests {
     }
 
     @Test
+    func `drops an agent tool's own worktree although it is still on disk`() throws {
+        let root = try makeDirectory()
+        defer { try? FileManager.default.removeItem(atPath: root) }
+        let repositoryPath = try makeDirectory(in: root, named: "repo")
+        let codex = try makeDirectory(in: root, named: ".codex/worktrees/9868/repo")
+
+        // A launch snapshot from before such worktrees were hidden
+        // still lists one; the reading's omission is deliberate.
+        let previous = [group(repositoryPath: repositoryPath, paths: [repositoryPath, codex])]
+        let next = [group(repositoryPath: repositoryPath, paths: [repositoryPath])]
+
+        let merged = DashboardModel.retainingLostRows(of: previous, in: next)
+        #expect(merged.flatMap(\.items).map(\.worktree.path) == [repositoryPath])
+
+        // A repository the reading lost altogether keeps its own
+        // rows, but not that one.
+        let kept = DashboardModel.retainingLostRows(of: previous, in: [])
+        #expect(kept.flatMap(\.items).map(\.worktree.path) == [repositoryPath])
+    }
+
+    @Test
     func `keeps a creation placeholder, which has no directory yet`() throws {
         let root = try makeDirectory()
         defer { try? FileManager.default.removeItem(atPath: root) }

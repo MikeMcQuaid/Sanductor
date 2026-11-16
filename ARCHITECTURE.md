@@ -853,12 +853,14 @@ editing and insertion retain the original text.
    the repository's name, or `<owner>-<name>` when another owner's
    clone already holds it. The finder marks and opens checkouts by
    `owner/name` alone, never the bare name, so a fork and its upstream
-   sit side by side. Older `worktrees/<uuid>/<branch>` checkouts keep
-   working because everything derives from `git worktree list`. Each
-   poll also adopts checkouts the canonical listing does not know (an
-   agent may clone a base of its own and cut worktrees from it), with
-   the owning clone as their repository path. Sessions always launch
-   from the real path because transcripts are keyed by cwd.
+   sit side by side. The sidebar shows every worktree
+   `git worktree list` reports except those under a `.claude` or
+   `.codex` directory: Claude Code and Codex cut throwaway build
+   worktrees there, which nobody made by hand or through Sanductor.
+   Each poll also adopts checkouts the canonical listing does not know
+   (an agent may clone a base of its own and cut worktrees from it),
+   with the owning clone as their repository path. Sessions always
+   launch from the real path because transcripts are keyed by cwd.
 4. The prompt is written to `sanductor/prompts/prompt-<UUID>.md` in the
    shared workspace. The shell reads and removes it before launch,
    using absolute command paths to exclude shell aliases. It travels
