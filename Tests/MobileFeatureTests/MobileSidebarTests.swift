@@ -4,6 +4,41 @@ import SanductorRemote
 import Testing
 
 struct MobileSidebarTests {
+    @Test(arguments: ["work", "other"], [AgentActivity.idle, .working])
+    func `phone PR links follow the branch independently of agent activity`(branch: String, activity: AgentActivity) {
+        let pullRequest = SidebarPullRequest(PullRequestSummary(
+            number: 42,
+            title: "",
+            url: "https://github.com/owner/repo/pull/42",
+            headBranch: "work",
+            mergeable: "",
+            reviewDecision: "APPROVED",
+            checks: "SUCCESS",
+        ))
+        let sidebar = [
+            SidebarRepository(name: "repo", owner: "owner", worktrees: ["/tree"], entries: [
+                SidebarEntry(
+                    target: SidebarTarget(repository: "repo", repositoryPath: "/repo", branch: "work", path: "/tree"),
+                    status: .idleAgent,
+                    activity: .idle,
+                    block: nil,
+                    pullRequest: pullRequest,
+                ),
+            ]),
+        ]
+        let session = MobileSession(
+            id: "pane",
+            name: "agent",
+            repository: "repo",
+            branch: branch,
+            agent: .codexCLI,
+            activity: activity,
+            directory: "/tree",
+        )
+        #expect(session.sidebarEntry(in: sidebar)?.pullRequest == (branch == "work" ? pullRequest : nil))
+        #expect(session.sidebarEntry(in: [])?.pullRequest == nil)
+    }
+
     @Test
     func `phone visibility follows the Mac snapshot without local working hours`() {
         let model = MobileModel(configuration: SSHConfiguration())

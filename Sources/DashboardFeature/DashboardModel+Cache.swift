@@ -207,22 +207,27 @@ extension DashboardModel {
 
     private func publishSidebar(_ real: [RepositoryGroup]) {
         let sidebar = real.map { group in
-            SidebarRepository(
+            let hidden = isWorkHidden(group.repository)
+            let items = hidden ? [] : group.items.filter { item in
+                item.worktree.isHostDirectory == false && item.session?.paneID != nil
+            }
+            return SidebarRepository(
                 name: group.repository.name,
                 owner: group.repository.owner,
-                worktrees: group.items.filter { $0.worktree.isHostDirectory == false }.map(\.worktree.path),
-                entries: group.items.filter { $0.worktree.isHostDirectory == false }.map { item in
+                worktrees: items.map(\.worktree.path),
+                entries: items.map { item in
                     SidebarEntry(
                         target: SidebarTarget(item.worktree),
                         status: sidebarStatus(for: item),
                         activity: item.session?.activity,
                         block: block(for: item),
+                        pullRequest: pullRequest(for: item).map(SidebarPullRequest.init),
                     )
                 },
                 lastActivityAt: SessionService.repositoryActivity(of: group),
                 fullName: group.repository.fullName,
                 defaultBranch: group.defaultBranch,
-                isHidden: isWorkHidden(group.repository),
+                isHidden: hidden,
             )
         }
         if sidebar != publishedSidebar, service.publishSidebar(sidebar) {

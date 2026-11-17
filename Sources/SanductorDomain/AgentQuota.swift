@@ -5,12 +5,20 @@ public struct AgentQuota: Equatable, Identifiable, Sendable {
     // MARK: Lifecycle
 
     /// Creates a quota window; absent allowances are omitted by the adapter.
-    public init(id: String, label: String, usedPercent: Double, resetsAt: Date?, modelName: String? = nil) {
+    public init(
+        id: String,
+        label: String,
+        usedPercent: Double,
+        resetsAt: Date?,
+        modelName: String? = nil,
+        availableResets: Int? = nil,
+    ) {
         self.id = id
         self.label = label
         self.usedPercent = usedPercent
         self.resetsAt = resetsAt
         self.modelName = modelName
+        self.availableResets = availableResets
     }
 
     // MARK: Public
@@ -25,4 +33,6 @@ public struct AgentQuota: Equatable, Identifiable, Sendable {
     public let usedPercent: Double
     /// The provider's reset time, when reported.
     public let resetsAt: Date?
+    /// Manual resets available for this allowance; nil when the provider does not report them.
+    public let availableResets: Int?
 }

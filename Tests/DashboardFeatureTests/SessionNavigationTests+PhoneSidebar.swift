@@ -5,10 +5,51 @@ import Testing
 
 extension SessionNavigationTests {
     @Test
+    func `phone PR projection updates from the authenticated host cache without fetching`() throws {
+        let fixture = Fixture()
+        defer { fixture.close() }
+        fixture.model.groups[0].items[0] = fixture.model.groups[0].items[0].with(session: AgentSession(
+            name: "session", agent: .codexCLI, status: .running, paneID: "pane",
+        ))
+        let summary = PullRequestSummary(
+            number: 42,
+            title: "Private title",
+            url: "https://github.com/owner/repo/pull/42",
+            headBranch: "main",
+            mergeable: "CONFLICTING",
+            reviewDecision: "CHANGES_REQUESTED",
+            checks: "FAILURE",
+            body: "Private body",
+        )
+        fixture.model.pullRequests.rememberBranchSummary(
+            summary, repositoryPath: fixture.repository.path, branch: "main",
+        )
+        fixture.model.cacheSidebar(fixture.model.groups)
+        let file = URL(filePath: fixture.root + "/shared/sanductor/sidebar-sanductor-dev.json")
+        let data = try Data(contentsOf: file)
+        let sidebar = try JSONDecoder().decode([SidebarRepository].self, from: data)
+        #expect(sidebar.first?.entries.first?.pullRequest == SidebarPullRequest(summary))
+        #expect(String(data: data, encoding: .utf8)?.contains("Private") == false)
+        #expect(sidebar.first?.entries.first?.pullRequest?.details != nil)
+        #expect(sidebar.first?.entries.first?.status == .ciFailing)
+
+        fixture.model.pullRequests.rememberBranchSummary(nil, repositoryPath: fixture.repository.path, branch: "main")
+        fixture.model.cacheSidebar(fixture.model.groups)
+        #expect(try JSONDecoder()
+            .decode([SidebarRepository].self, from: Data(contentsOf: file))
+            .first?
+            .entries
+            .first?
+            .pullRequest == nil)
+    }
+
+    @Test
     func `phone sidebar publishes public owners and ordered worktrees only when changed`() throws {
         let fixture = Fixture()
         defer { fixture.close() }
-        let original = try #require(fixture.model.groups.first?.items.first)
+        let original = try #require(fixture.model.groups.first?.items.first).with(session: AgentSession(
+            name: "session", agent: nil, status: .running, paneID: "pane",
+        ))
         let host = WorktreeItem(
             worktree: Worktree(
                 repositoryName: "repo",
@@ -56,5 +97,27 @@ extension SessionNavigationTests {
 
         fixture.model.cacheSidebar([])
         #expect(try JSONDecoder().decode([SidebarRepository].self, from: Data(contentsOf: URL(filePath: file))).isEmpty)
+    }
+
+    @Test(arguments: [SessionStatus.running, .finished])
+    func `phone snapshot removes worktree details when its live pane closes`(status: SessionStatus) throws {
+        let fixture = Fixture()
+        defer { fixture.close() }
+        let original = try #require(fixture.model.groups.first?.items.first)
+        fixture.model.groups[0].items[0] = original.with(session: AgentSession(
+            name: "session", agent: .codexCLI, status: status, paneID: "pane",
+        ))
+        fixture.model.cacheSidebar(fixture.model.groups)
+        #expect(fixture.model.publishedSidebar.first?.entries.count == 1)
+        #expect(fixture.model.publishedSidebar.first?.worktrees == [original.worktree.path])
+
+        fixture.model.groups[0].items = [original]
+        fixture.model.cacheSidebar(fixture.model.groups)
+        let file = URL(filePath: fixture.root + "/shared/sanductor/sidebar-sanductor-dev.json")
+        let stopped = try JSONDecoder().decode([SidebarRepository].self, from: Data(contentsOf: file))
+        #expect(stopped.first?.entries.isEmpty == true)
+        #expect(stopped.first?.worktrees.isEmpty == true)
+        #expect(stopped.first?.name == fixture.repository.name)
+        #expect(fixture.model.store.load().cachedSidebar.first?.worktrees.count == 1)
     }
 }

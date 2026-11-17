@@ -177,6 +177,15 @@
                     .background(.background)
                 }
             }
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    if let pullRequest = model.sidebarEntry(
+                        for: model.sessions.first { $0.id == session.id } ?? session,
+                    )?.pullRequest {
+                        MobilePullRequestLink(pullRequest: pullRequest)
+                    }
+                }
+            }
             .navigationTitle(model.sessions.first { $0.id == session.id }?.branch ?? session.branch)
             .navigationBarTitleDisplayMode(.inline)
             .onChange(of: model.connectionGeneration) {

@@ -23,7 +23,7 @@ No Sanductor account, subscription or hosted relay exists or is planned.
 - Signs and pushes from any published stack layer, with rebasing, labels, merge queues, automerge and branch and temporary file cleanup.
 - Keeps agents running and reachable over SSH after quitting, with private backups and 30-day retention that preserves ongoing work.
 - Saves reusable prompts and schedules recurring repository tasks.
-- Tracks agents, PRs and blockers by repository or status, with bulk actions, notifications and account quota usage in Messages.
+- Tracks agents, PRs and blockers by repository or status, with bulk actions, notifications, usage and available resets in Messages.
 - Edits code with syntax highlighting, fuzzy file search and shell tabs.
 - Starts tasks and checks blockers through Shortcuts and Siri, with an [iPhone companion](#-iphone-companion-app) and agent shortcut keys.
 
@@ -35,8 +35,6 @@ No Sanductor account, subscription or hosted relay exists or is planned.
 - A [Codex CLI] or [Claude Code] account.
 
 ## 📦 Installation
-
-Install and upgrade with [Homebrew].
 
 ```bash
 brew install sanductor
@@ -91,6 +89,7 @@ fi
 ## 📱 iPhone companion app
 
 For iOS 26+, run `script/bootstrap` and `script/install` in a source checkout and build `Sanductor-iOS` in Xcode with your signing team.
+Shows public and private PR status with conflict badges and prefers GitHub Mobile, falling back to GitHub.com; private PRs require sign-in.
 
 1. Copy the public key from iPhone Settings to your Mac's clipboard, then install it for the `sandvault-<you>` user:
 

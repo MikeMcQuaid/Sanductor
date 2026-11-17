@@ -21,6 +21,8 @@ public extension ClaudeCodeRunner {
     var quotaCommand: String? {
         """
         unsetopt xtrace; quota_token=''; \
+        quota_version=$(claude --version 2>/dev/null) || quota_version=''; \
+        quota_version=${quota_version%% *}; \
         for quota_keychain in "${HOME}/Library/Keychains/sandvault.keychain-db" \
           "${HOME}/Library/Keychains/login.keychain-db"; do \
           [[ -f "${quota_keychain}" ]] || continue; \
@@ -35,8 +37,10 @@ public extension ClaudeCodeRunner {
             "${HOME}/.claude/.credentials.json" 2>/dev/null) || exit 1; \
         fi;
         """ + quotaRequest(
-            url: "https://api.anthropic.com/api/oauth/usage",
-            headers: #"printf 'header = "anthropic-beta: oauth-2025-04-20"\n';"#,
+            url: "https://api.anthropic.com/api/oauth/usage?cedar_ember=1",
+            headers: #"printf 'header = "anthropic-beta: oauth-2025-04-20"\n'; "#
+                + #"if [[ "${quota_version}" =~ '^[0-9]+(\.[0-9]+)+$' ]]; then "#
+                + #"printf 'header = "User-Agent: claude-cli/%s (external, cli)"\n' "${quota_version}"; fi;"#,
         )
     }
 
@@ -45,24 +49,16 @@ public extension ClaudeCodeRunner {
         let decoder = JSONDecoder()
         decoder.keyDecodingStrategy = .convertFromSnakeCase
         let response = try decoder.decode(ClaudeQuotaResponse.self, from: data)
+        let resets = (try? decoder.decode(ClaudeQuotaResetResponse.self, from: data))?.cedarEmber
+        let now = Date.now
         if let limits = response.limits, limits.isEmpty == false {
             return limits.compactMap { limit in
-                guard let percent = limit.percent, percent.isFinite, percent >= 0 else {
+                guard let percent = limit.percent, percent.isFinite, percent >= 0,
+                      let period = ["weekly": "Weekly", "five_hour": "5 hours", "session": "5 hours"][limit.group]
+                else {
                     return nil
                 }
 
-                let period: String
-                switch limit.group {
-                case "weekly":
-                    period = "Weekly"
-
-                case "five_hour",
-                     "session":
-                    period = "5 hours"
-
-                default:
-                    return nil
-                }
                 let name = limit.scope?.model?.displayName.map { String($0.prefix(Self.quotaNameLimit)) }
                 return AgentQuota(
                     id: limit.kind + "/" + (name ?? ""),
@@ -70,6 +66,11 @@ public extension ClaudeCodeRunner {
                     usedPercent: percent,
                     resetsAt: limit.resetsAt.flatMap(Self.quotaReset),
                     modelName: name,
+                    availableResets: resets?.available(
+                        for: name == "Fable" ? "seven_day_overage_included"
+                            : name == nil ? (period == "Weekly" ? "seven_day" : "five_hour") : nil,
+                        now: now,
+                    ),
                 )
             }
         }
@@ -90,6 +91,7 @@ public extension ClaudeCodeRunner {
                 usedPercent: window.utilization,
                 resetsAt: window.resetsAt.flatMap(Self.quotaReset),
                 modelName: name,
+                availableResets: resets?.available(for: id, now: now),
             )
         }
     }

@@ -43,7 +43,7 @@ public struct SidebarRepository: Codable, Equatable, Sendable {
     public let name: String
     /// The public GitHub owner, when known.
     public let owner: String?
-    /// Worktree paths in sidebar order, including the main checkout.
+    /// Visible worktrees with live panes in sidebar order, including the main checkout when running.
     public let worktrees: [String]
     /// Empty in snapshots written by older Mac builds.
     public let entries: [SidebarEntry]
