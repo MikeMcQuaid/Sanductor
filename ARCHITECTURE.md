@@ -1472,8 +1472,15 @@ reads additional source files.
    agent icons, percentages and reset times. Allowances with the
    same period and reset second share a row and show the reset once,
    keeping Claude and Fable together despite fractional-second offsets.
+   Reported manual limit resets appear beside the allowance they restore.
+   Codex supplies reset credits with usage; Claude's optional reset grants
+   are counted by allowance, excluding future, expired or paused grants.
+   An absent or inaccessible reset count stays hidden, never becoming zero.
+   Unreadable reset metadata never discards ordinary usage.
    Both adapters read their usage endpoints as the sandbox user,
    using its existing agent sign-in.
+   Claude requests resets with the installed CLI's versioned client
+   identity; unrecognised versions still fetch ordinary usage.
    Tokens stay inside the sandbox and travel to curl through standard
    input, never arguments or logs. Claude checks only explicitly
    unlocked sandbox keychains, falling back to its credentials file;
@@ -2517,6 +2524,9 @@ channel and subscribes again with the latest panes before reading events.
 Only existing repositories are offered. The repository list hides those
 without sessions; the top new-session menu still offers every repository.
 Repository and Status use the same compact row insets without separators.
+PR links share the repository and agent detail line, with closely spaced
+badges and the state expressed by its icon and accessibility label.
+The session and PR link remain separate touch targets.
 Repository headers show owner/repository names, with the Mac's primary
 title colour, secondary count and adjacent primary-coloured plus for
 session creation.
@@ -2533,6 +2543,9 @@ on connection and manual refresh, orders known repositories and worktrees
 accordingly and keeps new or unlisted sessions accessible. Without a
 snapshot it retains the sessions-first listing. This optional snapshot
 never grants access to repositories absent from the command's listing.
+Worktree entries and paths include only visible worktrees with live herdr
+panes; repository identity and visibility remain available for the
+new-session picker.
 Both platforms share `OwnerAvatar` and its per-owner memory and disk
 cache with the new-session menu and the iPhone's new-session repository
 row. The iPhone's agent picker uses text-sized marks with extra space
@@ -2564,6 +2577,31 @@ internal. Repository counts count worktrees with sessions. Status mode
 reads the host-provided PR classification and blockers through the shared
 sidebar snapshot; it never queries GitHub inside the sandbox. Host-only
 feedback-loop and load state are not inferred.
+The same projection includes a PR link, state, check rollup, review
+decision and conflicts for public and private repositories alike, using
+the Mac's existing authenticated readings and sidebar classification.
+Read-only private metadata may cross SSH; GitHub credentials and authority
+to perform GitHub writes may not. The shared snapshot is not an integrity
+boundary:
+agents can alter displayed status, which never authorises a GitHub action.
+No GitHub token is copied into the sandbox or stored by the phone.
+The SSH login authorises access to this metadata; viewing it requires no
+separate GitHub sign-in on the phone.
+Descriptions, conversations and logs remain outside this basic phone UI's
+scope, rather than being excluded for repository privacy.
+Phone rows and the selected terminal first try opening the HTTPS PR link
+as a Universal Link in its installed app, then fall back to the browser
+if iOS cannot open it there. GitHub Mobile must have Universal Links
+enabled; Sanductor honours that system preference.
+GitHub uses its own phone or browser sign-in for private repositories;
+that sign-in grants Sanductor no credentials or additional capabilities.
+The projection remains the last Mac reading until refreshed, and a live
+branch switch hides a PR belonging to the previous branch. Older snapshots
+without PR details remain readable. Status icons are shared with the Mac.
+Open PRs with known conflicts carry the conflict field and show the Mac's
+conflict badge, with its rebase guidance available to accessibility.
+Other mergeability values are omitted, and older snapshots without the
+field remain readable.
 Repository listings omit symlinked aliases, matching the desktop and
 creation's physical-path check. Creation accepts listed names, including
 spaces and non-ASCII characters, but rejects path separators and traversal.
@@ -2627,11 +2665,11 @@ confirmation against the selected URL before repairing the GitHub remote.
 Submodule redirects cannot rewrite the parent’s remote, and repairs keep
 its transport and unrelated fork destinations. The updated remote feeds
 the Mac and phone sidebar names on their next refresh.
-The desktop's review, editor, GitHub and historical-conversation surfaces
-are outside this companion's scope. The main screen keeps Settings and
-Connect or Disconnect at the top left in separate native glass buttons,
-with a fixed toolbar spacer between them. The new-session menu is alone
-at the top right in both sidebar modes.
+The desktop's review, editor, full GitHub and historical-conversation
+surfaces are outside this companion's scope. The main screen keeps
+Settings and Connect or Disconnect at the top left in separate native
+glass buttons, with a fixed toolbar spacer between them. The new-session
+menu is alone at the top right in both sidebar modes.
 Connect is blue on the disconnected page;
 Disconnect keeps its neutral colour. The disconnected page shows only
 its title and instruction, with the Connect icon inline. An explicit
@@ -2848,6 +2886,8 @@ request, and build-and-test and analyze in parallel on the `xcode-27`
 image, each requiring Xcode 27.2 or later. Analysis shares its
 clean Release builds with packaging; independent matrix jobs run each
 sanitizer, whose differently instrumented outputs cannot be shared.
+The combined analysis and packaging job allows 60 minutes, leaving room
+for builds before the three ten-minute notarisation waits.
 The stable `tests` check waits for analysis and every matrix job and
 fails if any failed, was cancelled or was skipped, preserving branch
 protection.

@@ -26,7 +26,10 @@ extension SessionNavigationTests {
         model.groups = [
             RepositoryGroup(
                 repository: Repository(name: "repo", path: original.repository.path, fullName: "Work/repo"),
-                items: original.items,
+                items: original.items.map { item in item.with(session: AgentSession(
+                    name: "session", agent: .codexCLI, status: .running, paneID: "pane",
+                ))
+                },
             ),
         ]
         model.selection = original.items.first
@@ -39,6 +42,8 @@ extension SessionNavigationTests {
         model.refreshWorkMode()
         #expect(model.visibleGroups.isEmpty)
         #expect(model.publishedSidebar.first?.isHidden == true)
+        #expect(model.publishedSidebar.first?.entries.isEmpty == true)
+        #expect(model.publishedSidebar.first?.worktrees.isEmpty == true)
         #expect(model.selection == nil)
         #expect(model.groups.first?.items.count == original.items.count)
         model.selection = original.items.first
@@ -48,6 +53,7 @@ extension SessionNavigationTests {
         model.refreshWorkMode()
         #expect(model.visibleGroups == model.groups)
         #expect(model.publishedSidebar.first?.isHidden == false)
+        #expect(model.publishedSidebar.first?.entries.count == original.items.count)
     }
 }
 

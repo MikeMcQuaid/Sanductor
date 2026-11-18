@@ -22,6 +22,7 @@ public extension CodexRunner {
         let decoder = JSONDecoder()
         decoder.keyDecodingStrategy = .convertFromSnakeCase
         let response = try decoder.decode(CodexQuotaResponse.self, from: data)
+        let resets = (try? decoder.decode(CodexQuotaResets.self, from: data))?.rateLimitResetCredits?.availableCount
         return [
             ("primary", response.rateLimit?.primaryWindow),
             ("secondary", response.rateLimit?.secondaryWindow),
@@ -46,6 +47,8 @@ public extension CodexRunner {
                 label: label,
                 usedPercent: window.usedPercent,
                 resetsAt: window.resetAt.map(Date.init(timeIntervalSince1970:)),
+                availableResets: window.limitWindowSeconds == Self.oneWeek
+                    ? resets : nil,
             )
         }
     }
@@ -63,6 +66,16 @@ private struct CodexQuotaResponse: Decodable {
     }
 
     let rateLimit: RateLimit?
+}
+
+// MARK: - CodexQuotaResets
+
+private struct CodexQuotaResets: Decodable {
+    struct Credits: Decodable {
+        let availableCount: Int?
+    }
+
+    let rateLimitResetCredits: Credits?
 }
 
 // MARK: - CodexQuotaWindow

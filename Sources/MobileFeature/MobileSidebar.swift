@@ -67,7 +67,7 @@
         // MARK: Private
 
         private static let blockLines = 2
-        private static let titleSpacing: CGFloat = 6
+        private static let titleSpacing: CGFloat = 4
         private static let rowSpacing: CGFloat = 3
         private static let rowInset: CGFloat = 8
         private static let agentIconSize: CGFloat = 14
@@ -146,63 +146,75 @@
         }
 
         private func sessionButton(_ session: MobileSession) -> some View {
-            Button { model.selection = session } label: {
-                HStack(alignment: .top, spacing: Self.titleSpacing) {
-                    if model.sidebarEntry(for: session)?.block != nil {
-                        Image(systemName: "hand.raised.fill")
-                            .foregroundStyle(.orange)
-                            .accessibilityLabel("Blocked")
-                    } else {
-                        SessionStatusIcon(status: .running, activity: session.activity)
-                            .interfaceFont(.callout)
+            VStack(alignment: .leading, spacing: 0) {
+                Button { model.selection = session } label: {
+                    HStack(alignment: .top, spacing: Self.titleSpacing) {
+                        if model.sidebarEntry(for: session)?.block != nil {
+                            Image(systemName: "hand.raised.fill")
+                                .foregroundStyle(.orange)
+                                .accessibilityLabel("Blocked")
+                                .frame(width: Self.agentIconSize)
+                        } else {
+                            SessionStatusIcon(status: .running, activity: session.activity)
+                                .interfaceFont(.callout)
+                                .frame(width: Self.agentIconSize)
+                        }
+                        Text(session.branch).font(nameStyle.font).lineLimit(1)
+                        Spacer(minLength: 0)
                     }
-                    sessionLabel(session)
-                    Spacer(minLength: 0)
+                    .foregroundStyle(.primary)
+                    .contentShape(Rectangle())
                 }
-                .foregroundStyle(.primary)
-                .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-            .padding(.leading, Self.rowInset)
-            .contextMenu {
-                if let entry = model.sidebarEntry(for: session) {
-                    Button(entry.block == nil ? "Block…" : "Edit block…") {
-                        pendingExistingBlock = entry.block
-                        pendingBlock = entry.target
+                .buttonStyle(.plain)
+                .contextMenu {
+                    if let entry = model.sidebarEntry(for: session) {
+                        Button(entry.block == nil ? "Block…" : "Edit block…") {
+                            pendingExistingBlock = entry.block
+                            pendingBlock = entry.target
+                        }
                     }
                 }
+                sessionLabel(session)
+                    .padding(.leading, Self.agentIconSize + Self.titleSpacing)
             }
         }
 
+        @ViewBuilder
         private func sessionLabel(_ session: MobileSession) -> some View {
-            VStack(alignment: .leading, spacing: 0) {
-                Text(session.branch).font(nameStyle.font).lineLimit(1)
-                HStack(spacing: Self.titleSpacing) {
-                    if mode == .status {
-                        let name = model.sidebarEntry(for: session)?.target.repository ?? session.repository
-                        let repository = model.sidebar.first { $0.name == name }
-                        OwnerAvatar(owner: repository?.owner, size: Self.agentIconSize)
-                        Text(name)
-                            .lineLimit(1)
-                            .accessibilityLabel(repository?.fullName ?? name)
-                    }
-                    if let agent = session.agent {
-                        AgentIcon(agent, size: Self.agentIconSize)
-                    } else {
-                        Image(systemName: "terminal").accessibilityLabel("Shell")
-                    }
-                    if let status = session.gitStatus {
-                        Text(status.summary).help(GitWorktreeStatus.countsHelp)
+            HStack(spacing: Self.titleSpacing) {
+                Button { model.selection = session } label: {
+                    HStack(spacing: Self.titleSpacing) {
+                        if mode == .status {
+                            let name = model.sidebarEntry(for: session)?.target.repository ?? session.repository
+                            let repository = model.sidebar.first { $0.name == name }
+                            OwnerAvatar(owner: repository?.owner, size: Self.agentIconSize)
+                            Text(name)
+                                .lineLimit(1)
+                                .accessibilityLabel(repository?.fullName ?? name)
+                        }
+                        if let agent = session.agent {
+                            AgentIcon(agent, size: Self.agentIconSize)
+                        } else {
+                            Image(systemName: "terminal").accessibilityLabel("Shell")
+                        }
                     }
                 }
-                .interfaceFont(.caption)
-                .foregroundStyle(.secondary)
-                if let block = model.sidebarEntry(for: session)?.block {
-                    Text("Blocked: " + block.dependency.label)
-                        .lineLimit(Self.blockLines)
-                        .interfaceFont(.caption)
-                        .foregroundStyle(.secondary)
+                .buttonStyle(.plain)
+                if let pullRequest = model.sidebarEntry(for: session)?.pullRequest {
+                    MobilePullRequestLink(pullRequest: pullRequest)
                 }
+                if let status = session.gitStatus {
+                    Text(status.summary).help(GitWorktreeStatus.countsHelp)
+                }
+                Spacer(minLength: 0)
+            }
+            .interfaceFont(.caption)
+            .foregroundStyle(.secondary)
+            if let block = model.sidebarEntry(for: session)?.block {
+                Text("Blocked: " + block.dependency.label)
+                    .lineLimit(Self.blockLines)
+                    .interfaceFont(.caption)
+                    .foregroundStyle(.secondary)
             }
         }
     }

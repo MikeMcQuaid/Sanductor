@@ -91,7 +91,19 @@ for mode in transient success persistent invalid submit-failure; do
       ! grep -qx spctl "${scratch}/events"
       [[ "$(grep -cx zip "${scratch}/events")" == 1 ]]
       case "${mode}" in
-        persistent) [[ "$(cat "${scratch}/attempts")" == 3 ]] ;;
+        persistent)
+          [[ "$(cat "${scratch}/attempts")" == 3 ]]
+          ruby -ryaml - "${scratch}/calls" <<'WORKFLOW'
+jobs = YAML.load_file('.github/workflows/tests.yml').fetch('jobs')
+wait_minutes = File.readlines(ARGV.fetch(0)).sum do |call|
+  call[/\Anotarytool wait .* --timeout (\d+)m\b/, 1].to_i
+end
+build_minutes = jobs.fetch('build-and-test').fetch('timeout-minutes')
+unless jobs.fetch('analyze').fetch('timeout-minutes') >= build_minutes + wait_minutes
+  abort 'CI analysis must allow time for builds and every notarisation wait'
+end
+WORKFLOW
+          ;;
         invalid)
           [[ "$(cat "${scratch}/attempts")" == 1 ]]
           grep -q 'Invalid signature diagnostic' "${scratch}/package.log"

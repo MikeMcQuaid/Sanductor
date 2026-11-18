@@ -110,7 +110,8 @@ jobs:
 
   analyze:
     runs-on: xcode-27
-    timeout-minutes: 30
+    # Leave time for builds before packaging's three ten-minute waits.
+    timeout-minutes: 60
     env:
       # Forks and Dependabot have no secrets. Check only the certificate
       # so script/package fails if the remaining credentials are missing.

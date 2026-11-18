@@ -32,6 +32,12 @@ extension MobileSession {
         if [.idleAgent, .worktree, .branch, .defaultBranch].contains(status) {
             status = agent == nil ? inactive : .idleAgent
         }
-        return SidebarEntry(target: target, status: status, activity: activity, block: block)
+        return SidebarEntry(
+            target: target,
+            status: status,
+            activity: activity,
+            block: block,
+            pullRequest: entry.target.branch == branch ? entry.pullRequest : nil,
+        )
     }
 }

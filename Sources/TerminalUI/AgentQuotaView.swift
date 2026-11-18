@@ -75,6 +75,11 @@ public struct AgentQuotaView: View {
                 Text((quota.modelName.map { $0 + " " } ?? "")
                     + quota.usedPercent.formatted(.number.precision(.fractionLength(0 ... 1))) + "% used")
                     .monospacedDigit()
+                if let resets = quota.availableResets, resets >= 0 {
+                    Text(String(resets) + (resets == 1 ? " reset available" : " resets available"))
+                        .monospacedDigit()
+                        .foregroundStyle(.secondary)
+                }
             }
             if reading.isUnavailable {
                 Text("Stale").foregroundStyle(.secondary)
