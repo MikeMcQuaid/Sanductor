@@ -10,7 +10,10 @@ extension ReviewView {
 
     @ViewBuilder var scopeButtons: some View {
         scopeButton(
-            .uncommitted, systemImage: "pencil", help: "Review uncommitted changes", disabled: model.stackTarget != nil,
+            .uncommitted,
+            systemImage: "circle.dashed",
+            help: "Review uncommitted changes",
+            disabled: model.stackTarget != nil,
         )
         scopeButton(.lastCommit, systemImage: "clock", help: "Review the last commit")
         scopeButton(

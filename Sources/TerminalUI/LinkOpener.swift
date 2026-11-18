@@ -1,5 +1,6 @@
 import AppKit
 import Foundation
+import SanductorData
 import SwiftUI
 
 // MARK: - UtilityTabTarget
@@ -169,6 +170,45 @@ public enum LinkOpener {
 public enum FileOpener {
     // MARK: Public
 
+    /// Runs the external editor command on absolute paths: a
+    /// worktree's root, or the root and then a file in it, which an
+    /// editor that takes a folder opens in that worktree's window.
+    /// Reports a command that fails, such as one not found on the path.
+    /// Returns whether there was a command to run.
+    @discardableResult
+    @preconcurrency
+    @MainActor
+    public static func openInExternalEditor(_ absolutePaths: String...) -> Bool {
+        let argv = (UserDefaults.standard.string(forKey: AppSettings.externalEditorKey) ?? "")
+            .split(separator: " ")
+            .map(String.init)
+        guard argv.isEmpty == false else {
+            return false
+        }
+
+        Task {
+            let detail: String
+            do {
+                let result = try await FoundationProcessRunner().run(
+                    argv + absolutePaths, workingDirectory: nil, environment: [:],
+                )
+                guard result.succeeded == false else {
+                    return
+                }
+
+                detail = String(result.status) + ": "
+                    + (result.standardError.isEmpty ? result.standardOutput : result.standardError)
+            } catch {
+                detail = error.localizedDescription
+            }
+            ErrorLog.shared.report(
+                "The external editor `" + argv.joined(separator: " ") + "` could not open "
+                    + (absolutePaths.last ?? "") + " (" + detail + ")",
+            )
+        }
+        return true
+    }
+
     /// Shows a file that belongs to no worktree in whichever one is
     /// on screen: `sanductor` can be handed anything readable, and
     /// refusing it would be less useful than showing it.
@@ -184,14 +224,27 @@ public enum FileOpener {
 
     /// Routes a worktree-relative file by the command key. Paths
     /// that resolve outside the worktree are refused: a hostile
-    /// repository could put `../` segments in a diff path.
+    /// repository could put `../` segments in a diff path. A plain
+    /// click for a worktree other than `showingIn`, the one on screen,
+    /// opens the file there by its absolute path: a request for
+    /// another worktree waits unseen until that one is selected.
     @preconcurrency
     @MainActor
-    public static func open(relativePath: String, line: Int?, worktreePath: String) {
+    public static func open(
+        relativePath: String,
+        line: Int?,
+        worktreePath: String,
+        showingIn shownPath: String? = nil,
+    ) {
         guard let absolute = safePath(relativePath: relativePath, worktreePath: worktreePath) else {
             return
         }
         guard NSEvent.modifierFlags.contains(.command) else {
+            if let shownPath, shownPath != worktreePath {
+                open(absolutePath: absolute, line: line, worktreePath: shownPath)
+                return
+            }
+
             let defaults = UserDefaults.standard
             defaults.set(relativePath, forKey: "editorFilePath")
             defaults.set(line ?? 0, forKey: "editorFileLine")
@@ -200,15 +253,8 @@ public enum FileOpener {
             return
         }
 
-        let command = UserDefaults.standard.string(forKey: "externalEditorCommand") ?? ""
-        let argv = command.split(separator: " ").map(String.init)
-        if argv.isEmpty {
+        if openInExternalEditor(worktreePath, absolute) == false {
             NSWorkspace.shared.open(URL(filePath: absolute))
-        } else {
-            let process = Process()
-            process.executableURL = URL(filePath: "/usr/bin/env")
-            process.arguments = argv + [absolute]
-            try? process.run()
         }
     }
 

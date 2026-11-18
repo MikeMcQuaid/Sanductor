@@ -1583,6 +1583,29 @@ both, and `sanductor repositories`, look in the directories the app
 published to `session-defaults`.
 Explicit absolute file paths may belong to no worktree and open beside
 the current selection; relative paths remain confined to their worktree.
+A pull request's review threads resolve against the worktree holding
+its head branch, the one on screen first, so their lines meet the code
+they were left on; with no such worktree, the repository's checkout.
+A holder must be the branch whose sidebar listing found that pull
+request, which asks for `head=<owner>:<branch>` with the owner read
+from the branch's own remote, so a same-named branch tracking another
+fork never matches; a directory of your own never holds one, since it
+borrows the sidebar repository's path whatever it really checks out.
+A plain click for a worktree other than the selected one opens the
+file in the selected one by its absolute path, since a request for
+another worktree waits unseen until that one is selected.
+
+The **external editor** is the command Settings → Editor holds,
+split on spaces and run through `ProcessRunner` with absolute paths
+appended. `FileOpener.openInExternalEditor` serves both its callers: a
+Cmd-clicked file, and `ExternalEditorButton`'s worktree or directory
+root, on a sidebar row's menu and the review toolbar. A Cmd-clicked
+file follows its worktree's root, so an editor that takes a folder
+opens the file in that worktree's window rather than one of its own. A
+command that exits non-zero, such as one missing from the path,
+reaches the Messages pane. With no command, a Cmd-clicked file goes to
+its default app, while the root button is disabled: a directory's
+default app is Finder, not an editor.
 
 The editor's work per frame is bounded by what is on screen, since
 every scroll redraws the ruler and the visible text: line starts are
@@ -2335,8 +2358,8 @@ steps.
   Only the conversation is copied, never code.
 - Host directories of your own list under a repository
   (`Worktree.isHostDirectory`), kept in the metadata as configuration,
-  with the editor in the agent's pane and a menu of Copy path, Forget,
-  Fetch and fast-forward-only checkout.
+  with the editor in the agent's pane and a menu of Copy path, Open in
+  external editor, Forget, Fetch and fast-forward-only checkout.
 
 ## State and persistence
 

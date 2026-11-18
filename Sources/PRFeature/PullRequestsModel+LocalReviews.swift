@@ -66,12 +66,34 @@ extension PullRequestsModel {
             return
         }
 
-        let candidates = items.filter { item in
-            item.worktree.repositoryPath == repository.path && item.worktree.branch == summary.headBranch
-        }
-        for item in candidates where await restoreLocalReviewIdentity(item.worktree.path, summary) {
+        for worktree in worktrees(holding: summary) where await restoreLocalReviewIdentity(worktree.path, summary) {
             UtilityTabTarget.pullRequestCacheChanged()
         }
+    }
+
+    /// Where a pull request's review threads open: the worktree that
+    /// has its head branch checked out, the one on screen first, so a
+    /// thread's lines meet the code they were left on, or the
+    /// repository's own checkout when no worktree holds it. A holder
+    /// must be the branch the sidebar found this pull request for: its
+    /// listing (`GitHubClient.branchPullRequests`) asks GitHub for
+    /// `head=<owner>:<branch>`, the owner read from the branch's own
+    /// remote, so a same-named branch tracking another fork never
+    /// matches. A directory of your own never is: it borrows the
+    /// sidebar repository's path, so its branch may belong to anything.
+    func checkoutPath(for summary: PullRequestSummary) -> String {
+        let holders = worktrees(holding: summary)
+            .filter { worktree in
+                worktree.isHostDirectory == false
+                    && pullRequests.branchSummary(repositoryPath: repository.path, branch: worktree.branch)?.number
+                    == summary.number
+            }
+            .map(\.path)
+        return holders.first { $0 == worktreePath } ?? holders.first ?? repository.path
+    }
+
+    private func worktrees(holding summary: PullRequestSummary) -> [Worktree] {
+        items.map(\.worktree).filter { $0.repositoryPath == repository.path && $0.branch == summary.headBranch }
     }
 
     func setLocalResolved(_ threadID: String, resolved: Bool, review: LocalReview, path: String) {

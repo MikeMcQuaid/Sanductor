@@ -168,6 +168,42 @@ extension PullRequestsModelTests {
         #expect(NSPasteboard.general.string(forType: .string) == ReviewThread.digest(of: review.threads))
     }
 
+    @Test
+    func `review threads open in the worktree holding the head branch`() {
+        let elsewhere = item(branch: "feature", ahead: 0, path: "/elsewhere/feature")
+        let shown = item(branch: "feature", ahead: 0)
+        let model = makeModel(
+            items: [elsewhere, shown, item(branch: "other", ahead: 0)], worktreePath: shown.worktree.path,
+        )
+        let alone = makeModel(items: [elsewhere])
+        let host = WorktreeItem(
+            worktree: Worktree(
+                repositoryName: "repo",
+                repositoryPath: "/repo",
+                branch: "feature",
+                path: "/mine",
+                isHostDirectory: true,
+            ),
+            session: nil,
+            isDirty: false,
+            aheadOfUpstream: nil,
+        )
+        let hostOnly = makeModel(items: [host])
+        for seeded in [model, alone, hostOnly] {
+            seeded.store.update { metadata in
+                metadata.pullRequestCache[PullRequestStore.branchKey(repositoryPath: "/repo", branch: "feature")] =
+                    summary(7, head: "feature")
+            }
+        }
+        #expect(model.checkoutPath(for: summary(7, head: "feature")) == shown.worktree.path)
+        #expect(alone.checkoutPath(for: summary(7, head: "feature")) == "/elsewhere/feature")
+        #expect(model.checkoutPath(for: summary(8, head: "unchecked")) == "/repo")
+        // Another fork's pull request from a same-named branch.
+        #expect(model.checkoutPath(for: summary(9, head: "feature")) == "/repo")
+        // A directory of your own only borrows the repository's path.
+        #expect(hostOnly.checkoutPath(for: summary(7, head: "feature")) == "/repo")
+    }
+
     private func localReview() -> LocalReview {
         var review = LocalReview(reviewer: .codexCLI, snapshot: "s", revision: "r", threads: [
             ReviewThread(

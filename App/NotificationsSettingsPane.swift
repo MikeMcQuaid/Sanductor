@@ -173,9 +173,11 @@ struct EditorSettingsPane: View {
             Section("External editor") {
                 TextField("Command", text: $externalEditor, prompt: Text("e.g. zed --wait"))
                 Text("Runs on Cmd-clicking a file in a diff, finder result or conversation, "
-                    + "with the file path appended; arguments split on spaces. Empty hands "
-                    + "Cmd-clicked files to the system's default app. A plain click always "
-                    + "opens the built-in editor.")
+                    + "with the worktree's root and then the file path appended, so an editor "
+                    + "that takes a folder opens the file in that worktree's window, and on "
+                    + "Open in external editor, with the worktree's root; arguments split on "
+                    + "spaces. Empty hands Cmd-clicked files to the system's default app. A "
+                    + "plain click always opens the built-in editor.")
                     .interfaceFont(.caption)
                     .foregroundStyle(.secondary)
             }

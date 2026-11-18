@@ -29,6 +29,7 @@ struct HostDirectoryActions: View {
             NSPasteboard.general.setString(item.worktree.path, forType: .string)
         }
         .hoverHelp("Copy this directory's full path")
+        ExternalEditorButton(path: item.worktree.path)
         if let pullRequest = model.pullRequest(for: item) {
             Button("Copy pull request URL") {
                 NSPasteboard.general.clearContents()
