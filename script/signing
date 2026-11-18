@@ -17,11 +17,13 @@ if [[ ! -f "${file}" && -z "${SV_SESSION_ID:-}" ]]; then
     for profile in "${HOME}/Library/Developer/Xcode/UserData/Provisioning Profiles/"* \
       "${HOME}/Library/MobileDevice/Provisioning Profiles/"*; do
       if [[ -f "${profile}" ]]; then
-        security cms -D -i "${profile}" 2>/dev/null || true
+        decoded="$(security cms -D -i "${profile}" 2>/dev/null)" || continue
+        # Legacy App ID prefixes need not be the team, so read the team.
+        if grep -q '<string>[[:alnum:]]\{10\}\.com\.mikemcquaid\.Sanductor</string>' <<<"${decoded}"; then
+          plutil -extract TeamIdentifier.0 raw -o - - <<<"${decoded}" 2>/dev/null | sed 's/^/DEVELOPMENT_TEAM = /' || true
+        fi
       fi
-    done |
-      sed -n 's|^[[:space:]]*<string>\([[:alnum:]]\{10\}\)\.com\.mikemcquaid\.Sanductor</string>$|DEVELOPMENT_TEAM = \1|p' |
-      sort -u
+    done | sort -u
   )"
   if [[ -n "${teams}" && "${teams}" != *$'\n'* ]]; then
     printf '%s\n' "// Written by script/signing from this Mac's Sanductor provisioning profile." \

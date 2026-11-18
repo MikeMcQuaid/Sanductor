@@ -42,6 +42,11 @@
                             + " on your Mac:\n" + SSHCredentials.fingerprint(key))
                     }
             }
+            .overlay {
+                if model.isOpeningAlert {
+                    LaunchProgressView(spinner: "Opening the Mac's alert…").background(.background)
+                }
+            }
             .interfaceFont(.body)
             .onAppear {
                 if model.configuration.isValid == false {

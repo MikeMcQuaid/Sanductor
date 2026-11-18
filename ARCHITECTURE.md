@@ -2752,10 +2752,13 @@ sending what was turned off. Subscriptions belong to the iCloud
 account, so the choice covers every phone signed into it. Until the
 Mac's choices have been read the phone changes nothing. Tapping an
 alert reads its record from iCloud, since an alert's copy of a long
-path may be cut short, and if it came from the herdr session chosen
-when the session list holds its worktree, selects that worktree's
-pane; otherwise the app opens without changing the selection. Alerts
-also show while the app is in front.
+path may be cut short, under a spinner covering the app, retrying
+twice while iCloud is briefly unreachable and saying so in Settings if
+the read still fails. A later tap cancels an earlier read, so the
+older alert cannot win by finishing last. If the alert came from the
+herdr session chosen when the session list holds its worktree, it
+selects that worktree's pane; otherwise the app opens without changing
+the selection. Alerts also show while the app is in front.
 
 Both apps name the container `iCloud.<bundle identifier>`. Local
 builds use its Development environment and releases its Production
@@ -2777,6 +2780,8 @@ missing from Xcode's provisioning profiles for
 `com.mikemcquaid.Sanductor` (under `~/Library/Developer/Xcode/UserData`
 or, before Xcode 16, `~/Library/MobileDevice`), but only when they name
 exactly one team; several print each and leave the choice to the user.
+It reads each profile's `TeamIdentifier`, not its App ID's prefix,
+which a legacy App ID may keep from before teams had their own.
 A profile proves the team may provision the identifier where a
 certificate does not, so a contributor whose only certificate belongs
 to another team keeps building ad hoc rather than failing to provision.

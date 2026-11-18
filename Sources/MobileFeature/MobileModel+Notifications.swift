@@ -13,14 +13,53 @@ extension MobileModel {
     /// from iCloud since the alert's own copy of a long path may be
     /// cut short.
     public func open(alert recordID: CKRecord.ID) {
-        Task {
-            if let target = try? await PhoneNotifications()?.target(of: recordID) {
-                open(target)
-            }
-        }
+        open(alert: recordID) { try await PhoneNotifications()?.target(of: $0) }
     }
 
     // MARK: Internal
+
+    /// Reads an alert's record, retrying while iCloud is briefly
+    /// unreachable; a later tap supersedes it, so an earlier read
+    /// finishing last cannot select the older worktree.
+    @discardableResult
+    func open(
+        alert recordID: CKRecord.ID,
+        lookup: @escaping (CKRecord.ID) async throws -> PhoneNotificationTarget?,
+    ) -> Task<Void, Never> {
+        alertLookup?.cancel()
+        isOpeningAlert = true
+        let task = Task {
+            for attempt in 1 ... Self.alertReadAttempts {
+                do {
+                    let target = try await lookup(recordID)
+                    guard Task.isCancelled == false else {
+                        return
+                    }
+
+                    isOpeningAlert = false
+                    if let target {
+                        open(target)
+                    }
+                    return
+                } catch let error as CKError where attempt < Self.alertReadAttempts && Self.isTransient(error) {
+                    try? await Task.sleep(for: .seconds(error.retryAfterSeconds ?? Double(attempt)))
+                    guard Task.isCancelled == false else {
+                        return
+                    }
+                } catch {
+                    guard Task.isCancelled == false else {
+                        return
+                    }
+
+                    isOpeningAlert = false
+                    notificationError = "Could not open the Mac's alert: " + error.localizedDescription
+                    return
+                }
+            }
+        }
+        alertLookup = task
+        return task
+    }
 
     /// The receive toggle's storage key; absence means on.
     static func receiveKey(_ kind: PhoneNotificationKind) -> String {
@@ -106,6 +145,13 @@ extension MobileModel {
     }
 
     // MARK: Private
+
+    private static let alertReadAttempts = 3
+
+    private static func isTransient(_ error: CKError) -> Bool {
+        [.networkUnavailable, .networkFailure, .serviceUnavailable, .requestRateLimited, .zoneBusy]
+            .contains(error.code)
+    }
 
     /// Asks to show alerts and registers for the pushes CloudKit
     /// sends, returning what to tell the user when alerts are refused.

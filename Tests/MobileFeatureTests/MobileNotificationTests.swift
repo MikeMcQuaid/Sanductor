@@ -1,3 +1,4 @@
+import CloudKit
 import Foundation
 @testable import MobileFeature
 import SanductorCloud
@@ -60,6 +61,57 @@ struct MobileNotificationTests {
         model.allSessions = [Self.session("pane", in: "/repo/branch")]
         model.selectNotifiedWorktree()
         #expect(model.selection == nil)
+    }
+
+    @Test
+    func `a later tapped alert wins over an earlier one still being read`() async {
+        let model = MobileModel(configuration: SSHConfiguration())
+        model.allSessions = [Self.session("first", in: "/repo/first"), Self.session("second", in: "/repo/second")]
+        let (gate, release) = AsyncStream<Void>.makeStream()
+        let opened = Task {
+            for await _ in gate {
+                break
+            }
+        }
+        let first = model.open(alert: CKRecord.ID(recordName: "first")) { _ in
+            await opened.value
+            return PhoneNotificationTarget(path: "/repo/first", session: model.configuration.session)
+        }
+        #expect(model.isOpeningAlert)
+        await model.open(alert: CKRecord.ID(recordName: "second")) { _ in
+            PhoneNotificationTarget(path: "/repo/second", session: model.configuration.session)
+        }.value
+        release.yield()
+        await first.value
+        #expect(model.selection?.id == "second")
+        #expect(model.isOpeningAlert == false)
+    }
+
+    @Test
+    func `an alert read again after iCloud was briefly unreachable`() async {
+        let model = MobileModel(configuration: SSHConfiguration())
+        model.allSessions = [Self.session("pane", in: "/repo/branch")]
+        var attempts = 0
+        await model.open(alert: CKRecord.ID(recordName: "alert")) { _ in
+            attempts += 1
+            guard attempts > 1 else {
+                throw CKError(.networkUnavailable, userInfo: [CKErrorRetryAfterKey: 0.0])
+            }
+
+            return PhoneNotificationTarget(path: "/repo/branch", session: model.configuration.session)
+        }.value
+        #expect(attempts == 2)
+        #expect(model.selection?.id == "pane")
+    }
+
+    @Test
+    func `an alert that cannot be read says so`() async {
+        let model = MobileModel(configuration: SSHConfiguration())
+        await model.open(alert: CKRecord.ID(recordName: "alert")) { _ in
+            throw CKError(.unknownItem)
+        }.value
+        #expect(model.isOpeningAlert == false)
+        #expect(model.notificationError?.hasPrefix("Could not open the Mac's alert") == true)
     }
 
     @Test

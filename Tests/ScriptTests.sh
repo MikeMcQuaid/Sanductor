@@ -183,18 +183,24 @@ exit 99
 SECURITY
 # Homes holding Xcode's provisioning profiles, decoded already: Xcode
 # 16 and later keep them under UserData, older ones under MobileDevice.
+# A legacy App ID's prefix need not be its team, so one differs here.
 profile() {
   mkdir -p "$1"
-  printf '<dict>\n  <key>application-identifier</key>\n  <string>%s</string>\n</dict>\n' "$3" >"$1/$2"
+  printf '%s\n' '<?xml version="1.0" encoding="UTF-8"?>' '<plist version="1.0">' '<dict>' \
+    '  <key>Entitlements</key>' '  <dict>' '    <key>application-identifier</key>' \
+    "    <string>$3</string>" '  </dict>' '  <key>TeamIdentifier</key>' '  <array>' \
+    "    <string>$4</string>" '  </array>' '</dict>' '</plist>' >"$1/$2"
 }
 modern="Library/Developer/Xcode/UserData/Provisioning Profiles"
 legacy="Library/MobileDevice/Provisioning Profiles"
-profile "${scratch}/home-one/${legacy}" sanductor.mobileprovision FIXTURE123.com.mikemcquaid.Sanductor
-profile "${scratch}/home-one/${modern}" other.provisionprofile FIXTURE789.com.example.Other
-profile "${scratch}/home-other/${modern}" other.provisionprofile FIXTURE789.com.example.Other
+profile "${scratch}/home-one/${legacy}" sanductor.mobileprovision PREFIX0001.com.mikemcquaid.Sanductor FIXTURE123
+profile "${scratch}/home-one/${modern}" other.provisionprofile FIXTURE789.com.example.Other FIXTURE789
+profile "${scratch}/home-other/${modern}" other.provisionprofile FIXTURE789.com.example.Other FIXTURE789
 for team in FIXTURE123 FIXTURE456; do
-  profile "${scratch}/home-both/${modern}" "${team}.mobileprovision" "${team}.com.mikemcquaid.Sanductor"
+  profile "${scratch}/home-both/${modern}" "${team}.mobileprovision" "${team}.com.mikemcquaid.Sanductor" "${team}"
 done
+# Builds expecting no team must not find the developer's own profiles.
+none="${scratch}/home-none"
 chmod +x "${scratch}/script/"* "${scratch}/bin/"*
 
 cat >"${scratch}/bin/brew" <<'BREW'
@@ -208,22 +214,22 @@ BREW
 chmod +x "${scratch}/bin/brew"
 for missing in 0 1; do
   : >"${scratch}/brew-invocations"
-  env PATH="${scratch}/bin:${PATH}" BOOTSTRAP_TEST_MISSING="${missing}" "${scratch}/script/bootstrap"
+  env PATH="${scratch}/bin:${PATH}" HOME="${none}" BOOTSTRAP_TEST_MISSING="${missing}" "${scratch}/script/bootstrap"
   [[ "$(head -1 "${scratch}/brew-invocations")" == 'bundle check' ]] || exit 1
   [[ "$(wc -l <"${scratch}/brew-invocations")" -eq $((missing + 1)) ]] || exit 1
 done
 : >"${scratch}/brew-invocations"
-env PATH="${scratch}/bin:${PATH}" "${scratch}/script/bootstrap" swiftlint ripgrep
+env PATH="${scratch}/bin:${PATH}" HOME="${none}" "${scratch}/script/bootstrap" swiftlint ripgrep
 [[ "$(cat "${scratch}/brew-invocations")" == 'install swiftlint ripgrep' ]] || exit 1
-if env PATH="${scratch}/bin:${PATH}" BOOTSTRAP_TEST_STATUS=1 "${scratch}/script/bootstrap" ripgrep; then
+if env PATH="${scratch}/bin:${PATH}" HOME="${none}" BOOTSTRAP_TEST_STATUS=1 "${scratch}/script/bootstrap" ripgrep; then
   echo 'Bootstrap accepted a failed dependency installation' >&2
   exit 1
 fi
 
 for configuration in Release Debug; do
   override="${configuration/Release/}"
-  env -u SANDUCTOR_DEVELOPMENT_TEAM PATH="${scratch}/bin:${PATH}" SV_SESSION_ID= XCODE_CONFIGURATION="${override}" \
-    "${scratch}/script/build" >"${scratch}/build.log" 2>&1
+  env -u SANDUCTOR_DEVELOPMENT_TEAM PATH="${scratch}/bin:${PATH}" HOME="${none}" SV_SESSION_ID= \
+    XCODE_CONFIGURATION="${override}" "${scratch}/script/build" >"${scratch}/build.log" 2>&1
   ! grep -q '^DEVELOPMENT_TEAM=' "${scratch}/xcode-arguments" || exit 1
   app=".DerivedData/Build/Products/${configuration}/Sanductor.app"
   [[ "$(tail -1 "${scratch}/build.log")" == "${app}" ]] || exit 1
@@ -237,7 +243,7 @@ for configuration in Release Debug; do
   done
   : >"${scratch}/installation-events"
   touch "${scratch}/app-running"
-  env PATH="${scratch}/bin:${PATH}" SV_SESSION_ID= XCODE_CONFIGURATION="${override}" \
+  env PATH="${scratch}/bin:${PATH}" HOME="${none}" SV_SESSION_ID= XCODE_CONFIGURATION="${override}" \
     "${scratch}/script/install" >"${scratch}/install.log" 2>&1
   for stream in stdout stderr; do
     grep -q "Build diagnostic on ${stream}" "${scratch}/install.log"
@@ -275,7 +281,7 @@ for home in one none; do
   grep -qx SANDUCTOR_ENTITLEMENTS_SUFFIX=-iCloud "${scratch}/xcode-arguments"
   grep -qx -- -allowProvisioningDeviceRegistration "${scratch}/xcode-arguments"
 done
-env PATH="${scratch}/bin:${PATH}" SV_SESSION_ID= SANDUCTOR_DEVELOPMENT_TEAM= \
+env PATH="${scratch}/bin:${PATH}" HOME="${none}" SV_SESSION_ID= SANDUCTOR_DEVELOPMENT_TEAM= \
   "${scratch}/script/build" >"${scratch}/build.log" 2>&1
 ! grep -q '^DEVELOPMENT_TEAM=' "${scratch}/xcode-arguments" || exit 1
 
@@ -297,7 +303,7 @@ rm "${scratch}/Signing.xcconfig"
 for stuck in 1 0; do
   : >"${scratch}/installation-events"
   [[ "${stuck}" == 0 ]] || touch "${scratch}/app-running"
-  env PATH="${scratch}/bin:${PATH}" SV_SESSION_ID= INSTALL_TEST_STUCK="${stuck}" \
+  env PATH="${scratch}/bin:${PATH}" HOME="${none}" SV_SESSION_ID= INSTALL_TEST_STUCK="${stuck}" \
     "${scratch}/script/install" >"${scratch}/install.log" 2>&1
   if [[ "${stuck}" == 1 ]]; then
     [[ "$(cat "${scratch}/installation-events")" == $'quit\nkill\nreplace\ncopy\nopen' ]] || exit 1
@@ -307,7 +313,7 @@ for stuck in 1 0; do
 done
 : >"${scratch}/installation-events"
 touch "${scratch}/app-running"
-if env PATH="${scratch}/bin:${PATH}" SV_SESSION_ID= INSTALL_TEST_STUCK=1 INSTALL_TEST_UNKILLABLE=1 \
+if env PATH="${scratch}/bin:${PATH}" HOME="${none}" SV_SESSION_ID= INSTALL_TEST_STUCK=1 INSTALL_TEST_UNKILLABLE=1 \
   "${scratch}/script/install" >"${scratch}/install.log" 2>&1; then
   echo 'Installation replaced an app that was still running' >&2
   exit 1
@@ -316,7 +322,7 @@ fi
 rm "${scratch}/app-running" "${scratch}/installation-started"
 : >"${scratch}/installation-events"
 build_status=0
-env PATH="${scratch}/bin:${PATH}" SV_SESSION_ID= BUILD_TEST_FAIL=1 \
+env PATH="${scratch}/bin:${PATH}" HOME="${none}" SV_SESSION_ID= BUILD_TEST_FAIL=1 \
   "${scratch}/script/install" >"${scratch}/failure.log" 2>&1 || build_status=$?
 [[ "${build_status}" == 65 ]] || exit 1
 for stream in stdout stderr; do

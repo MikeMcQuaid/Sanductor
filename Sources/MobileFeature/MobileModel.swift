@@ -75,6 +75,8 @@ public final class MobileModel {
     private(set) var connectionGeneration: UUID = .init()
     var error: String?
     var notificationError: String?
+    /// Whether a tapped alert's record is still being read.
+    var isOpeningAlert = false
     var pendingHostKey: String?
     let progress: LaunchProgress = .init()
 
@@ -100,6 +102,7 @@ public final class MobileModel {
     /// A tapped alert's worktree, waiting for the session list to
     /// hold it.
     @ObservationIgnored var notifiedWorktree: PhoneNotificationTarget?
+    @ObservationIgnored var alertLookup: Task<Void, Never>?
 
     var sidebar: [SidebarRepository] = [] {
         didSet {
