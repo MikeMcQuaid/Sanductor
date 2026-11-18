@@ -88,7 +88,8 @@ fi
 
 ## 📱 iPhone companion app
 
-For iOS 26+, run `script/bootstrap` and `script/install` in a source checkout and build `Sanductor-iOS` in Xcode with your signing team.
+On iOS 26+, install TestFlight and open the maintainers' beta link.
+Or clone this repo, run `script/bootstrap` and `script/install` from its root, then build `Sanductor-iOS` in Xcode with your signing team.
 Shows public and private PR status with conflict badges and prefers GitHub Mobile, falling back to GitHub.com; private PRs require sign-in.
 
 1. Copy the public key from iPhone Settings to your Mac's clipboard, then install it for the `sandvault-<you>` user:
@@ -120,11 +121,11 @@ Shows public and private PR status with conflict badges and prefers GitHub Mobil
 Xcode 27.2 or later is needed to build from source.
 Use `script/build`, `script/test`, `script/style --fix` and `script/analyze` for [development](ARCHITECTURE.md#dependencies-and-toolchain).
 Quit the app and run `script/tutorial` to replay the opening tour without resetting settings.
-See the [release process](ARCHITECTURE.md#releases) for publishing.
 
 ## 📄 Licence and contact
 
-[AGPL-3.0](LICENSE); personal software without support or compatibility guarantees.
+[AGPL-3.0](LICENSE); no support or compatibility guarantees.
+[Privacy policy](PRIVACY.md).
 [Contact Mike McQuaid](mailto:mike@mikemcquaid.com).
 Vendored [Octicons](https://github.com/primer/octicons) use the [MIT License](https://github.com/primer/octicons/blob/main/LICENSE).
 

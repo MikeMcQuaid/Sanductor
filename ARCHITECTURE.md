@@ -3037,8 +3037,8 @@ ARM64 `macos-26` and `xcode-27` images. Each job checks the actual OS and
 architecture and fails if the app exits within ten seconds. This
 catches startup crashes and linking failures without needing Xcode 27
 on Tahoe; it does not exercise sessions or UI interactions. Only after
-both checks pass and the TestFlight upload succeeds does a separate
-publishing job automatically recreate the tag at the original commit,
+both checks pass and TestFlight processing and distribution succeed
+does a publishing job recreate the tag at the original commit,
 push it and create a release with generated notes and that exact zip
 attached.
 
@@ -3064,6 +3064,11 @@ audit, installation, migration from `agentide` and uninstallation against
 the actual release; a source rename cannot supply its final checksum.
 
 #### iPhone TestFlight
+
+See [TestFlight submission copy](TESTFLIGHT.md) for beta descriptions,
+reviewer-owned Mac setup, beta terms and metadata suggestions. The
+[privacy policy](PRIVACY.md) covers device storage, SSH, GitHub, coding
+agents and TestFlight diagnostics.
 
 Both apps now use `com.mikemcquaid.Sanductor`; the iPhone Swift module
 is `SanductoriOS` and the Mac module is `Sanductor`. Apple treats the
@@ -3097,13 +3102,66 @@ Set up the new identity before running the Release workflow:
    fallback and still requires a profile for Sanductor.
    Reuse `APP_STORE_CERTIFICATES`, its password and `NOTARIZATION_*`
    when they belong to that team and certificate.
-4. Push this release-input change and check the **Release** dry run,
-   which archives and validates without uploading. After merging, run
-   **Release** on `main` with a fresh version to upload the first build.
-5. Complete encryption compliance, create TestFlight groups on the new
-   record and add the testers again. External testing needs its own
-   beta review and a new public link if one is used. Old invitations
-   and installed builds continue to belong to AgentIDE.
+4. In **Sanductor > TestFlight > Internal Testing**, create a personal
+   group with **Enable automatic distribution** selected and add your
+   App Store Connect account. Accept its invitation in TestFlight on
+   your iPhone. Reuse a group if automatic distribution is enabled;
+   otherwise create one with that option selected. An internal group
+   must exist before you create the external group in Step 6.
+   Old invitations and installed builds belong to AgentIDE; the new
+   record needs its own testers and invitation.
+5. In **TestFlight > Additional > Test Information**, enter the beta
+   description, feedback email and review contact details. Explain how
+   to connect to the Mac over SSH and provide usable reviewer access
+   and instructions. Complete these before the first public release.
+6. Beside **External Testing**, choose **+**, name the group exactly
+   **Public Beta** and create it. A different name requires a repository
+   Actions variable `TESTFLIGHT_PUBLIC_GROUP` with that exact name.
+7. Check the **Release** dry run, which archives and validates without
+   uploading. Merge the automation into `main`; successful CI uploads a
+   private build. To publish an official release, choose GitHub
+   **Actions > Release > Run workflow**, select `main` and enter a fresh
+   bare version. The workflow uploads, adds testing notes and submits
+   beta review before adding the build to the configured external group.
+   GitHub publication waits for these operations, but not Apple's
+   asynchronous beta-review decision.
+8. After approval, open the configured external group (**Public Beta**
+   by default), then **Testers > Create Public Link**,
+   select **Open to Anyone**, set the tester limit to **10,000** and
+   confirm. Share the link; testers need neither App Store Connect
+   membership nor individual invitations. Later releases are added and
+   testers notified automatically after any required approval.
+
+Only the Release dispatch repeats for official releases. Private builds
+follow successful `main` CI automatically. For failures that can be
+resolved without changing the release commit, address the cause and
+choose **Re-run failed jobs** within 30 days of the initial run.
+[GitHub reruns jobs at the original commit and only within that
+window][github-actions-reruns]. Manual release ZIPs are retained for
+30 days so quota waits and distribution retries can reuse them.
+Push dry-run ZIPs expire after one day.
+
+After 30 days, start a new Release run from `main`. If recovery requires
+source or workflow changes, merge them and start a new run from the
+updated branch. In either case, use a fresh version if the original
+version already has a GitHub tag or Apple has accepted or rejected its
+public TestFlight upload. The new release must start from an untagged
+commit; the build rejects a commit already carrying any tag.
+
+If the tag was pushed but GitHub publication failed, rerun the failed
+publication job in the original run within 30 days. After that window,
+finish publication for the existing tag using the original validated
+ZIP: open **Releases → Draft a new release**, select the existing tag,
+attach that ZIP, generate release notes and publish. Do not dispatch a
+different version at the tagged commit or upload to Apple again. If the
+original ZIP is unavailable, prepare an untagged commit and release a
+fresh version.
+
+After Apple accepts a public upload, retries reuse that build and
+consume no new upload slot. At the limit, wait for a build or reservation
+to leave its quota window. Processing can time out even if Apple later
+finishes. Inspect that build before retrying.
+See Apple's [external testing instructions][apple-external-testing].
 
 The new iPhone app needs its Mac connection configured again, its new
 public key installed using the README steps and the Mac's host key
@@ -3118,15 +3176,20 @@ and [changing a bundle ID](https://developer.apple.com/documentation/xcode/chang
 
 Before pushing the GitHub tag or publishing release binaries, the
 workflow archives the `Sanductor-iOS` scheme in Release and uploads it
-to App Store Connect.
+to App Store Connect, waits up to 20 minutes for processing and submits
+it for external beta review with testing notes and tester notification.
+It adds the build to the configured external group: **Public Beta** by
+default, or the group named by `TESTFLIGHT_PUBLIC_GROUP`. A failure in
+any of these operations prevents GitHub publication. Apple's later beta
+approval remains asynchronous and can still reject a submitted build.
 Human push dry runs run the same archive with distribution signing,
 export a signed IPA and call `altool --validate-app` using the same API
 key. They do not upload a TestFlight build. The job runs despite the
 publishing job being skipped on pushes, and missing credentials or
 failed validation fail the workflow. Dependabot skips it.
 
-`script/testflight [--dry-run]` prepares version settings and package
-pins before archiving, without Homebrew build tools. It imports
+`script/testflight [--dry-run|--internal]` prepares version settings and
+package pins before archiving, without Homebrew build tools. It imports
 `APP_STORE_CERTIFICATES`, the base64 of an `Apple-Distribution.p12`
 export including its private key, using `APP_STORE_CERTIFICATES_PASSWORD`.
 Both can be shared with other apps on the same team. GitHub's
@@ -3134,11 +3197,14 @@ Both can be shared with other apps on the same team. GitHub's
 supplies the base64 App Store Connect distribution profile as
 `APP_STORE_IOS_PROFILE`. It must match `com.mikemcquaid.Sanductor` and
 the exported certificate; there is no Watch app or Watch profile. The
-script reads the Team ID from the profile, uses a temporary keychain and
-restores the keychain search list while removing its temporary
-credentials and profile on exit. If the original keychain search list
-cannot be read, it stops before changing keychains. Credentials and
-signed iPhone products are never cached.
+script reads the Team ID from the profile and uses a temporary keychain.
+Immediately before adding it for Xcode, the script reads the live
+keychain search list and stops if that read fails. Cleanup deletes only
+its temporary keychain, which also removes its search-list entry, even
+if creation failed. It never restores a snapshot over another process's
+keychain changes. Temporary credentials and newly installed profiles
+are always removed. Profile validation leaves the search list untouched.
+Credentials and signed iPhone products are never cached.
 Before importing certificates or invoking Xcode, it checks the profile's
 application identifier against `com.mikemcquaid.Sanductor` and reports
 which Actions secret needs the replacement profile.
@@ -3146,22 +3212,105 @@ which Actions secret needs the replacement profile.
 Upload and validation reuse the existing `NOTARIZATION_KEY`,
 `NOTARIZATION_KEY_ID` and `NOTARIZATION_ISSUER_ID` secrets, passed as
 `APP_STORE_KEY`, `APP_STORE_KEY_ID` and `APP_STORE_ISSUER_ID`. The team
-API key needs Developer, App Manager or Admin access. The app must
-already have an iOS record in App Store Connect. The release version and
-`run_number.run_attempt` build number are passed explicitly, so retrying
-failed jobs uses a new build number. Failed uploads prevent the GitHub
-tag and release from being published; use **Re-run failed jobs**, not
-another dispatch of its version.
+API key needs App Manager or Admin access to manage external testing.
+The app needs an iOS record in App Store Connect. New uploads
+allocate a build number immediately before archiving, exceeding every
+iOS build and upload number Apple reports, including legacy dotted
+numbers and uploads still processing. Rerunning an older workflow
+therefore cannot reuse its old run number. Failed public uploads prevent
+the GitHub tag and release from being published.
 
-The phone app implements SSH using SwiftNIO SSH and swift-crypto, so
-complete Apple's encryption questions for its actual use before making
-a build available to testers. No non-exempt encryption declaration is
-assumed by the build. Apple's processing, internal tester groups and
-external beta review remain in App Store Connect. Internal groups can
-automatically distribute future builds; each TestFlight build expires
-after 90 days. The workflow does not publish a public App Store release
-or restrict builds to internal-only testing. Public iOS distribution
-can use the same bundle ID and signing setup later.
+Successful **GitHub Actions CI** push runs on this repository's `main`
+trigger the private TestFlight job at that run's exact commit. Failed CI
+and pull requests cannot upload. Main CI runs have separate concurrency
+groups so later pushes do not replace pending runs. Releases and private
+uploads share one serial queue, retaining up to GitHub's 100 pending
+runs. Build numbers are allocated inside this queue. Push dry runs use
+separate per-ref queues and cannot delay live releases.
+Private builds use the nearest release tag as their marketing version
+and export with `testFlightInternalTestingOnly` enabled. They cannot be
+distributed externally. The internal group's automatic distribution
+delivers them without repeating invitations.
+
+After each private upload processes, `.github/testflight.rb` expires all
+but the newest 20 unexpired internal-only iOS builds across versions.
+Public and unknown build audiences are never expired. Official releases
+also remain available internally. Each TestFlight build expires after 90
+days. The helper uses Ruby's standard libraries and the team API key,
+reads every API page and fails closed on API errors.
+
+Before uploading publicly, the workflow saves the allocated build
+number, version, commit and run ID in a GitHub artefact retained for 90
+days. Saving this intent must succeed before an upload can start.
+Retries validate the identity and query both Apple's builds and upload
+history. An accepted upload resumes processing and distribution without
+another upload, even if the original upload command failed. Distribution
+submits the build for beta review when it is ready and has no existing
+submission. Retries reuse an existing submission or testing build. Only
+an identity absent from both Apple endpoints can be uploaded again. The
+plan refuses another build number for a version already accepted
+publicly; resuming this run's accepted build remains allowed. A later
+accepted upload with the same identity supersedes earlier failed or
+awaiting attempts. An `AWAITING_UPLOAD` record has not received its
+binary. Without an accepted transfer, a rejected or awaiting public
+upload requires a new Release run with a fresh version. For a private
+upload, correct the problem and retry the workflow; it keeps the
+marketing version and allocates a fresh build number above Apple's
+history and all saved public intents.
+
+Apple build relationships identify upload audiences. Builds included in
+the upload response take precedence over the earlier builds query, so a
+manual upload completed between the two reads still counts. Apple does
+not expose an upload's audience before its build is available. A recent
+upload without a known audience or public intent blocks public uploads
+until its audience is known or its timestamps leave the 24-hour window.
+This includes manual uploads and does not classify private uploads as
+public. Once classified, public uploads count from their creation time
+and private uploads remain excluded. Public intent artefacts identify
+otherwise unclassified uploads by both marketing version and build
+number. A new dispatch refuses a version with an accepted public upload,
+even before its build appears. Polling reports rejected uploads
+immediately; public recovery requires a new release version. Each actual
+upload command also needs a durable reservation before starting. The
+quota counts these reservations, public builds and matching Apple
+uploads, including failed or processing ones, without counting the same
+attempt twice. An upload confirms only the reservation active when that
+attempt started. Unconfirmed reservations last 25 hours to cover the
+job's one-hour timeout and the rolling 24-hour window. An archive
+failure can consume a slot without reaching Apple. Apple's later upload
+timestamps also count. Private uploads and dry runs create no public
+reservations. Missing API access fails closed.
+
+Processing polls stop at the 20-minute deadline. Sleeps are limited to
+the remaining time. Each paginated request shares that deadline,
+including connection and response time. Late responses cannot start
+another page, poll or distribution. A build ready before the deadline
+can still be distributed.
+
+The workflow refuses a fourth GitHub release in a rolling 24 hours,
+checking published timestamps before building and before pushing the
+tag. Before uploading publicly, it also refuses a fourth iOS upload
+eligible for the App Store in 24 hours, including failed attempts
+received by Apple. Private uploads and dry runs do not consume these
+slots. The shared serial queue prevents concurrent runs bypassing either
+check. Manual uploads and releases must respect the same limits.
+
+The phone app uses SwiftNIO SSH with Swift Crypto's `Crypto` product,
+which [delegates to Apple's CryptoKit on iOS][swift-crypto]; it does not
+use `CryptoExtras`. Its generated Info.plist declares
+`ITSAppUsesNonExemptEncryption` as false, avoiding a manual compliance
+answer for every upload. For an older build's encryption algorithm
+question, select **None of the algorithms mentioned above**: the app
+uses only Apple's operating-system cryptography. Apple's
+[encryption documentation][apple-encryption] explains this exemption.
+Reassess that declaration if cryptographic dependencies change. The
+workflow does not publish a public App Store release; that can use the
+same bundle ID and signing setup later.
+
+[apple-external-testing]: https://developer.apple.com/help/app-store-connect/test-a-beta-version/invite-external-testers/
+[apple-encryption]: https://developer.apple.com/help/app-store-connect/reference/app-information/export-compliance-documentation-for-encryption/
+[github-actions-reruns]: https://docs.github.com/en/actions/how-tos/manage-workflow-runs/re-run-workflows-and-jobs
+[swift-crypto]: https://github.com/apple/swift-crypto#implementation
 
 The release contract is also the cask contract: the tag is the bare
 version, the zip is `Sanductor-<version>.zip` and the app's
