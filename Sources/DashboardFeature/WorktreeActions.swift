@@ -57,6 +57,7 @@ struct WorktreeActions: View {
             NSPasteboard.general.setString(item.worktree.path, forType: .string)
         }
         .hoverHelp("Copy this worktree's full path")
+        ExternalEditorButton(path: item.worktree.path)
         if let pullRequest = model.pullRequest(for: item) {
             CopyPullRequestURLButton(pullRequest.url)
                 .hoverHelp("Copy the URL of pull request #" + String(pullRequest.number))

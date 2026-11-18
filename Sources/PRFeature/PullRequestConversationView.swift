@@ -286,7 +286,12 @@ struct PullRequestConversationView: View {
             ReviewThreadRow(
                 thread: thread,
                 onEdit: {
-                    FileOpener.open(relativePath: thread.path, line: thread.line, worktreePath: repositoryPath)
+                    FileOpener.open(
+                        relativePath: thread.path,
+                        line: thread.line,
+                        worktreePath: model.checkoutPath(for: summary),
+                        showingIn: UserDefaults.standard.string(forKey: "selectedWorktreePath"),
+                    )
                 },
                 onToggleResolved: { await toggleResolved(thread) },
                 onToggleResolveOnPush: { await toggleResolveOnPush(thread) },

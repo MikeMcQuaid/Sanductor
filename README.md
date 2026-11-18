@@ -73,7 +73,7 @@ Settings (Cmd-,):
 - **Review**: Choose reviewers, models, effort and review or fix prompts.
 - **Notifications**: Set alerts, private sounds and a Dock badge.
 - **Fonts**: Customise fonts and sizes.
-- **Editor**: Choose the external editor opened with Cmd-click.
+- **Editor**: Choose the external editor for files and worktrees.
 - **Advanced**: Set paths, refresh intervals, idle sleep and logging.
 
 Use `sanductor .` for a worktree or `sanductor /some/file` for a file.

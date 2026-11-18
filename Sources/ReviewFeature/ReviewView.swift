@@ -228,6 +228,7 @@ public struct ReviewView: View {
                 deletions: model.files.map(\.deletions).reduce(0, +),
             )
             .hoverHelp("Lines added and deleted across the diff")
+            ExternalEditorButton(path: worktreePath, iconOnly: true)
             RefreshButton { await model.reload() }
                 .controlSize(.small)
                 .hoverHelp("Reload the diff from git")
