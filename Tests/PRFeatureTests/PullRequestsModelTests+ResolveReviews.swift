@@ -57,6 +57,8 @@ extension PullRequestsModelTests {
 
     @Test
     func `bulk resolution reports REST fallback threads once and continues marking`() async {
+        let pasteboard = NSPasteboard.withUniqueName()
+        defer { pasteboard.releaseGlobally() }
         let model = makeModel()
         let selected = resolutionSummary(head: "head")
         model.store.update { metadata in
@@ -66,7 +68,7 @@ extension PullRequestsModelTests {
             ])
         }
         let previous = ErrorLog.shared.entries.last?.id ?? 0
-        await model.copyUnresolvedComments(selected, resolve: true)
+        await model.copyUnresolvedComments(selected, pasteboard: pasteboard, resolve: true)
         let errors = ErrorLog.shared.entries.filter { $0.id > previous && $0.isError }
         #expect(errors.count == 1)
         #expect(errors.first?.message.contains("resolution IDs") == true)
@@ -77,6 +79,8 @@ extension PullRequestsModelTests {
 
     @Test(arguments: [false, true])
     func `legacy review copies cannot resolve a replacement with the same findings`(replaced: Bool) async throws {
+        let pasteboard = NSPasteboard.withUniqueName()
+        defer { pasteboard.releaseGlobally() }
         let model = makeModel()
         let path = worktreesPath + "/feature"
         var legacy = LocalReview(
@@ -101,13 +105,15 @@ extension PullRequestsModelTests {
             }
             return text
         }
-        await model.copyUnresolvedComments(resolutionSummary(head: "head"), resolve: true)
-        #expect(NSPasteboard.general.string(forType: .string) == ReviewCopy.digest(of: review.threads))
+        await model.copyUnresolvedComments(resolutionSummary(head: "head"), pasteboard: pasteboard, resolve: true)
+        #expect(pasteboard.string(forType: .string) == ReviewCopy.digest(of: review.threads))
         #expect(model.store.load().localReviews[path]?.remaining == (replaced ? 2 : 0))
     }
 
     @Test(arguments: [false, true])
     func `review copies exclude pending threads until their mark is cancelled`(resolve: Bool) async throws {
+        let pasteboard = NSPasteboard.withUniqueName()
+        defer { pasteboard.releaseGlobally() }
         let model = makeModel()
         let selected = resolutionSummary(head: "head")
         let pending = resolutionThread("pending")
@@ -121,18 +127,20 @@ extension PullRequestsModelTests {
             repositoryPath: "/another-checkout", summary: selected, thread: pending,
         )
         #expect(model.reviewCount(for: selected) == 1)
-        await model.copyUnresolvedComments(selected, resolve: resolve)
-        #expect(NSPasteboard.general.string(forType: .string) == ReviewCopy.digest(of: [open]))
+        await model.copyUnresolvedComments(selected, pasteboard: pasteboard, resolve: resolve)
+        #expect(pasteboard.string(forType: .string) == ReviewCopy.digest(of: [open]))
         #expect(model.reviewCount(for: selected) == (resolve ? 0 : 1))
         try await model.pullRequests.toggleResolveOnPush(repositoryPath: "/repo", summary: selected, thread: pending)
         #expect(model.reviewCount(for: selected) == (resolve ? 1 : 2))
-        await model.copyUnresolvedComments(selected)
-        #expect(NSPasteboard.general.string(forType: .string)
+        await model.copyUnresolvedComments(selected, pasteboard: pasteboard)
+        #expect(pasteboard.string(forType: .string)
             == ReviewCopy.digest(of: resolve ? [pending] : [pending, open]))
     }
 
     @Test(arguments: ["/repo", "/another-checkout"])
     func `bulk review resolution preserves pending marks and resolved threads`(repositoryPath: String) async throws {
+        let pasteboard = NSPasteboard.withUniqueName()
+        defer { pasteboard.releaseGlobally() }
         let model = makeModel()
         let selected = resolutionSummary(head: "head")
         let key = PullRequestAutomation.key(for: selected.url)
@@ -151,7 +159,7 @@ extension PullRequestsModelTests {
             metadata.pullRequestAutomation[key] = state
         }
 
-        await model.copyUnresolvedComments(selected, resolve: true)
+        await model.copyUnresolvedComments(selected, pasteboard: pasteboard, resolve: true)
         let marked = try #require(model.store.load().pullRequestAutomation[key])
         #expect(marked.resolutions == [
             "open": PendingThreadResolution(head: "head", commentID: "open-comment"), "pending": pending,
@@ -161,12 +169,14 @@ extension PullRequestsModelTests {
             .load()
             .threadsCache[AppMetadata.threadsKey(repositoryPath: "/repo", number: 1)]?
             .threads == threads)
-        await model.copyUnresolvedComments(selected, resolve: true)
+        await model.copyUnresolvedComments(selected, pasteboard: pasteboard, resolve: true)
         #expect(model.store.load().pullRequestAutomation[key] == marked)
     }
 
     @Test(arguments: ["OPEN", "CLOSED"])
     func `bulk review resolution continues local findings after a GitHub failure`(state: String) async throws {
+        let pasteboard = NSPasteboard.withUniqueName()
+        defer { pasteboard.releaseGlobally() }
         let model = makeModel()
         var selected = resolutionSummary(head: state == "OPEN" ? nil : "head", state: state)
         selected.unresolvedComments = 1
@@ -204,20 +214,22 @@ extension PullRequestsModelTests {
             .first { $0.outsideDiffReviewID != nil })
         #expect(model.reviewCount(for: selected) == 4)
 
-        await model.copyUnresolvedComments(selected, resolve: true)
+        await model.copyUnresolvedComments(selected, pasteboard: pasteboard, resolve: true)
         #expect(model.reviewCount(for: selected) == 1)
-        #expect(NSPasteboard.general.string(forType: .string)?.contains("Validate the configuration.") == true)
+        #expect(pasteboard.string(forType: .string)?.contains("Validate the configuration.") == true)
         #expect(model.store.load().resolvedOutsideDiff[AppMetadata.threadsKey(repositoryPath: "/repo", number: 1)]
             == [finding.id])
         #expect(model.store.load().localReviews[path]?.threads.allSatisfy(\.isResolved) == true)
         #expect(model.store.load().localReviews[path + "-other"] == unrelated)
         #expect(model.store.load().pullRequestAutomation.isEmpty)
-        await model.copyUnresolvedComments(selected, resolve: true)
+        await model.copyUnresolvedComments(selected, pasteboard: pasteboard, resolve: true)
         #expect(model.reviewCount(for: selected) == 1)
     }
 
     @Test
     func `bulk review resolution continues marking after an invalid GitHub thread`() async {
+        let pasteboard = NSPasteboard.withUniqueName()
+        defer { pasteboard.releaseGlobally() }
         let model = makeModel()
         let selected = resolutionSummary(head: "head")
         model.store.update { metadata in
@@ -226,7 +238,7 @@ extension PullRequestsModelTests {
                 resolutionThread("valid"),
             ])
         }
-        await model.copyUnresolvedComments(selected, resolve: true)
+        await model.copyUnresolvedComments(selected, pasteboard: pasteboard, resolve: true)
         #expect(model.store.load().pullRequestAutomation[PullRequestAutomation.key(for: selected.url)]?.resolutions == [
             "valid": PendingThreadResolution(head: "head", commentID: "valid-comment"),
         ])
@@ -234,18 +246,22 @@ extension PullRequestsModelTests {
 
     @Test
     func `bulk review resolution needs a known head for GitHub threads`() async {
+        let pasteboard = NSPasteboard.withUniqueName()
+        defer { pasteboard.releaseGlobally() }
         let model = makeModel()
         model.store.update { metadata in
             metadata.threadsCache[AppMetadata.threadsKey(repositoryPath: "/repo", number: 1)] = .init(
                 threads: [resolutionThread("open")],
             )
         }
-        await model.copyUnresolvedComments(resolutionSummary(head: nil), resolve: true)
+        await model.copyUnresolvedComments(resolutionSummary(head: nil), pasteboard: pasteboard, resolve: true)
         #expect(model.store.load().pullRequestAutomation.isEmpty)
     }
 
     @Test(arguments: [false, true])
     func `bulk copy captures findings before resolution and preserves replacement reviews`(replaced: Bool) async {
+        let pasteboard = NSPasteboard.withUniqueName()
+        defer { pasteboard.releaseGlobally() }
         let model = makeModel()
         let selected = resolutionSummary(head: "head")
         let path = worktreesPath + "/feature"
@@ -271,8 +287,8 @@ extension PullRequestsModelTests {
             }
             return text
         }
-        await model.copyUnresolvedComments(selected, resolve: true)
-        #expect(NSPasteboard.general.string(forType: .string) == ReviewCopy.digest(of: [remote] + review.threads))
+        await model.copyUnresolvedComments(selected, pasteboard: pasteboard, resolve: true)
+        #expect(pasteboard.string(forType: .string) == ReviewCopy.digest(of: [remote] + review.threads))
         #expect(model.store.load().localReviews[path]?.remaining == (replaced ? 1 : 0))
         #expect(model.store
             .load()
@@ -282,6 +298,8 @@ extension PullRequestsModelTests {
 
     @Test
     func `bulk copy failure leaves every finding unchanged`() async {
+        let pasteboard = NSPasteboard.withUniqueName()
+        defer { pasteboard.releaseGlobally() }
         let model = makeModel()
         let selected = resolutionSummary(head: "head")
         model.store.update { metadata in
@@ -291,7 +309,7 @@ extension PullRequestsModelTests {
         }
         let previous = model.store.load()
         model.preparePrompt = { _ in throw CocoaError(.fileWriteNoPermission) }
-        await model.copyUnresolvedComments(selected, resolve: true)
+        await model.copyUnresolvedComments(selected, pasteboard: pasteboard, resolve: true)
         #expect(model.store.load() == previous)
     }
 
@@ -312,6 +330,8 @@ extension PullRequestsModelTests {
 
     @Test(arguments: ["OPEN", "CLOSED"])
     func `bulk resolution reports a shared failure once per action`(state: String) async {
+        let pasteboard = NSPasteboard.withUniqueName()
+        defer { pasteboard.releaseGlobally() }
         let model = makeModel()
         let selected = resolutionSummary(head: state == "OPEN" ? nil : "head", state: state)
         model.store.update { metadata in
@@ -320,11 +340,11 @@ extension PullRequestsModelTests {
             )
         }
         let previous = ErrorLog.shared.entries.last?.id ?? 0
-        await model.copyUnresolvedComments(selected, resolve: true)
+        await model.copyUnresolvedComments(selected, pasteboard: pasteboard, resolve: true)
         let errors = ErrorLog.shared.entries.filter { $0.id > previous && $0.isError }
         #expect(errors.count == 1)
         #expect(errors.first?.message.contains(state == "OPEN" ? "loading" : "closed") == true)
-        await model.copyUnresolvedComments(selected, resolve: true)
+        await model.copyUnresolvedComments(selected, pasteboard: pasteboard, resolve: true)
         #expect(ErrorLog.shared.entries.count { $0.id > previous && $0.isError } == 2)
     }
 

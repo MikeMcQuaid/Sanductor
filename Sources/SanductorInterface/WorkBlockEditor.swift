@@ -24,9 +24,14 @@ public struct WorkBlockEditor: View {
         self.dismiss = dismiss
         _scope = State(initialValue: block?.scope ?? .worktree)
         _repositoryPath = State(initialValue: target.repositoryPath)
+        _day = State(initialValue: Self.tomorrow)
         switch block?.dependency {
         case let .note(text):
             _note = State(initialValue: text)
+
+        case let .date(day):
+            _source = State(initialValue: .date)
+            _day = State(initialValue: day)
 
         case let .worktree(other):
             _source = State(initialValue: .worktree)
@@ -50,6 +55,8 @@ public struct WorkBlockEditor: View {
     // MARK: Public
 
     public var body: some View {
+        let dateSelection = Binding(get: { day }, set: { day = Self.unblockDate(for: $0, previous: day) })
+        let selectableDays = min(day, Self.tomorrow)...
         VStack(alignment: .leading, spacing: Self.spacing) {
             Text("Block " + (
                 additionalTargets.isEmpty ? target.label : String(additionalTargets.count + 1) + " worktrees"
@@ -69,6 +76,8 @@ public struct WorkBlockEditor: View {
                     Text("Remove this block manually when it is resolved.")
                         .interfaceFont(.caption)
                         .foregroundStyle(.secondary)
+                } else if source == .date {
+                    DatePicker("Unblock on", selection: dateSelection, in: selectableDays, displayedComponents: .date)
                 } else {
                     dependencyPicker
                 }
@@ -86,10 +95,45 @@ public struct WorkBlockEditor: View {
         .task(id: source.rawValue + repositoryPath) { await reloadSources() }
     }
 
+    // MARK: Internal
+
+    var dependency: BlockDependency? {
+        switch source {
+        case .note:
+            let text = note.trimmingCharacters(in: .whitespacesAndNewlines)
+            return text.isEmpty || text.utf8.count > WorkBlock.maximumNoteBytes ? nil : .note(text)
+
+        case .date:
+            return day > .now ? .date(day) : nil
+
+        case .worktree:
+            return targets.first { $0.path == selected }.map(BlockDependency.worktree)
+
+        case .issue:
+            return sources.issues
+                .first { String($0.number) == selected }
+                .map { .issue(repositoryPath: repositoryPath, number: $0.number, title: $0.title) }
+
+        case .pullRequest:
+            return sources.pullRequests
+                .first { String($0.number) == selected }
+                .map { .pullRequest(repositoryPath: repositoryPath, number: $0.number, title: $0.title) }
+        }
+    }
+
+    static func unblockDate(for day: Date, previous: Date, calendar: Calendar = .current) -> Date {
+        guard calendar.isDate(day, inSameDayAs: previous) == false else {
+            return previous
+        }
+
+        return calendar.startOfDay(for: day)
+    }
+
     // MARK: Private
 
     private enum Source: String, CaseIterable {
         case note = "Note"
+        case date = "Date"
         case worktree = "Worktree"
         case issue = "Issue"
         case pullRequest = "Pull request"
@@ -103,9 +147,14 @@ public struct WorkBlockEditor: View {
     private static let maximumListHeight: CGFloat = 300
     private static let noteLines = 2 ... 5
 
+    private static var tomorrow: Date {
+        Calendar.current.dateInterval(of: .day, for: .now)?.end ?? .now
+    }
+
     @State private var scope: WorkBlock.Scope
     @State private var source: Source = .note
     @State private var repositoryPath: String
+    @State private var day: Date
     @State private var note = ""
     @State private var search = ""
     @State private var selected: String?
@@ -127,7 +176,8 @@ public struct WorkBlockEditor: View {
     private var choices: [(id: String, label: String)] {
         let all: [(id: String, label: String)] =
             switch source {
-            case .note:
+            case .date,
+                 .note:
                 []
 
             case .worktree:
@@ -145,27 +195,6 @@ public struct WorkBlockEditor: View {
                     .map { (String($0.number), $0.reference + ": " + $0.title) }
             }
         return all.filter { search.isEmpty || $0.label.localizedStandardContains(search) }
-    }
-
-    private var dependency: BlockDependency? {
-        switch source {
-        case .note:
-            let text = note.trimmingCharacters(in: .whitespacesAndNewlines)
-            return text.isEmpty || text.utf8.count > WorkBlock.maximumNoteBytes ? nil : .note(text)
-
-        case .worktree:
-            return targets.first { $0.path == selected }.map(BlockDependency.worktree)
-
-        case .issue:
-            return sources.issues
-                .first { String($0.number) == selected }
-                .map { .issue(repositoryPath: repositoryPath, number: $0.number, title: $0.title) }
-
-        case .pullRequest:
-            return sources.pullRequests
-                .first { String($0.number) == selected }
-                .map { .pullRequest(repositoryPath: repositoryPath, number: $0.number, title: $0.title) }
-        }
     }
 
     private var actions: some View {

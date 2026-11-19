@@ -9,11 +9,12 @@ extension GitHubClientTests {
     func `REST stack positions survive missing neighbouring pull requests`() throws {
         let json = """
         [{"number":7,"title":"Work","html_url":"https://github.com/o/r/pull/7",
-          "head":{"ref":"top"},"base":{"ref":"middle"},"state":"open",
+          "head":{"ref":"top","repo":{"full_name":"fork/r"}},"base":{"ref":"middle"},"state":"open",
           "stack":{"number":42,"size":3,"position":3,"base":{"ref":"main","sha":"base"}}}]
         """
         let summary = try #require(GitHubClient.summaries(fromRESTJSON: json).first)
-        let standing = StackStanding(position: 3, height: 3, base: "middle")
+        let standing = StackStanding(position: 3, height: 3, base: "middle", number: 42)
+        #expect(summary.headRepository == "fork/r")
         #expect(summary.stackStanding == standing)
         #expect(summary.retitled("Updated", body: "Body").stackStanding == standing)
         #expect(summary.awaitingChecks().stackStanding == standing)

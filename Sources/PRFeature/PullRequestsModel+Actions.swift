@@ -71,13 +71,13 @@ extension PullRequestsModel {
         ErrorLog.shared.report(message, about: repository.name, branch: actedBranch)
     }
 
-    /// Copies unresolved review conversations not marked Resolve on push to the
-    /// clipboard, ready for pasting into an agent or reply.
-    func copyUnresolvedComments(_ summary: PullRequestSummary, resolve: Bool = false) async {
+    /// Copies unresolved conversations and findings that still need attention.
+    func copyUnresolvedComments(_ summary: PullRequestSummary, pasteboard: NSPasteboard, resolve: Bool = false) async {
         let remote = copyableRemoteReviews(for: summary)
         let local = localReview(for: summary)
         let threads = (remote + (local?.review.threads ?? [])).filter { $0.isResolved == false }
-        guard PromptClipboard.copy(ReviewCopy.digest(of: threads), prepare: preparePrompt) else {
+        let text = threads.isEmpty ? "" : feedbackPrefix(for: summary) + ReviewCopy.digest(of: threads)
+        guard PromptClipboard.copy(text, to: pasteboard, prepare: preparePrompt) else {
             return
         }
 
@@ -200,20 +200,6 @@ extension PullRequestsModel {
         }
 
         return selected.isDraft == false
-    }
-
-    /// The stack size, following base branches that are other listed
-    /// pull requests' heads.
-    func stackDepth(for summary: PullRequestSummary) -> Int {
-        let byHead = Dictionary(summaries.map { ($0.headBranch, $0) }) { first, _ in first }
-        var current = summary
-        var depth = 1
-        var seen = Set([current.headBranch])
-        while let next = byHead[current.baseBranch], seen.insert(next.headBranch).inserted {
-            depth += 1
-            current = next
-        }
-        return depth
     }
 
     /// Whether every local commit is already on the remote; Open

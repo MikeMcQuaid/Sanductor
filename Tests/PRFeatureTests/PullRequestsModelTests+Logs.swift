@@ -68,11 +68,14 @@ extension PullRequestsModelTests {
 
     @Test
     func `only every run coming back empty is worth saying, in our words`() async {
+        let pasteboard = NSPasteboard.withUniqueName()
+        defer { pasteboard.releaseGlobally() }
         let links = ["https://github.com/o/r/actions/runs/123/job/1"]
         let model = makeModel()
         model.fetchFailedRunLog = { _ in throw GitHubClient.RunLogsUnavailable(failedJobs: 2) }
 
-        #expect(await model.copyFailingLogs(summary(1, head: "feature", failingCheckLinks: links)) == false)
+        let selected = summary(1, head: "feature", failingCheckLinks: links)
+        #expect(await model.copyFailingLogs(selected, pasteboard: pasteboard) == false)
         let message = ErrorLog.shared.entries.last?.message ?? ""
         #expect(message.contains("2 failed jobs"))
         // gh's own "still in progress" never reaches the pane.
@@ -82,6 +85,8 @@ extension PullRequestsModelTests {
 
     @Test
     func `a failure waiting cannot cure is not reported as a wait`() async {
+        let pasteboard = NSPasteboard.withUniqueName()
+        defer { pasteboard.releaseGlobally() }
         let links = ["https://github.com/o/r/actions/runs/123/job/1"]
         let model = makeModel()
         let refusal = NSError(domain: "gh", code: 4, userInfo: [
@@ -89,7 +94,8 @@ extension PullRequestsModelTests {
         ])
         model.fetchFailedRunLog = { _ in throw refusal }
 
-        #expect(await model.copyFailingLogs(summary(1, head: "feature", failingCheckLinks: links)) == false)
+        let selected = summary(1, head: "feature", failingCheckLinks: links)
+        #expect(await model.copyFailingLogs(selected, pasteboard: pasteboard) == false)
         let message = ErrorLog.shared.entries.last?.message ?? ""
         #expect(message.contains("no route to the network"))
         #expect(message.contains("yet") == false)

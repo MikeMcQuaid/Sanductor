@@ -5,12 +5,15 @@ import TerminalUI
 
 /// Copies complete job diagnostics through the shared paste-size limit.
 extension PullRequestsModel {
-    func copyCheckLog(_ check: PullRequestCheck, pasteboard: NSPasteboard = .general) async -> Bool {
+    func copyCheckLog(
+        _ check: PullRequestCheck, for summary: PullRequestSummary, pasteboard: NSPasteboard,
+    ) async -> Bool {
+        let prefix = feedbackPrefix(for: summary)
         pasteboard.clearContents()
         do {
             let log = try await fetchCheckLog(check)
             return PromptClipboard.copy(
-                CheckLogDocument(log).plainText(showTimestamps: false), to: pasteboard, prepare: preparePrompt,
+                prefix + CheckLogDocument(log).plainText(showTimestamps: false), to: pasteboard, prepare: preparePrompt,
             )
         } catch {
             report("Could not copy " + check.displayName + "'s log: " + error.localizedDescription)
@@ -121,7 +124,7 @@ extension PullRequestsModel {
     /// Copies the failing logs to the clipboard; false opens the
     /// errors surface, and a pull request whose failing checks are
     /// not Actions runs has nothing to copy.
-    func copyFailingLogs(_ summary: PullRequestSummary, pasteboard: NSPasteboard = .general) async -> Bool {
+    func copyFailingLogs(_ summary: PullRequestSummary, pasteboard: NSPasteboard) async -> Bool {
         pasteboard.clearContents()
         let links = includesOptionalLogs(for: summary)
             ? (summary.checkDetails ?? []).map(\.link) : summary.failingCheckLinks
@@ -132,7 +135,7 @@ extension PullRequestsModel {
         }
 
         do {
-            let text = try await failingLogs(for: summary)
+            let text = try await feedbackPrefix(for: summary) + failingLogs(for: summary)
             guard PromptClipboard.copy(text, to: pasteboard, prepare: preparePrompt) else {
                 return false
             }

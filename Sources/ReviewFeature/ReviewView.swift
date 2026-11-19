@@ -105,6 +105,7 @@ public struct ReviewView: View {
             }
             .sheet(isPresented: $localReview.showsPrompt) { LocalReviewPromptView(model: localReview) }
             .sheet(isPresented: $showsLocalReview) { LocalReviewView(model: localReview, diff: model) }
+            .environment(\.feedbackStackPrefix, stack.feedbackPrefix(for: stack.checkedOut))
     }
 
     // MARK: Internal

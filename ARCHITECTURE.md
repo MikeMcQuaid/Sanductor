@@ -1234,8 +1234,12 @@ confirmed passing checks, approval and mergeability, with no unresolved
 review conversations; missing information never claims readiness.
 
 A row's Block action applies to its worktree or current branch and
-records either a note or a dependency on another worktree, open issue
+records a note, a date or a dependency on another worktree, open issue
 or open pull request, including those in another listed repository.
+The shared Mac and iPhone editor stores a selected date as the start of
+that local day. Editing the scope keeps that instant across time zones.
+The host clears the block on its first blocker refresh at or after
+that instant, including after a relaunch.
 Notes remain until explicitly removed. Issues and pull requests unblock
 only after a successful reading confirms closure or merger; a missing
 or failed answer keeps the block. Worktree dependencies clear when
@@ -3619,6 +3623,15 @@ Unavailable job logs are noted without delaying other feedback. External
 checks retain their name and conclusion without an Actions log endpoint.
 Generated job links are included only after repository visibility is
 verified public.
+Clipboard copies of review conversations and check logs identify the
+branch and its stack using the local branch chain, GitHub's reported
+stack number and position or the open PRs that build on one another.
+Listings retain a pull request's known head repository across closure
+and reopening so upstream branches stay distinct from forks.
+Individual and bulk copies include this context before the clipboard
+size limit is applied.
+Review and check copy actions take a pasteboard from the caller. The
+Mac UI uses the general pasteboard and tests use private pasteboards.
 The Checks pane retains its display rollup; its bulk copy includes complete
 selected logs without a shared truncation budget.
 

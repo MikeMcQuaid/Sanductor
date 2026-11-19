@@ -95,6 +95,9 @@ public struct ReviewThreadRow: View {
     /// otherwise start minimised.
     @State private var expandOverrides: [Bool] = []
 
+    @Environment(\.feedbackStackPrefix)
+    private var feedbackStackPrefix
+
     private let thread: ReviewThread
     private let onEdit: (@MainActor () -> Void)?
     private let localReviewer: AgentKind?
@@ -211,7 +214,7 @@ public struct ReviewThreadRow: View {
 
     private var copyButton: some View {
         PaneIconButton("doc.on.doc", help: "Copy this conversation, with its file and line, to the clipboard") {
-            PromptClipboard.copy(ReviewCopy.text(thread))
+            PromptClipboard.copy(feedbackStackPrefix + ReviewCopy.text(thread))
         }
     }
 

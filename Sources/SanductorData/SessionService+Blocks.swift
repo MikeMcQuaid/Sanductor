@@ -51,10 +51,10 @@ public extension SessionService {
     }
 
     /// Only positive evidence clears a dependency; unavailable GitHub stays blocked.
-    func resolveWorkBlocks() async {
+    func resolveWorkBlocks(now: Date = .now) async {
         let blocks = store.load().workBlocks
         var resolved = Set<WorkBlock>()
-        for block in blocks where await dependencyFinished(block.dependency, since: block.createdAt) {
+        for block in blocks where await dependencyFinished(block.dependency, since: block.createdAt, now: now) {
             resolved.insert(block)
         }
         guard resolved.isEmpty == false else {
@@ -83,6 +83,11 @@ public extension SessionService {
         case .note:
             break
 
+        case let .date(day):
+            guard day > .now else {
+                throw SessionServiceError("Choose a future date.")
+            }
+
         case let .worktree(target):
             guard targets.contains(target), block.applies(to: target) == false else {
                 throw SessionServiceError("Choose another listed worktree.")
@@ -96,11 +101,14 @@ public extension SessionService {
         }
     }
 
-    private func dependencyFinished(_ dependency: BlockDependency, since createdAt: Date) async -> Bool {
+    private func dependencyFinished(_ dependency: BlockDependency, since createdAt: Date, now: Date) async -> Bool {
         do {
             switch dependency {
             case .note:
                 return false
+
+            case let .date(day):
+                return day <= now
 
             case let .worktree(target):
                 // An absent directory proves removal; a listing failure does not.

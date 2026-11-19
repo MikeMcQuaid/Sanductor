@@ -88,7 +88,10 @@ struct CheckLogView: View {
                 help: "Copy this check's log, including collapsed groups",
                 disabled: log.isEmpty || isLoading,
             ) {
-                PromptClipboard.copy(document.plainText(showTimestamps: showTimestamps), prepare: model.preparePrompt)
+                PromptClipboard.copy(
+                    model.feedbackPrefix(for: summary) + document.plainText(showTimestamps: showTimestamps),
+                    prepare: model.preparePrompt,
+                )
             }
         }
         .padding(Self.controlSpacing)

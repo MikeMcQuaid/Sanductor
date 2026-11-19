@@ -25,6 +25,8 @@ struct PullRequestsModelTests {
         await model.reload()
         #expect(model.stackDepth(for: summary(3, head: "third", base: "second")) == 3)
         #expect(model.stackDepth(for: summary(1, head: "first")) == 1)
+        let expected = "Feedback for first (stack: main → first → second → third)\n\n"
+        #expect(model.feedbackPrefix(for: summary(1, head: "first")) == expected)
     }
 
     @Test

@@ -39,12 +39,15 @@ extension PullRequestStore {
             case .unchanged:
                 // An unchanged listing can still outdate a summary
                 // enriched since it arrived.
+                var kept = cached ?? []
                 store.update { metadata in
                     metadata.fetchedAt[key] = Date()
-                    Self.correctSummaries(from: cached ?? [], repositoryPath: repositoryPath, in: &metadata)
+                    kept = metadata.pullRequestListsCache[key]?.summaries ?? kept
+                    Self.correctSummaries(in: &kept, repositoryPath: repositoryPath, metadata: &metadata)
+                    metadata.pullRequestListsCache[key]?.summaries = kept
                 }
                 PerformanceLog.record(.cacheHit, "etag " + key, seconds: 0)
-                return cached ?? []
+                return kept
 
             case let .changed(body, etag):
                 var fetched = GitHubClient.summaries(fromRESTJSON: body)
@@ -86,7 +89,7 @@ extension PullRequestStore {
         in metadata: inout AppMetadata,
     ) -> [PullRequestSummary] {
         var kept = painted(fetched, repositoryPath: repositoryPath, in: &metadata)
-        correctSummaries(from: kept, repositoryPath: repositoryPath, in: &metadata)
+        correctSummaries(in: &kept, repositoryPath: repositoryPath, metadata: &metadata)
         // Invalidating the listing makes its next answer authoritative.
         if let previous = metadata.pullRequestListsCache[key]?.summaries,
            previous.count > max(limit, kept.count), metadata.fetchedAt[key] != nil
@@ -106,16 +109,20 @@ extension PullRequestStore {
     /// one it reports open again replaces the finished summary and clears its stamp,
     /// so the next enrichment asks rather than repeating the cache.
     static func correctSummaries(
-        from listed: [PullRequestSummary],
+        in listed: inout [PullRequestSummary],
         repositoryPath: String,
-        in metadata: inout AppMetadata,
+        metadata: inout AppMetadata,
     ) {
-        for summary in listed {
-            let key = summaryKey(repositoryPath: repositoryPath, number: summary.number)
+        for index in listed.indices {
+            let key = summaryKey(repositoryPath: repositoryPath, number: listed[index].number)
             guard let cached = metadata.enrichedSummaryCache[key]?.summary else {
                 continue
             }
 
+            if listed[index].headRepository == nil, let headRepository = cached.headRepository {
+                listed[index].headRepository = headRepository
+            }
+            let summary = listed[index]
             if summary.state == "OPEN" {
                 if cached.state != "OPEN" {
                     metadata.enrichedSummaryCache[key] = CachedSummary(summary: summary, requiresHeadRefresh: true)

@@ -1,5 +1,13 @@
 import AppKit
 import SanductorData
+import SwiftUI
+
+public extension EnvironmentValues {
+    /// The stack and branch that own feedback copied from this pane.
+    @Entry var feedbackStackPrefix = ""
+}
+
+// MARK: - PromptClipboard
 
 /// Copies feedback with the same size and file-lifetime rules as autofix.
 public enum PromptClipboard {

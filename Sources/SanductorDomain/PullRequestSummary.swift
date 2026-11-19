@@ -206,7 +206,7 @@ public struct PullRequestSummary: ReferencedItem, Hashable, Sendable, Codable {
     /// leaves out: counted so the help can say why a green dot sits
     /// beside a red run on GitHub; manual copying can include optional jobs.
     public let autofixChecks: AutofixChecks?
-    public let headRepository: String?
+    public var headRepository: String?
 
     /// GitHub's reported position, available from REST branch listings.
     public var stackStanding: StackStanding?
