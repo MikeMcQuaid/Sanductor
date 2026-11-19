@@ -208,7 +208,8 @@ public struct GitHubClient: Sendable {
     /// A remembered answer, including the answer that there is none.
     /// Cheap fields, including the body so a click-through shows the
     /// conversation immediately.
-    static let coreFields = "number,title,url,headRefName,headRefOid,baseRefName,state,isDraft,author,body,labels"
+    static let coreFields =
+        "number,title,url,headRefName,headRefOid,headRepository,baseRefName,state,isDraft,author,body,labels"
 
     /// The expensive dashboard fields; computing these across every
     /// open pull request timed out (HTTP 504) on busy repositories,

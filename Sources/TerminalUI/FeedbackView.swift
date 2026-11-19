@@ -210,6 +210,9 @@ public struct FeedbackView: View {
 
     @State private var initial: PullRequestAutomation
     @State private var message = ""
+    @Environment(\.feedbackStackPrefix)
+    private var feedbackStackPrefix
+
     @State private var isCopying = false
     @State private var isReviewing = false
     @State private var isPresented = false
@@ -229,7 +232,8 @@ public struct FeedbackView: View {
         isCopying = true
         defer { isCopying = false }
         do {
-            guard try await PromptClipboard.copy(service.copyFeedback(state), prepare: service.promptForPasting) else {
+            let text = try await feedbackStackPrefix + service.copyFeedback(state)
+            guard PromptClipboard.copy(text, prepare: service.promptForPasting) else {
                 message = "Could not copy feedback"
                 return
             }

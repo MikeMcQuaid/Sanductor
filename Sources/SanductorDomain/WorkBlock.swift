@@ -40,9 +40,10 @@ public struct SidebarTarget: Codable, Hashable, Identifiable, Sendable {
 
 // MARK: - BlockDependency
 
-/// One reason work cannot proceed, retained until explicitly resolved.
+/// One reason work cannot proceed.
 public enum BlockDependency: Codable, Hashable, Sendable {
     case note(String)
+    case date(Date)
     case worktree(SidebarTarget)
     case issue(repositoryPath: String, number: Int, title: String)
     case pullRequest(repositoryPath: String, number: Int, title: String)
@@ -53,6 +54,9 @@ public enum BlockDependency: Codable, Hashable, Sendable {
         switch self {
         case let .note(text):
             text
+
+        case let .date(day):
+            "Until " + day.formatted(date: .long, time: .omitted)
 
         case let .worktree(target):
             target.label

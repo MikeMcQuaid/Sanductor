@@ -29,11 +29,14 @@ extension PullRequestsModelTests {
             2026-11-10T10:00:03Z ##[endgroup]
             """
         }
+        var listed = summary(1, head: "remote", base: "lower")
+        listed.stackStanding = StackStanding(position: 3, height: 4, base: "lower", number: 42)
+        model.pullRequests.rememberListing(repositoryPath: "/repo", scope: .branch("remote"), summaries: [listed])
         model.preparePrompt = { text in
-            #expect(text == "Build\n  make\n  output")
+            #expect(text == "Feedback for remote (stack #42, layer 3 of 4, base: lower)\n\nBuild\n  make\n  output")
             return "prepared log"
         }
-        #expect(await model.copyCheckLog(check, pasteboard: pasteboard))
+        #expect(await model.copyCheckLog(check, for: summary(1, head: "remote"), pasteboard: pasteboard))
         #expect(pasteboard.string(forType: .string) == "prepared log")
     }
 
@@ -52,6 +55,7 @@ extension PullRequestsModelTests {
                 requirement: .required,
                 link: "https://github.com/o/r/actions/runs/1/job/2",
             ),
+            for: summary(1, head: "feature"),
             pasteboard: pasteboard,
         ) == false)
         #expect(pasteboard.string(forType: .string) == nil)
@@ -109,6 +113,23 @@ extension PullRequestsModelTests {
         }
         #expect(await model.copyFailingLogs(summary, pasteboard: pasteboard))
         #expect(pasteboard.string(forType: .string) == "## build\nrequired failure")
+    }
+
+    @Test
+    func `copied logs name the PR layer even when another branch is checked out`() async {
+        let model = makeModel()
+        let pasteboard = NSPasteboard.withUniqueName()
+        defer { pasteboard.releaseGlobally() }
+        let selected = summary(2, head: "feature", failingCheckLinks: ["https://github.com/o/r/actions/runs/13"])
+        model.fetchFailedRunLog = { _ in "required failure" }
+        model.stacking.stack = BranchStack(base: "main", branches: ["feature", "upper"], checkedOut: "upper")
+        #expect(await model.copyFailingLogs(selected, pasteboard: pasteboard))
+        #expect(pasteboard.string(forType: .string) == """
+        Feedback for feature (stack: main → feature → upper)
+
+        ## Run 13
+        required failure
+        """)
     }
 
     @Test(arguments: [1, 2])

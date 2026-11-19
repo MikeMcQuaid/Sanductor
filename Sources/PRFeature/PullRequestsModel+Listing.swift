@@ -37,6 +37,51 @@ extension PullRequestsModel {
         stacking.selected ?? currentBranch ?? branch
     }
 
+    /// Follows the visible PR chain when the worktree has no local stack for this PR.
+    func listedStack(containing summary: PullRequestSummary) -> BranchStack {
+        let parents = listedParents(of: summary)
+        var branches = parents.reversed().map(\.headBranch) + [summary.headBranch]
+        let byBase = Dictionary(grouping: summaries.filter { $0.state == "OPEN" }, by: \.baseBranch)
+        var current = summary
+        while canHaveStackChildren(current), let children = byBase[current.headBranch],
+              children.count == 1, let child = children.first, branches.contains(child.headBranch) == false
+        {
+            branches.append(child.headBranch)
+            current = child
+        }
+        let base = (parents.last ?? summary).baseBranch
+        return BranchStack(base: base.isEmpty ? nil : base, branches: branches, checkedOut: summary.headBranch)
+    }
+
+    /// Counts the selected layer and its open ancestors in the PR listing.
+    func stackDepth(for summary: PullRequestSummary) -> Int {
+        listedParents(of: summary).count + 1
+    }
+
+    private func listedParents(of summary: PullRequestSummary) -> [PullRequestSummary] {
+        guard summary.state == "OPEN" else {
+            return []
+        }
+
+        let byHead = Dictionary(grouping: summaries.filter { canHaveStackChildren($0) }, by: \.headBranch)
+        var parents = [PullRequestSummary]()
+        var current = summary
+        var seen = Set([current.headBranch])
+        while let candidates = byHead[current.baseBranch], candidates.count == 1, let parent = candidates.first,
+              seen.insert(parent.headBranch).inserted
+        {
+            parents.append(parent)
+            current = parent
+        }
+        return parents
+    }
+
+    private func canHaveStackChildren(_ summary: PullRequestSummary) -> Bool {
+        let baseRepository = repository.fullName ?? GitHubRemote.fullName(ofURL: summary.url)
+        return summary.state == "OPEN" && summary.headBranch != defaultBranch
+            && (summary.headRepository == nil || summary.headRepository?.lowercased() == baseRepository?.lowercased())
+    }
+
     /// What the listing on screen is of, so an answer that arrives
     /// after the tab has moved on is dropped rather than shown.
     var cacheKey: String {

@@ -240,7 +240,7 @@ public struct PullRequestsView: View {
             },
             reloadToken: model.conversationRefreshes,
             onBack: { model.selected = nil },
-            onCopyComments: { await model.copyUnresolvedComments(summary) },
+            onCopyComments: { await model.copyUnresolvedComments(summary, pasteboard: .general) },
             onOpenChecks: { model.openFailingChecks(summary) },
             onResolvedChanged: { await model.refreshSummary(summary.number) },
             onThreadsChanged: { model.updateUnresolved($0, number: summary.number) },
@@ -253,6 +253,7 @@ public struct PullRequestsView: View {
             labels: model.selectedLabels,
             availableLabels: model.availableLabels,
         )
+        .environment(\.feedbackStackPrefix, model.feedbackPrefix(for: summary))
         .task(id: summary.url) { await model.restoreLocalReview(for: summary) }
     }
 }

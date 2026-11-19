@@ -109,6 +109,7 @@ public extension GitHubClient {
                 // while GitHub still showed the request waiting.
                 awaitsCopilotReview: (row.requestedReviewers ?? []).contains { Self.isCopilot($0.login) },
                 labels: (row.labels ?? []).map(\.name).sorted(),
+                headRepository: row.head.repo?.fullName,
                 stackStanding: row.stack.flatMap { stack in
                     guard let position = stack.position, let size = stack.size,
                           position > 0, size >= position
@@ -116,7 +117,7 @@ public extension GitHubClient {
                         return nil
                     }
 
-                    return StackStanding(position: position, height: size, base: row.base.ref)
+                    return StackStanding(position: position, height: size, base: row.base.ref, number: stack.number)
                 },
             )
         }
@@ -140,6 +141,7 @@ public extension GitHubClient {
 
 private struct RESTPullRow: Decodable {
     struct Stack: Decodable {
+        let number: Int?
         let size: Int?
         let position: Int?
     }
@@ -147,6 +149,11 @@ private struct RESTPullRow: Decodable {
     struct Ref: Decodable {
         let ref: String
         let sha: String?
+        let repo: Repo?
+    }
+
+    struct Repo: Decodable {
+        let fullName: String?
     }
 
     struct User: Decodable {

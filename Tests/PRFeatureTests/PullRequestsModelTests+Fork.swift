@@ -8,6 +8,22 @@ import Testing
 /// and the pull request has to say so.
 extension PullRequestsModelTests {
     @Test
+    func `a reopened fork stays out of the upstream stack`() async throws {
+        let model = makeModel()
+        var fork = summary(1, head: "lower", state: "CLOSED")
+        fork.headRepository = "fork/repo"
+        let upper = summary(2, head: "upper", base: "lower")
+        model.pullRequests.rememberSummary(repositoryPath: "/repo", summary: fork)
+        model.fetchList = { _, _ in [summary(1, head: "lower"), upper] }
+        model.scope = .open
+        #expect(try await model.showListing(limit: 2))
+        #expect(model.feedbackPrefix(for: upper).isEmpty)
+        model.repaintFromCache()
+        #expect(model.pullRequests.cachedSummary(repositoryPath: "/repo", number: 1)?.headRepository == "fork/repo")
+        #expect(model.feedbackPrefix(for: upper).isEmpty)
+    }
+
+    @Test
     func `a push to a fork says whose fork it went to`() async {
         let model = makeModel(items: [item(branch: "feature", ahead: 2)])
         model.performPush = { _ in .fork(owner: "MikeMcQuaid") }

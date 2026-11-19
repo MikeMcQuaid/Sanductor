@@ -51,6 +51,16 @@ public struct BranchStack: Hashable, Sendable, Codable {
         branches.count > 1
     }
 
+    /// Identifies the source of copied feedback when several branches share a stack.
+    public func feedbackPrefix(for branch: String, stackName: String = "stack") -> String {
+        guard isStacked, branches.contains(branch) else {
+            return ""
+        }
+
+        let chain = ([base].compactMap(\.self) + branches).joined(separator: " → ")
+        return "Feedback for " + branch + " (" + stackName + ": " + chain + ")\n\n"
+    }
+
     /// A queued branch and everything beneath it form a fixed base.
     public func mutableBranches(queued: Set<String>) -> [String] {
         guard let last = branches.lastIndex(where: queued.contains) else {

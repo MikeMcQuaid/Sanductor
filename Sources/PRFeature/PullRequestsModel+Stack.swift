@@ -27,6 +27,27 @@ extension PullRequestsModel {
         stacking.stack
     }
 
+    func feedbackPrefix(for summary: PullRequestSummary) -> String {
+        let branch = summary.headBranch
+        let listed = pullRequests.cachedListing(repositoryPath: repository.path, scope: .branch(branch))?
+            .first { $0.number == summary.number }
+        let standing = summary.stackStanding ?? listed?.stackStanding
+        let name = standing?.number.map { "stack #" + String($0) } ?? "stack"
+        if summary.state == "OPEN", listed != nil || (scope == .worktree && listedBranch == branch) {
+            let prefix = stack.feedbackPrefix(for: branch, stackName: name)
+            if prefix.isEmpty == false {
+                return prefix
+            }
+        }
+        guard let standing, standing.isStacked else {
+            return listedStack(containing: summary).feedbackPrefix(for: branch)
+        }
+
+        let base = standing.base ?? summary.baseBranch
+        return "Feedback for " + branch + " (" + name + ", layer " + String(standing.position) + " of "
+            + String(standing.height) + (base.isEmpty ? "" : ", base: " + base) + ")\n\n"
+    }
+
     /// Lists a branch of the stack, without checking anything out:
     /// reading up and down a stack is navigation, and moving the
     /// worktree to another branch is a deliberate act of its own.

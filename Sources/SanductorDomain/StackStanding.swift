@@ -5,13 +5,17 @@ public struct StackStanding: Codable, Hashable, Sendable {
     // MARK: Lifecycle
 
     /// Creates a standing.
-    public init(position: Int, height: Int, base: String? = nil) {
+    public init(position: Int, height: Int, base: String? = nil, number: Int? = nil) {
+        self.number = number
         self.position = position
         self.height = height
         self.base = base
     }
 
     // MARK: Public
+
+    /// GitHub’s stack number when the pull request has registered membership.
+    public let number: Int?
 
     /// Counting from the bottom of the stack.
     public let position: Int

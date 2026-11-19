@@ -28,9 +28,9 @@ extension PullRequestFooterView {
             if modifiers.isDisjoint(with: [.command, .shift]) == false {
                 model.openReviews(selected, inExternalBrowser: modifiers.contains(.command))
             } else if modifiers.contains(.option) {
-                await model.copyUnresolvedComments(selected, resolve: true)
+                await model.copyUnresolvedComments(selected, pasteboard: .general, resolve: true)
             } else {
-                await model.copyUnresolvedComments(selected)
+                await model.copyUnresolvedComments(selected, pasteboard: .general)
             }
         }
         .hoverHelp("Copy unresolved local AI and GitHub conversations and outside-diff findings, "
@@ -40,7 +40,7 @@ extension PullRequestFooterView {
             + "and resolves local and outside-diff findings")
         .contextMenu {
             BusyButton("Copy and resolve all reviews on push", busy: "Copying reviews", disabled: count == 0) {
-                await model.copyUnresolvedComments(selected, resolve: true)
+                await model.copyUnresolvedComments(selected, pasteboard: .general, resolve: true)
             }
         }
         let checks = PullRequestsModel.copyableFailingChecks(
@@ -54,7 +54,7 @@ extension PullRequestFooterView {
         ) { modifiers in
             if modifiers.isDisjoint(with: [.command, .shift]) == false {
                 model.openFailingChecks(selected, inExternalBrowser: modifiers.contains(.command))
-            } else if await model.copyFailingLogs(selected) == false {
+            } else if await model.copyFailingLogs(selected, pasteboard: .general) == false {
                 utilityTab = UtilityTabTarget.errors
             }
         }
@@ -74,12 +74,12 @@ extension PullRequestFooterView {
     func rawFeedbackMenu(for selected: PullRequestSummary) -> some View {
         Menu("Copy unfiltered feedback") {
             BusyButton("All unresolved reviews", busy: "Copying reviews") {
-                await model.copyUnresolvedComments(selected)
+                await model.copyUnresolvedComments(selected, pasteboard: .general)
             }
             .disabled(reviewCount(for: selected) == 0)
             Button("Failing CI logs") {
                 Task {
-                    if await model.copyFailingLogs(selected) == false {
+                    if await model.copyFailingLogs(selected, pasteboard: .general) == false {
                         utilityTab = UtilityTabTarget.errors
                     }
                 }

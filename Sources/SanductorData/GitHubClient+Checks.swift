@@ -11,7 +11,7 @@ extension GitHubClient {
         cachedChecks: [PullRequestCheck] = [],
         requiredChecks: RequiredChecksReader = { _ in nil },
     ) async throws -> PullRequestSummary? {
-        let fields = Self.coreFields + "," + Self.statusFields + ",headRepository"
+        let fields = Self.coreFields + "," + Self.statusFields
         let result = try await gh(["pr", "view", String(number), "--json", fields], in: repositoryPath)
         var summary = await Self.summaries(
             fromJSON: "[" + result.standardOutput + "]", requiredChecks: requiredChecks,

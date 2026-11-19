@@ -38,7 +38,7 @@ public struct CopyReviewConversationsButton: View {
 
     func copy(resolve: Bool, toClipboard: (String) -> Bool = { PromptClipboard.copy($0) }) async {
         let copied = open
-        guard toClipboard(ReviewCopy.digest(of: copied)) else {
+        guard toClipboard(feedbackStackPrefix + ReviewCopy.digest(of: copied)) else {
             return
         }
 
@@ -48,6 +48,9 @@ public struct CopyReviewConversationsButton: View {
     }
 
     // MARK: Private
+
+    @Environment(\.feedbackStackPrefix)
+    private var feedbackStackPrefix
 
     private let threads: [ReviewThread]
     private let onResolve: ([ReviewThread]) async -> Void
