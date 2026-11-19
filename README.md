@@ -88,12 +88,11 @@ fi
 
 ## 📱 iPhone companion app
 
-On iOS 26+, install TestFlight and open the maintainers' beta link.
+Use [TestFlight](https://apps.apple.com/app/testflight/id899247664) on iOS 26+ to [join the beta](https://testflight.apple.com/join/zA5bSe4d).
 Or clone this repo, put `DEVELOPMENT_TEAM = <your paid team ID>` in `Signing.xcconfig` at its root, run `script/bootstrap` and `script/install`, then build `Sanductor-iOS` in Xcode.
 Shows public and private PR status with conflict badges and prefers GitHub Mobile, falling back to GitHub.com; private PRs require sign-in.
 
 1. Copy the public key from iPhone Settings to your Mac's clipboard, then install it for the `sandvault-<you>` user:
-
    ```bash
    mkdir -p ~/.config/codeofhonor/sandvault/authorized_keys.d
    pbpaste >~/.config/codeofhonor/sandvault/authorized_keys.d/sanductor-phone
