@@ -79,7 +79,7 @@ let package = Package(
             name: "SanductoriOSAppSources",
             dependencies: ["MobileFeature"],
             path: "iOSApp",
-            exclude: ["PrivacyInfo.xcprivacy"],
+            exclude: ["PrivacyInfo.xcprivacy", "Sanductor.entitlements"],
             swiftSettings: mainActorByDefault,
         ),
         // The app shell's own sources, as a plain target so they can
@@ -102,7 +102,7 @@ let package = Package(
                 "TerminalUI",
             ],
             path: "App",
-            exclude: ["Sanductor.entitlements", "Assets.xcassets", "Credits.html"],
+            exclude: ["Sanductor.entitlements", "Sanductor-iCloud.entitlements", "Assets.xcassets", "Credits.html"],
             swiftSettings: mainActorByDefault,
         ),
         .target(
@@ -125,10 +125,16 @@ let package = Package(
             ],
             swiftSettings: approachableConcurrency,
         ),
+        // The Mac's alerts relayed to the iPhone through the user's own
+        // private CloudKit database, shared by both apps.
+        .target(
+            name: "SanductorCloud",
+            swiftSettings: approachableConcurrency,
+        ),
         .target(
             name: "MobileFeature",
             dependencies: [
-                "SanductorRemote", "SanductorInterface", "SanductorDomain",
+                "SanductorRemote", "SanductorInterface", "SanductorDomain", "SanductorCloud",
                 .product(name: "SwiftTerm", package: "SwiftTerm"),
             ],
             swiftSettings: mainActorByDefault,
@@ -152,7 +158,7 @@ let package = Package(
         ),
         .target(
             name: "DashboardFeature",
-            dependencies: ["SanductorDomain", "SanductorData", "SanductorInterface", "TerminalUI"],
+            dependencies: ["SanductorDomain", "SanductorData", "SanductorInterface", "SanductorCloud", "TerminalUI"],
             swiftSettings: mainActorByDefault,
         ),
         .target(
@@ -206,8 +212,13 @@ let package = Package(
             swiftSettings: approachableConcurrency,
         ),
         .testTarget(
+            name: "SanductorCloudTests",
+            dependencies: ["SanductorCloud"],
+            swiftSettings: approachableConcurrency,
+        ),
+        .testTarget(
             name: "MobileFeatureTests",
-            dependencies: ["MobileFeature"],
+            dependencies: ["MobileFeature", "SanductorCloud"],
             swiftSettings: mainActorByDefault,
         ),
         .testTarget(

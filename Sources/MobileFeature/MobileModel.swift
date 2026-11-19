@@ -1,5 +1,6 @@
 import Foundation
 import Observation
+import SanductorCloud
 import SanductorDomain
 import SanductorInterface
 import SanductorRemote
@@ -73,6 +74,9 @@ public final class MobileModel {
     var isCreating = false
     private(set) var connectionGeneration: UUID = .init()
     var error: String?
+    var notificationError: String?
+    /// Whether a tapped alert's record is still being read.
+    var isOpeningAlert = false
     var pendingHostKey: String?
     let progress: LaunchProgress = .init()
 
@@ -88,6 +92,17 @@ public final class MobileModel {
     @ObservationIgnored var refreshTask: Task<Void, Never>?
     @ObservationIgnored var refreshAgain = false
     @ObservationIgnored var refreshPreferences = false
+
+    // The Mac alert kinds last subscribed to; nil until the first
+    // subscription, or after one failed, so the next reading retries.
+    // swiftlint:disable:next discouraged_optional_collection
+    @ObservationIgnored var subscribedNotifications: Set<PhoneNotificationKind>?
+    @ObservationIgnored var notificationUpdate: Task<Void, Never>?
+
+    /// A tapped alert's worktree, waiting for the session list to
+    /// hold it.
+    @ObservationIgnored var notifiedWorktree: PhoneNotificationTarget?
+    @ObservationIgnored var alertLookup: Task<Void, Never>?
 
     var sidebar: [SidebarRepository] = [] {
         didSet {
@@ -177,6 +192,7 @@ public final class MobileModel {
             if choices != defaults {
                 defaults = choices
             }
+            updateNotifications()
             if orderedSidebar != sidebar {
                 sidebar = orderedSidebar
             }
@@ -202,6 +218,7 @@ public final class MobileModel {
         {
             selection = nil
         }
+        selectNotifiedWorktree()
     }
 
     // MARK: Private

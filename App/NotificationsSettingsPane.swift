@@ -1,5 +1,7 @@
 import AppKit
+import DashboardFeature
 import SanductorData
+import SanductorInterface
 import SwiftUI
 import TerminalUI
 
@@ -14,13 +16,39 @@ struct NotificationsSettingsPane: View {
         Form {
             eventRow(.done, title: "Agent finished", detail: "A turn completed; the answer is waiting.")
             eventRow(.blocked, title: "Agent needs input", detail: "A question or approval is waiting.")
+            Section {
+                Text("Send to iPhone delivers an alert through your iCloud account while this Mac is locked, "
+                    + "its display is asleep or it has had no input for five minutes, "
+                    + "including autofix alerts. Turn each kind off on the iPhone in its Settings. "
+                    + "Send Test delivers one at once, after the iPhone has connected with the toggle on.")
+                    .interfaceFont(.caption)
+                    .foregroundStyle(.secondary)
+                if let phoneTestResult {
+                    Text(phoneTestResult)
+                        .interfaceFont(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                if let phoneUnavailable {
+                    Text(phoneUnavailable)
+                        .interfaceFont(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            } header: { Text("iPhone") }
         }
         .formStyle(.grouped)
+        .task { phoneUnavailable = await PhoneAlerts.unavailableReason() }
     }
 
     // MARK: Private
 
     private static let iconSpacing: CGFloat = 6
+
+    @State private var phoneUnavailable: String?
+    @State private var phoneTestResult: String?
+    @AppStorage(NotificationPreferences.Event.done.phoneKey)
+    private var sendsFinishedToPhone = false
+    @AppStorage(NotificationPreferences.Event.blocked.phoneKey)
+    private var sendsNeedsInputToPhone = false
 
     private func eventRow(
         _ event: NotificationPreferences.Event,
@@ -34,6 +62,17 @@ struct NotificationsSettingsPane: View {
             }
             if event == .blocked {
                 Toggle("Count in the Dock badge", isOn: toggleBinding(key: NotificationPreferences.badgeKey))
+            }
+            HStack {
+                Toggle("Send to iPhone", isOn: phoneBinding(for: event))
+                    .disabled(phoneUnavailable != nil)
+                    .hoverHelp("Also alert your iPhone while you're away from this Mac")
+                BusyButton(
+                    "Send Test",
+                    busy: "Sending",
+                    disabled: phoneUnavailable != nil || phoneBinding(for: event).wrappedValue == false,
+                ) { await sendTest(event, title: title) }
+                    .hoverHelp("Send this alert to your iPhone now, even while you're at this Mac")
             }
             Text(detail)
                 .interfaceFont(.caption)
@@ -58,6 +97,26 @@ struct NotificationsSettingsPane: View {
                 .foregroundStyle(.orange)
                 .accessibilityHidden(true)
                 .hoverHelp("The sidebar's waiting-on-input icon")
+        }
+    }
+
+    private func sendTest(_ event: NotificationPreferences.Event, title: String) async {
+        do {
+            try await PhoneAlerts.sendTest(event, title: title)
+            phoneTestResult = "Sent a test of " + title + "; it should reach your iPhone within seconds."
+        } catch {
+            phoneTestResult = "Could not send a test of " + title + ": " + error.localizedDescription
+        }
+    }
+
+    /// Absence means off: sending to the phone is opted into.
+    private func phoneBinding(for event: NotificationPreferences.Event) -> Binding<Bool> {
+        switch event {
+        case .done:
+            $sendsFinishedToPhone
+
+        case .blocked:
+            $sendsNeedsInputToPhone
         }
     }
 

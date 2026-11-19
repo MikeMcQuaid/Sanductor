@@ -61,6 +61,25 @@ fi
 
 script/package-pins
 
+# iPhone alerts travel through iCloud, which needs a real team's
+# signature and provisioning profile; without a team the build stays
+# ad hoc and the app hides the feature. Here rather than above: the
+# sandbox must not touch keychains.
+SANDUCTOR_DEVELOPMENT_TEAM="${SANDUCTOR_DEVELOPMENT_TEAM-$(script/signing)}"
+if [[ -n "${SANDUCTOR_DEVELOPMENT_TEAM}" ]]; then
+  echo "signing for iCloud with team ${SANDUCTOR_DEVELOPMENT_TEAM}" >&2
+  ARGS+=(
+    CODE_SIGN_STYLE=Automatic
+    "CODE_SIGN_IDENTITY=Apple Development"
+    "DEVELOPMENT_TEAM=${SANDUCTOR_DEVELOPMENT_TEAM}"
+    SANDUCTOR_ENTITLEMENTS_SUFFIX=-iCloud
+    -allowProvisioningUpdates
+    -allowProvisioningDeviceRegistration
+  )
+else
+  echo "no team in Signing.xcconfig: signing ad hoc, without iPhone alerts" >&2
+fi
+
 # Package plugins are trusted everywhere: SwiftTerm 1.19 ships a
 # build-tool plugin, and a non-interactive xcodebuild fails on an
 # untrusted one where the Xcode app would have asked. The prompt is

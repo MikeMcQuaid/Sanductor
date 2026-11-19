@@ -1,0 +1,25 @@
+#!/bin/bash
+# Import CloudKit/Schema.ckdb into the iPhone alerts container's
+# Development environment, validating it first. Production only changes
+# through the CloudKit Console's Deploy Schema Changes. Needs the
+# management token `xcrun cktool save-token --type management` keeps in
+# the host's keychain, so never runs in the sandbox.
+set -euo pipefail
+
+cd "$(dirname "$0")/.."
+
+if [[ -n "${SV_SESSION_ID:-}" ]]; then
+  echo "Run script/cloudkit-schema on the host: it needs your CloudKit token." >&2
+  exit 1
+fi
+
+team="${SANDUCTOR_DEVELOPMENT_TEAM:-$(script/signing)}"
+if [[ -z "${team}" ]]; then
+  echo "No Apple team: run script/signing or set SANDUCTOR_DEVELOPMENT_TEAM." >&2
+  exit 1
+fi
+
+xcrun cktool import-schema --validate --team-id "${team}" \
+  --container-id iCloud.com.mikemcquaid.Sanductor --environment development \
+  --file CloudKit/Schema.ckdb
+echo "Imported; choose Deploy Schema Changes in the CloudKit Console to reach Production."

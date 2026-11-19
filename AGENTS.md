@@ -34,9 +34,13 @@ conventional-commit prefixes such as `feat:`, `fix:` or `chore:`.
 ## Commands
 
 - `script/bootstrap`: install `Brewfile` dependencies, write version
-  settings and copy package pins into the Xcode workspace
+  and signing settings and copy package pins into the Xcode workspace
+- `script/signing`: print the Apple team this checkout signs with,
+  first saving it to `Signing.xcconfig` from Xcode's provisioning
+  profiles for the app when they name exactly one team
 - `script/package-pins`: copy package pins into the Xcode workspace
-- `script/build`: build Release (`XCODE_CONFIGURATION=Debug` overrides)
+- `script/build`: build Release (`XCODE_CONFIGURATION=Debug` overrides),
+  signed for iCloud when `script/signing` finds a team
 - `script/install`: build, then copy the app into /Applications so
   the running copy survives rebuilds, and relaunch it automatically
 - `script/zip`: zip the Release build as
@@ -57,6 +61,9 @@ conventional-commit prefixes such as `feat:`, `fix:` or `chore:`.
   app's performance log on or off (off by default; on, every process
   run, `gh` call and cache hit or miss lands in the shared
   `tmp/sanductor/performance.log`)
+- `script/cloudkit-schema`: import `CloudKit/Schema.ckdb` into the
+  iPhone alerts container's Development environment, on the host with
+  a saved `cktool` management token; deploy it in the CloudKit Console
 - `script/attach [workspace]`: attach this terminal to the sandboxed
   herdr session, or list its workspaces when run without arguments
   (works as the host user or inside the sandbox)
@@ -67,6 +74,9 @@ conventional-commit prefixes such as `feat:`, `fix:` or `chore:`.
 - `ARCHITECTURE.md`: system design, packages and data flows
 - `AGENTS.md`: this file; `CLAUDE.md` is a symlink to it
 - `Package.swift`, `Sources/`, `Tests/`: the Swift package targets
+- `CloudKit/Schema.ckdb`: the iPhone alerts container's schema
+- `Signing.xcconfig`: this checkout's Apple team, gitignored, which
+  the project includes through the version xcconfig
 - `Sanductor.xcodeproj/`: native JSON project and shared schemes,
   requiring Xcode 27.2 or later; user-specific state stays ignored
 - `App/`: the app shell, synchronised with its native Xcode target.

@@ -22,7 +22,7 @@ extension DashboardModel {
             let completedTurn = previous.session?.activity == .working && session.activity == .done
             if completedTurn {
                 if feedbackStatus(for: item) == nil {
-                    post(.done, repositoryPath: item.worktree.repositoryPath, title: "Agent finished", body: body)
+                    post(.done, item.worktree, title: "Agent finished", body: body)
                 }
                 // The turn is assumed to have committed, so the
                 // branch's pull request stamps are forgotten here,
@@ -33,7 +33,7 @@ extension DashboardModel {
                     branch: item.worktree.branch,
                 )
             } else if previous.session?.activity != .blocked, session.activity == .blocked {
-                post(.blocked, repositoryPath: item.worktree.repositoryPath, title: "Agent needs input", body: body)
+                post(.blocked, item.worktree, title: "Agent needs input", body: body)
             }
         }
         updateDockBadge(for: new)
@@ -53,6 +53,7 @@ extension DashboardModel {
             post(
                 notice == .finished ? .done : .blocked,
                 repositoryPath: state.repositoryPath,
+                path: state.localWorktreePath ?? state.repositoryPath,
                 title: notice == .finished ? "Autofix finished" : "Autofix needs attention",
                 body: name + "\n" + (state.isLoopRunning
                     ? state.activityStatus : state.lastResult),
@@ -78,8 +79,21 @@ extension DashboardModel {
         return AppSettings.workMode.silences(repository, at: Date())
     }
 
-    private func post(_ event: NotificationPreferences.Event, repositoryPath: String, title: String, body: String) {
-        guard NotificationPreferences.notifies(event), silencesWork(repositoryPath: repositoryPath) == false else {
+    private func post(_ event: NotificationPreferences.Event, _ worktree: Worktree, title: String, body: String) {
+        post(event, repositoryPath: worktree.repositoryPath, path: worktree.path, title: title, body: body)
+    }
+
+    /// Posts on the Mac and, when chosen, sends to the iPhone; each
+    /// has its own toggle.
+    private func post(
+        _ event: NotificationPreferences.Event, repositoryPath: String, path: String, title: String, body: String,
+    ) {
+        guard silencesWork(repositoryPath: repositoryPath) == false else {
+            return
+        }
+
+        PhoneAlerts.send(event, title: title, body: body, path: path)
+        guard NotificationPreferences.notifies(event) else {
             return
         }
 

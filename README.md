@@ -12,7 +12,7 @@ I [write and review my own PRs](https://mikemcquaid.com/vibe-coding-developer-pr
 I review other people's PRs in GitHub.
 No Sanductor account, subscription or hosted relay exists or is planned.
 
-![The worktree sidebar, an agent's terminal and its review beside it](docs/screenshot.png)
+![The sidebar, an agent's terminal and its review](docs/screenshot.png)
 
 ## ✨ Features
 
@@ -68,10 +68,10 @@ Settings (Cmd-,):
 
 - **General**: Choose session defaults, signing and the browser.
 - **Work**: Hide and silence work outside working hours, pause work schedules for holidays and snooze hiding for 15 minutes.
-- **Prompts**: Save reusable text and optionally schedule it for a repository.
+- **Prompts**: Save reusable text, optionally scheduled per repository.
 - **Sessions**: Inspect and stop agents and browser pages.
-- **Review**: Choose reviewers, models, effort and review or fix prompts.
-- **Notifications**: Set alerts, private sounds and a Dock badge.
+- **Review**: Pick reviewers, models, effort and review or fix prompts.
+- **Notifications**: Set Mac and iPhone alerts, sounds and a Dock badge.
 - **Fonts**: Customise fonts and sizes.
 - **Editor**: Choose the external editor for files and worktrees.
 - **Advanced**: Set paths, refresh intervals, idle sleep and logging.
@@ -89,7 +89,7 @@ fi
 ## 📱 iPhone companion app
 
 On iOS 26+, install TestFlight and open the maintainers' beta link.
-Or clone this repo, run `script/bootstrap` and `script/install` from its root, then build `Sanductor-iOS` in Xcode with your signing team.
+Or clone this repo, put `DEVELOPMENT_TEAM = <your paid team ID>` in `Signing.xcconfig` at its root, run `script/bootstrap` and `script/install`, then build `Sanductor-iOS` in Xcode.
 Shows public and private PR status with conflict badges and prefers GitHub Mobile, falling back to GitHub.com; private PRs require sign-in.
 
 1. Copy the public key from iPhone Settings to your Mac's clipboard, then install it for the `sandvault-<you>` user:
@@ -115,6 +115,7 @@ Shows public and private PR status with conflict badges and prefers GitHub Mobil
    Select `sanductor` (installed app) or `sanductor-dev` (development).
    Choose **Connect** and verify the host key against `ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub` on your Mac.
    A changed key must be explicitly replaced in Settings.
+4. For alerts while away, use one iCloud account on both, turn on Send to iPhone in the Mac's Settings → Notifications, then reconnect.
 
 ## 🛠️ Development
 

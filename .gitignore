@@ -72,3 +72,6 @@ Sanductor.xcodeproj/project.xcworkspace/
 
 # Test scratch
 .test-scratch/
+
+# This checkout's Apple team, from script/signing
+Signing.xcconfig
