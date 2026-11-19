@@ -88,6 +88,20 @@ struct MobileNotificationTests {
     }
 
     @Test
+    func `a later alert that cannot be read drops the one still waiting`() async {
+        let model = MobileModel(configuration: SSHConfiguration())
+        await model.open(alert: CKRecord.ID(recordName: "first")) { _ in
+            PhoneNotificationTarget(path: "/repo/first", session: model.configuration.session)
+        }.value
+        await model.open(alert: CKRecord.ID(recordName: "second")) { _ in
+            throw CKError(.unknownItem)
+        }.value
+        model.allSessions = [Self.session("first", in: "/repo/first")]
+        model.selectNotifiedWorktree()
+        #expect(model.selection == nil)
+    }
+
+    @Test
     func `an alert read again after iCloud was briefly unreachable`() async {
         let model = MobileModel(configuration: SSHConfiguration())
         model.allSessions = [Self.session("pane", in: "/repo/branch")]

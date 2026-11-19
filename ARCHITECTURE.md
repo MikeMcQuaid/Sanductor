@@ -2758,7 +2758,8 @@ the read still fails. A later tap cancels an earlier read, so the
 older alert cannot win by finishing last. If the alert came from the
 herdr session chosen when the session list holds its worktree, it
 selects that worktree's pane; otherwise the app opens without changing
-the selection. Alerts also show while the app is in front.
+the selection. A new tap also drops any worktree an earlier alert is
+still waiting for. Alerts also show while the app is in front.
 
 Both apps name the container `iCloud.<bundle identifier>`. Local
 builds use its Development environment and releases its Production

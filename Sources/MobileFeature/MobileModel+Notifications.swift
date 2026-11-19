@@ -27,6 +27,7 @@ extension MobileModel {
         lookup: @escaping (CKRecord.ID) async throws -> PhoneNotificationTarget?,
     ) -> Task<Void, Never> {
         alertLookup?.cancel()
+        notifiedWorktree = nil
         isOpeningAlert = true
         let task = Task {
             for attempt in 1 ... Self.alertReadAttempts {
