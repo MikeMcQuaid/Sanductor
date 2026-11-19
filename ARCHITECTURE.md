@@ -2099,7 +2099,9 @@ steps.
   branch's own remote. A stack containing a fork disables creation,
   restacking, stack pushes and stack merges, and the service refuses
   them before changing any branch. A lone fork branch keeps its usual
-  signing, rebase and push actions.
+  signing, rebase and push actions. A branch tracking a local one
+  (remote `.`, as `git branch --track` writes) belongs to origin: `.`
+  means this repository, not a fork.
 - **Stacks are derived, never recorded**: branches sharing a fork point
   beyond the default branch, ordered by where each forks; two branches
   at one commit are one entry and the name the remote knows wins.

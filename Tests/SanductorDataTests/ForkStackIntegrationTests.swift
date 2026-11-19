@@ -51,4 +51,34 @@ struct ForkStackIntegrationTests {
         #expect(await git.currentBranch(worktreePath: path) == "lower")
         #expect(await git.refExists(worktreePath: origin, ref: "refs/heads/lower") == false)
     }
+
+    /// `git branch --track` and `--set-upstream-to` with a local
+    /// branch write `.` as the remote: this repository, not a fork.
+    @Test
+    func `a branch tracking the one below it locally still pushes with its stack`() async throws {
+        let world = try await World.make()
+        defer { world.tearDown() }
+        let path = world.repository.path
+        let git = GitClient(runner: FoundationProcessRunner())
+        try await BranchStackIntegrationTests.signable(path)
+        try ".signing-key*\n.allowed-signers\n".write(
+            toFile: path + "/.git/info/exclude", atomically: true, encoding: .utf8,
+        )
+        let origin = world.root + "/origin.git"
+        try await TestSupport.runGit(["clone", "-q", "--bare", path, origin], in: path)
+        try await TestSupport.runGit(["remote", "add", "origin", origin], in: path)
+        for branch in ["lower", "upper"] {
+            try await TestSupport.runGit(["checkout", "-q", "-b", branch], in: path)
+            try await TestSupport.runGit(["commit", "-q", "--allow-empty", "-S", "-m", branch], in: path)
+        }
+        try await TestSupport.runGit(["branch", "-q", "--set-upstream-to", "lower", "upper"], in: path)
+        try await TestSupport.runGit(["checkout", "-q", "lower"], in: path)
+        let worktree = Worktree(repositoryName: "repo", repositoryPath: path, branch: "lower", path: path)
+
+        let stack = await world.service.stack(for: worktree)
+        #expect(stack.branches == ["lower", "upper"])
+        #expect(stack.stackingBlocker == nil)
+        _ = try await world.service.pushStack(worktree: worktree)
+        #expect(await git.refExists(worktreePath: origin, ref: "refs/heads/lower"))
+    }
 }

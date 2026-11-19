@@ -10,12 +10,13 @@ import SanductorDomain
 public extension GitClient {
     /// Where a branch pushes, as git config has it: a remote's name,
     /// or a URL when that is what was written there. Nil when the
-    /// branch has neither.
+    /// branch has neither, or tracks a local branch, which git writes
+    /// as the remote `.`, this repository.
     func branchRemote(worktreePath: String, branch: String) async -> String? {
         for key in ["branch." + branch + ".pushremote", "branch." + branch + ".remote"] {
             let result = try? await git(["config", "--get", key], in: worktreePath, allowFailure: true)
             let value = (result?.standardOutput ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-            if value.isEmpty == false {
+            if value.isEmpty == false, value != "." {
                 return value
             }
         }
