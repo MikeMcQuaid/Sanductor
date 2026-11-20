@@ -76,3 +76,19 @@ public struct TranscriptEntry: Identifiable, Hashable, Sendable {
     /// The displayable text.
     public let text: String
 }
+
+public extension [TranscriptEntry] {
+    /// The newest reply's Markdown: the last unbroken run of the
+    /// agent's prose, since a reply's text blocks arrive as separate
+    /// entries. A tool call ends the run as a prompt does: what the
+    /// agent said on its way to an answer is not the answer. Nil
+    /// before the agent has written any.
+    var lastReply: String? {
+        guard let end = lastIndex(where: { $0.role == .assistant }) else {
+            return nil
+        }
+
+        let start = self[..<end].lastIndex { $0.role != .assistant }.map { $0 + 1 } ?? startIndex
+        return self[start ... end].map(\.text).joined(separator: "\n\n")
+    }
+}

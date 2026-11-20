@@ -42,6 +42,9 @@ extension TerminalRepresentable {
         /// blank with a cursor.
         var sentSize: (columns: Int, rows: Int)?
 
+        /// The size waiting to be sent once it stops changing.
+        var settlingResize: Task<Void, Never>?
+
         /// How many times the user discarded the client and attached afresh.
         var reattachments = 0
 
@@ -191,7 +194,7 @@ extension TerminalRepresentable {
                 return
             }
 
-            sendResize(columns: newCols, rows: newRows)
+            resizeWhenSettled(columns: newCols, rows: newRows)
         }
 
         /// Send keys immediately; herdr pastes already arrive as one payload.
@@ -254,6 +257,8 @@ extension TerminalRepresentable {
             }
             pump?.cancel()
             pump = nil
+            settlingResize?.cancel()
+            settlingResize = nil
             if let channel {
                 Task {
                     await channel.stop()

@@ -51,6 +51,12 @@ final class PaneTerminalView: TerminalView {
     /// menu item.
     var onCopyAllOutput: (() async -> String?)?
 
+    /// Reads the newest reply's Markdown, for agent panes: the
+    /// screen holds only the agent's rendering of it, which pastes
+    /// as neither Markdown nor formatted text. Nil hides the menu
+    /// item.
+    var onCopyReply: (() async -> String?)?
+
     /// Discards the herdr client and attaches afresh, for a pane
     /// that stopped drawing; nil on a local shell, which has none.
     var onReattach: (() -> Void)?
@@ -128,8 +134,15 @@ final class PaneTerminalView: TerminalView {
         let pasteItem = NSMenuItem(title: "Paste", action: #selector(NSText.paste(_:)), keyEquivalent: "")
         pasteItem.target = self
         menu.addItem(pasteItem)
-        if onCopyAllOutput != nil {
+        if onCopyReply != nil || onCopyAllOutput != nil {
             menu.addItem(.separator())
+        }
+        if onCopyReply != nil {
+            let replyItem = NSMenuItem(title: "Copy Last Reply", action: #selector(copyReply(_:)), keyEquivalent: "")
+            replyItem.target = self
+            menu.addItem(replyItem)
+        }
+        if onCopyAllOutput != nil {
             let allItem = NSMenuItem(title: "Copy All Output", action: #selector(copyAllOutput(_:)), keyEquivalent: "")
             allItem.target = self
             menu.addItem(allItem)
@@ -159,10 +172,20 @@ final class PaneTerminalView: TerminalView {
     }
 
     override func validateUserInterfaceItem(_ item: NSValidatedUserInterfaceItem) -> Bool {
-        if item.action == #selector(copy(_:)), selectedBlockText != nil {
-            return true
+        switch item.action {
+        // SwiftTerm refuses every action it does not know, which
+        // greyed out the items this pane adds to its own menu.
+        case #selector(copyAllOutput(_:)),
+             #selector(copyReply(_:)),
+             #selector(reattach(_:)):
+            true
+
+        case #selector(copy(_:)) where selectedBlockText != nil:
+            true
+
+        default:
+            super.validateUserInterfaceItem(item)
         }
-        return super.validateUserInterfaceItem(item)
     }
 
     /// A block stays rectangular; native selection reflows in prose panes.
@@ -215,6 +238,18 @@ final class PaneTerminalView: TerminalView {
             copyPasteboard.setString(
                 reflowsCopies ? PasteableText.reflow(text) : PasteableText.cleanTerminalCopy(text), forType: .string,
             )
+        }
+    }
+
+    /// The newest reply onto the clipboard, formatted and as Markdown.
+    @objc
+    func copyReply(_: Any?) {
+        guard let onCopyReply else {
+            return
+        }
+
+        Task { @MainActor in
+            await MarkdownClipboard.copy(to: copyPasteboard, reading: onCopyReply)
         }
     }
 

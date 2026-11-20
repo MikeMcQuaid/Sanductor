@@ -34,6 +34,57 @@ struct TerminalCopyTests {
     }
 
     @Test
+    func `copy last reply offers formatted text beside its Markdown`() async throws {
+        let view = PaneTerminalView(frame: .zero)
+        view.copyPasteboard = .withUniqueName()
+        defer { view.copyPasteboard.releaseGlobally() }
+        view.onCopyReply = { "Use **bold** and `code`." }
+        view.copyReply(nil)
+        let deadline = ContinuousClock.now + .seconds(5)
+        while view.copyPasteboard.string(forType: .string) == nil, ContinuousClock.now < deadline {
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        #expect(view.copyPasteboard.string(forType: .string) == "Use **bold** and `code`.")
+        #expect(view.copyPasteboard.string(forType: .html)?.contains("<strong>bold</strong>") == true)
+        #expect(view.menu(for: NSEvent())?.items.map(\.title).contains("Copy Last Reply") == true)
+    }
+
+    @Test
+    func `a reply read after something newer was copied leaves the newer copy`() async throws {
+        let view = PaneTerminalView(frame: .zero)
+        view.copyPasteboard = .withUniqueName()
+        defer { view.copyPasteboard.releaseGlobally() }
+        var hasRead = false
+        view.onCopyReply = {
+            // A selection is copied while the reply is being read.
+            view.copyPasteboard.clearContents()
+            view.copyPasteboard.setString("newer", forType: .string)
+            hasRead = true
+            return "older reply"
+        }
+        view.copyReply(nil)
+        let deadline = ContinuousClock.now + .seconds(5)
+        while hasRead == false, ContinuousClock.now < deadline {
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        try await Task.sleep(for: .milliseconds(50))
+        #expect(view.copyPasteboard.string(forType: .string) == "newer")
+    }
+
+    @Test
+    func `the items a pane adds to its menu are enabled`() {
+        let view = PaneTerminalView(frame: .zero)
+        view.onCopyReply = { nil }
+        view.onCopyAllOutput = { nil }
+        view.onReattach = { /* Only the item's presence matters. */ }
+        let added = view.menu(for: NSEvent())?
+            .items
+            .filter { ["Copy Last Reply", "Copy All Output", "Reattach"].contains($0.title) } ?? []
+        #expect(added.count == 3)
+        #expect(added.allSatisfy { view.validateUserInterfaceItem($0) })
+    }
+
+    @Test
     func `copy all output uses the same cleanup`() async throws {
         let view = PaneTerminalView(frame: .zero)
         view.reflowsCopies = true

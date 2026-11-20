@@ -128,6 +128,10 @@ public final class DashboardModel {
     /// discard the herdr client and attach afresh, by session name.
     public var reattachRequests: [String: Int] = [:]
 
+    /// The sessions showing their reader in place of their terminal,
+    /// by session name; the choice lasts until the app quits.
+    public var readerSessions: Set<String> = []
+
     /// Whether the machine is on battery, which slows every safety
     /// interval. The app's composition wires the machine's own
     /// answer in; left alone it says plugged in, so a test is never

@@ -244,6 +244,7 @@ extension RootView {
                 .lineLimit(1)
                 .layoutPriority(1)
                 .accessibilityElement(children: .combine)
+                readerToggle(for: session)
                 closeSessionButton(session, in: item)
                     .padding(.trailing, Self.tabHorizontalPadding)
                 parkedUtilityToggle
@@ -255,6 +256,7 @@ extension RootView {
             // run of the strip take the click, not only its glyphs.
             .contentShape(Rectangle())
             .contextMenu {
+                Button("Copy Last Reply") { copyLastReply(of: session, in: item.worktree.path) }
                 Button("Reattach") { dependencies.dashboard.reattachRequests[session.name, default: 0] += 1 }
             }
             Divider()

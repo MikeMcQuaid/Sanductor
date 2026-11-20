@@ -163,7 +163,7 @@ let package = Package(
         ),
         .target(
             name: "SessionFeature",
-            dependencies: ["SanductorDomain", "SanductorData", "TerminalUI"],
+            dependencies: ["SanductorDomain", "SanductorData", "SanductorInterface", "TerminalUI"],
             swiftSettings: mainActorByDefault,
         ),
         .target(
