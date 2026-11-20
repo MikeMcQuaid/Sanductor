@@ -39,12 +39,19 @@ extension DashboardModel {
             at: worktree?.path,
             reveals: reveals,
         ) { service in
-            let prompt = try await github.discussionPrompt(repositoryPath: repository.path, url: url, context: context)
+            let compose = try await github.discussionPrompt(repositoryPath: repository.path, url: url)
             if let worktree {
-                return try await service.launchAgent(in: worktree, prompt: prompt, agent: agent, options: options)
+                return try await service.launchAgent(
+                    in: worktree, prompt: context, agent: agent, options: options, composing: compose,
+                )
             }
             return try await service.createSession(
-                repository: repository, prompt: prompt, agent: agent, options: options, baseBranch: baseBranch,
+                repository: repository,
+                prompt: context,
+                agent: agent,
+                options: options,
+                baseBranch: baseBranch,
+                composing: compose,
             )
         }
     }

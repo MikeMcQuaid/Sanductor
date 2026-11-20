@@ -114,6 +114,7 @@ extension RootView {
                     .dropDestination(for: URL.self) { urls, _ in
                         _ = dropFiles(urls, into: session.name)
                     }
+                    .allowsHitTesting(showsReader == false)
                 if showsReader {
                     SessionReaderView(
                         session: session,
@@ -221,6 +222,7 @@ extension RootView {
         for await isOnline in dependencies.network.changes() {
             ServiceStatus.shared.networkChanged(isOnline: isOnline)
             if isOnline {
+                dependencies.prompts.syncPrivateSettings()
                 // Straight away, rather than at the next tick: the
                 // rows have been stale for as long as the route was
                 // gone.

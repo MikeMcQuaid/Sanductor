@@ -84,9 +84,12 @@ struct SessionServiceIntegrationTests {
         // the prompt is read into the command from its file, after
         // which the shell expands nothing in it, so all of this must
         // reach the agent as written.
-        let prompt = "Do the thing with `backticks`, $(subshells), $HOME, \"quotes\", 'apostrophes', "
+        let prompt = "Do the thing with $KEY and `backticks`, $(subshells), $HOME, \"quotes\", 'apostrophes', "
             + "\\backslashes, !bangs, *globs*, #hashes, %formats and ~tildes\n- then a line opening with a dash"
-        let name = try await world.service.createSession(
+        var service = world.service
+        let key = "sntryu_" + String(repeating: "X", count: 24)
+        service.promptSecret = { $0 == "KEY" ? key : nil }
+        let name = try await service.createSession(
             repository: world.repository,
             prompt: prompt,
             agent: .claudeCode,
@@ -112,13 +115,15 @@ struct SessionServiceIntegrationTests {
 
         let delivered = await TestSupport.poll {
             let received = try? String(contentsOfFile: worktreePath + "/agent-prompt.txt", encoding: .utf8)
-            return received == prompt
+            return received == prompt.replacing("$KEY", with: key)
         }
         #expect(delivered, Comment(rawValue:
             (try? String(contentsOfFile: worktreePath + "/agent-prompt.txt", encoding: .utf8)) ?? "No prompt file"))
         let arguments = try String(contentsOfFile: worktreePath + "/agent-arguments.txt", encoding: .utf8)
         #expect(arguments == "--model fable --effort max")
 
+        #expect(service.store.load().prompts[name] == prompt)
+        #expect(name.contains(key.lowercased()) == false)
         #expect(worktreePath.contains("/worktrees/repo/do_the_thing"))
     }
 

@@ -16,11 +16,11 @@ public struct PromptsView: View {
     public var body: some View {
         VStack(alignment: .leading) {
             header
-            Text("Reuse prompts in new sessions or schedule them for a repository.")
+            Text(model.cloudStatus)
                 .interfaceFont(.caption)
                 .foregroundStyle(.secondary)
             if let error = model.error {
-                Text(TokenRedaction.preview(error)).foregroundStyle(.red).textSelection(.enabled)
+                Text(error).foregroundStyle(.red).textSelection(.enabled)
             }
             ScrollView {
                 LazyVStack(alignment: .leading) {
@@ -127,7 +127,7 @@ public struct PromptsView: View {
             }
             if prompt.schedule != nil {
                 HStack {
-                    Toggle("Enable “" + TokenRedaction.preview(prompt.name) + "”", isOn: Binding(
+                    Toggle("Enable “" + prompt.name + "”", isOn: Binding(
                         get: { prompt.isEnabled },
                         set: { enabled in
                             var updated = prompt
@@ -151,7 +151,7 @@ public struct PromptsView: View {
                 prompt: prompt, owner: repositories.first { $0.path == prompt.repositoryPath }?.owner,
             )
             .interfaceFont(.headline)
-            Text(TokenRedaction.preview(prompt.prompt))
+            Text(prompt.prompt)
                 .lineLimit(Self.previewLines)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.leading)
@@ -167,11 +167,11 @@ public struct PromptsView: View {
                         .truncationMode(.middle)
                 }
                 .interfaceFont(.caption)
-                .hoverHelp(summary + (prompt.lastSession.map { "\n" + TokenRedaction.preview($0) } ?? ""))
+                .hoverHelp(summary + (prompt.lastSession.map { "\n" + $0 } ?? ""))
                 if model.runningID == prompt.id {
                     Label("Starting agent…", systemImage: "hourglass")
                 } else if let error = prompt.lastError {
-                    Text(TokenRedaction.preview(error)).foregroundStyle(.red).textSelection(.enabled)
+                    Text(error).foregroundStyle(.red).textSelection(.enabled)
                 }
             }
         }

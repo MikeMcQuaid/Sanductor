@@ -25,6 +25,11 @@ extension PullRequestStore {
                 repositoryPath: repositoryPath, number: summary.number,
             )
         }
+        dated.stateChangedAt = [
+            dated.stateChangedAt, summary.stateChangedAt, previous?.stateChangedAt, previous?.pendingPushAt,
+        ]
+        .compactMap(\.self)
+        .max()
         return dated
     }
 }

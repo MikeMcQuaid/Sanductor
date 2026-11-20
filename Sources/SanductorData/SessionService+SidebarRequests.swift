@@ -35,9 +35,18 @@ public extension SessionService {
             return
         }
 
-        let base = sidebarRequestsDirectory + "/" + id
-        try? JSONEncoder().encode(response).write(to: URL(filePath: base + ".response"), options: .atomic)
-        try? FileManager.default.removeItem(atPath: base + ".request")
+        let folder = unsafe open(sidebarRequestsDirectory, O_RDONLY | O_DIRECTORY | O_NOFOLLOW_ANY | O_CLOEXEC)
+        guard folder >= 0 else {
+            return
+        }
+
+        defer { close(folder) }
+        do {
+            try SandboxFile.replace(id + ".response", in: folder, with: JSONEncoder().encode(response), mode: 0o644)
+            _ = unsafe unlinkat(folder, id + ".request", 0)
+        } catch {
+            PerformanceLog.recordMessage("Could not write the shared request reply.", isError: true)
+        }
     }
 
     // MARK: Internal
@@ -48,6 +57,12 @@ public extension SessionService {
     }
 
     internal static func readSidebarRequests(in directory: String) -> [(id: String, request: SidebarRequest)] {
+        let folder = unsafe open(directory, O_RDONLY | O_DIRECTORY | O_NOFOLLOW_ANY | O_CLOEXEC)
+        guard folder >= 0 else {
+            return []
+        }
+
+        defer { close(folder) }
         let manager = FileManager.default
         return ((try? manager.contentsOfDirectory(atPath: directory)) ?? []).sorted().compactMap { name in
             guard name.hasSuffix(".request") else {
@@ -55,26 +70,9 @@ public extension SessionService {
             }
 
             let id = String(name.dropLast(".request".count))
-            let path = directory + "/" + name
             guard UUID(uuidString: id) != nil,
-                  manager.fileExists(atPath: directory + "/" + id + ".response") == false
-            else {
-                return nil
-            }
-
-            let descriptor = unsafe open(path, O_RDONLY | O_NOFOLLOW | O_NONBLOCK)
-            guard descriptor >= 0 else {
-                return nil
-            }
-
-            let handle = FileHandle(fileDescriptor: descriptor, closeOnDealloc: true)
-            defer { try? handle.close() }
-            var attributes = stat()
-            guard unsafe fstat(descriptor, &attributes) == 0,
-                  attributes.st_mode & S_IFMT == S_IFREG,
-                  attributes.st_size <= SidebarRequest.maximumBytes,
-                  let data = try? handle.read(upToCount: SidebarRequest.maximumBytes + 1),
-                  data.count <= SidebarRequest.maximumBytes,
+                  manager.fileExists(atPath: directory + "/" + id + ".response") == false,
+                  let data = try? SandboxFile.read(name, byteLimit: SidebarRequest.maximumBytes, relativeTo: folder),
                   let request = try? JSONDecoder().decode(SidebarRequest.self, from: data)
             else {
                 return nil

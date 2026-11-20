@@ -69,7 +69,8 @@ extension GitHubClientTests {
             {"name": "tests", "status": "IN_PROGRESS", "conclusion": "",
              "startedAt": "2026-10-17T10:01:00Z", "completedAt": "0001-01-01T00:00:00Z",
              "detailsUrl": "https://github.com/o/r/actions/runs/1/job/3"},
-            {"context": "external", "state": "SUCCESS", "targetUrl": "https://ci.example.com/build"}
+            {"context": "external", "state": "SUCCESS", "createdAt": "2026-10-17T10:10:00Z",
+             "targetUrl": "https://ci.example.com/build"}
           ]}]
         """
         let summary = try #require(await GitHubClient.summaries(fromJSON: json) { _ in ["build", "missing"] }.first)
@@ -93,6 +94,7 @@ extension GitHubClientTests {
         let cached = try JSONDecoder().decode(PullRequestSummary.self, from: JSONEncoder().encode(summary))
         #expect(cached.checkDetails == checks)
         let unknown = try #require(await GitHubClient.summaries(fromJSON: json) { _ in nil }.first)
+        #expect(unknown.lastEventAt?.ISO8601Format() == "2026-10-17T10:10:00Z")
         #expect(unknown.checkDetails?.allSatisfy { $0.requirement == .unknown } == true)
     }
 }

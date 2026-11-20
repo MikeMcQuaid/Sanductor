@@ -338,9 +338,10 @@ public struct GitHubClient: Sendable {
             body: row.body,
             closedAt: row.closedAt,
             updatedAt: row.updatedAt,
+            stateChangedAt: row.state == "OPEN" ? row.latestReviews?.compactMap(\.submittedAt).max() : nil,
             headCommit: row.headRefOid,
             awaitsCopilotReview: (row.reviewRequests ?? []).contains { Self.isCopilot($0.login) },
-            requestedReviewers: Set((row.reviewRequests ?? []).compactMap(\.login)),
+            requestedReviewers: Set((row.reviewRequests ?? []).compactMap { $0.login ?? $0.slug }),
             copilotReviewedAt: (row.latestReviews ?? [])
                 .filter { Self.isCopilot($0.author?.login) }
                 .compactMap(\.submittedAt)

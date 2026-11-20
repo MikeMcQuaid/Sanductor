@@ -87,6 +87,20 @@ struct SidebarStatusTests {
     }
 
     @Test
+    func `unpushed work survives transport without sending an unknown status to an older phone`() throws {
+        let entry = SidebarEntry(
+            target: SidebarTarget(repository: "r", repositoryPath: "/r", branch: "work", path: "/w"),
+            status: .needsPush,
+            activity: .done,
+            block: nil,
+        )
+        let data = try JSONEncoder().encode(entry)
+        #expect(try JSONDecoder().decode(SidebarEntry.self, from: data) == entry)
+        let object = try #require(JSONSerialization.jsonObject(with: data) as? [String: Any])
+        #expect(object["status"] as? String == "Done")
+    }
+
+    @Test
     func `old phone snapshots still decode without statuses`() throws {
         let data = Data(#"[{"name":"repo","worktrees":["/repo"]}]"#.utf8)
         let repositories = try JSONDecoder().decode([SidebarRepository].self, from: data)

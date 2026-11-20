@@ -3,6 +3,12 @@ import SanductorData
 import SanductorDomain
 
 extension DashboardModel {
+    struct SidebarState {
+        let status: SidebarStatus
+        let date: Date
+        let needsPush: Bool
+    }
+
     func repositoryGroups(sortedBy sort: RepositorySort) -> [RepositoryGroup] {
         sort.sorted(visibleGroups) { group in
             RepositorySort.Key(
@@ -24,28 +30,14 @@ extension DashboardModel {
     }
 
     func sidebarStatus(for item: WorktreeItem) -> SidebarStatus {
-        let pullRequest = pullRequest(for: item)
-        return .status(
-            session: item.session,
-            pullRequest: pullRequest,
-            inactiveStatus: .inactiveStatus(
-                for: SidebarTarget(item.worktree), defaultBranch: groups.group(holding: item)?.defaultBranch,
-            ),
-            isHostDirectory: item.worktree.isHostDirectory,
-            launchFailed: launchFailure(for: item) != nil,
-            blocked: block(for: item) != nil,
-            reviewThreadsKnown: pullRequest.map { summary in
-                store.load().threadsCache[AppMetadata.threadsKey(
-                    repositoryPath: item.worktree.repositoryPath, number: summary.number,
-                )] != nil
-            } ?? false,
-        )
+        sidebarState(for: item).status
     }
 
     var statusGroups: [(status: SidebarStatus, items: [WorktreeItem])] {
-        let grouped = Dictionary(grouping: visibleGroups.flatMap(\.items), by: sidebarStatus(for:))
+        let rows = visibleGroups.flatMap(\.items).map { (item: $0, state: sidebarState(for: $0)) }
+        let grouped = Dictionary(grouping: rows.sorted { $0.state.date > $1.state.date }, by: \.state.status)
         return SidebarStatus.allCases.compactMap { status in
-            grouped[status].map { (status, $0) }
+            grouped[status].map { (status, $0.map(\.item)) }
         }
     }
 
@@ -86,6 +78,37 @@ extension DashboardModel {
         }
         statusDetailsTask = task
         return task
+    }
+
+    func sidebarState(for item: WorktreeItem) -> SidebarState {
+        let pullRequest = pullRequest(for: item)
+        let push = pullRequest == nil ? pullRequests.pendingPushAt(
+            repositoryPath: item.worktree.repositoryPath, branch: item.worktree.branch,
+        ) : pullRequest?.pendingPushAt
+        let needsPush = item.needsPush(hasPullRequest: pullRequest != nil, lastPush: push)
+        let status = SidebarStatus.status(
+            session: item.session,
+            pullRequest: pullRequest,
+            inactiveStatus: .inactiveStatus(
+                for: SidebarTarget(item.worktree), defaultBranch: groups.group(holding: item)?.defaultBranch,
+            ),
+            isHostDirectory: item.worktree.isHostDirectory,
+            launchFailed: launchFailure(for: item) != nil,
+            blocked: block(for: item) != nil,
+            reviewThreadsKnown: pullRequest.map { summary in
+                store.load().threadsCache[AppMetadata.threadsKey(
+                    repositoryPath: item.worktree.repositoryPath, number: summary.number,
+                )] != nil
+            } ?? false,
+            hasUnpushedCommits: needsPush,
+            pendingPushAt: push,
+        )
+        let date = max(
+            Date(timeIntervalSince1970: TimeInterval(item.lastActivityAt)),
+            item.session?.lastActivityAt ?? .distantPast,
+            pullRequest?.lastEventAt ?? push ?? .distantPast,
+        )
+        return SidebarState(status: status, date: date, needsPush: needsPush)
     }
 
     private func readStatusDetails() async {

@@ -12,21 +12,25 @@ struct ScheduledSessionIntegrationTests {
         prompt.repositoryPath = world.repository.path
         prompt.schedule = PromptSchedule()
         prompt.name = "Weekly checks"
-        prompt.prompt = "Review `changes`, $(without expansion)\nand report findings"
+        prompt.prompt = "Review `changes`, $(without expansion)\nand report findings using $KEY"
         prompt.model = "fable"
         prompt.effort = "max"
         let due = Date(timeIntervalSince1970: 1_893_686_400)
         let prepared = try await world.service.createWorktreePath(
             repository: world.repository, branch: prompt.branch(for: due),
         )
-        let name = try await world.service.launchScheduledPrompt(prompt, due: due)
+        var service = world.service
+        service.promptSecret = { $0 == "KEY" ? "fixture" : nil }
+        let name = try await service.launchScheduledPrompt(prompt, due: due)
         #expect(SessionName.isSanductor(name))
+        let expected = prompt.prompt.replacing("$KEY", with: "fixture")
         #expect(await TestSupport.poll {
-            (try? String(contentsOfFile: prepared + "/agent-prompt.txt", encoding: .utf8)) == prompt.prompt
+            (try? String(contentsOfFile: prepared + "/agent-prompt.txt", encoding: .utf8)) == expected
         })
         #expect(try String(contentsOfFile: prepared + "/agent-arguments.txt", encoding: .utf8)
             == "--model fable --effort max")
         #expect(try await world.service.git.worktrees(of: world.repository).map(\.path) == [prepared])
+        #expect(service.store.load().prompts[name] == prompt.prompt)
         #expect(world.service.store.load().sessionsByWorktree[prepared] == name)
     }
 

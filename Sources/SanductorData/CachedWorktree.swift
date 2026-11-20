@@ -28,6 +28,8 @@ public struct CachedWorktree: Codable, Hashable, Sendable {
     public var aheadOfDefault: Int?
     public var behindDefault: Int?
     public var behindUpstream: Int?
+    // swiftlint:disable:next discouraged_optional_boolean - Absent from older sidebar caches.
+    public var onlyPublishedChanges: Bool?
     public var revision: String?
     public var lastActivityAt = 0
     public var hasSession = false

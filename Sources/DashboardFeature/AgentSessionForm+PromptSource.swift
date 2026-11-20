@@ -6,6 +6,7 @@ import SanductorDomain
 extension AgentSessionForm {
     /// What the user chose, handed to the submit action.
     struct Submission {
+        let repository: Repository
         let source: PromptSource
         /// The picked issues or pull requests, one launch each.
         let numbers: [Int]

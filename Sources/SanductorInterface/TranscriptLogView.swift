@@ -1,25 +1,25 @@
 import SanductorDomain
 import SwiftUI
-import TerminalUI
 
 /// A read-only conversation log for a past session, themed like the
 /// terminals: black on white in light mode, white on black in dark.
 /// Assistant prose renders as Markdown and fenced code blocks are
 /// syntax highlighted.
-struct TranscriptLogView: View {
+public struct TranscriptLogView<Assistant: View>: View {
     // MARK: Lifecycle
 
     /// Creates a log view over parsed transcript entries.
-    init(entries: [TranscriptEntry]) {
+    public init(entries: [TranscriptEntry], @ViewBuilder assistant: @escaping (String) -> Assistant) {
+        self.assistant = assistant
         self.entries = entries
     }
 
-    // MARK: Internal
+    // MARK: Public
 
     /// The scrolling log.
-    var body: some View {
+    public var body: some View {
         ScrollView {
-            LazyVStack(alignment: .leading, spacing: Self.spacing) {
+            LazyVStack(alignment: .leading, spacing: spacing) {
                 ForEach(entries) { entry in
                     row(entry)
                 }
@@ -27,7 +27,7 @@ struct TranscriptLogView: View {
                     Text("Empty transcript.").foregroundStyle(.secondary)
                 }
             }
-            .padding(Self.spacing)
+            .padding(spacing)
             .frame(maxWidth: .infinity, alignment: .leading)
         }
         // Conversations read newest-last, so open at the end.
@@ -36,15 +36,18 @@ struct TranscriptLogView: View {
         // The semantic text colours: they track appearance and the
         // Increase Contrast setting, where literal black and white
         // tracked nothing.
-        .foregroundStyle(Color(nsColor: .textColor))
-        .background(Color(nsColor: .textBackgroundColor))
+        #if os(macOS)
+            .foregroundStyle(Color(nsColor: .textColor))
+            .background(Color(nsColor: .textBackgroundColor))
+        #endif
     }
 
     // MARK: Private
 
-    private static let spacing: CGFloat = 8
-
+    private let assistant: (String) -> Assistant
     private let entries: [TranscriptEntry]
+
+    private let spacing: CGFloat = 8
 
     @ViewBuilder
     private func row(_ entry: TranscriptEntry) -> some View {
@@ -57,7 +60,7 @@ struct TranscriptLogView: View {
         case .assistant:
             // The shared renderer, so agent output, review comments
             // and pull request bodies all read the same.
-            MarkdownText(entry.text)
+            assistant(entry.text)
 
         case .tool:
             Text("⚙ " + entry.text)

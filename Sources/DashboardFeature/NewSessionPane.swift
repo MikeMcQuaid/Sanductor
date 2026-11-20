@@ -128,14 +128,10 @@ public struct NewSessionPane: View {
     }
 
     private func start(_ submission: AgentSessionForm.Submission) async {
-        guard let repository else {
-            return
-        }
-
         switch submission.source {
         case .prompt:
             await model.createSession(
-                repository: repository,
+                repository: submission.repository,
                 prompt: submission.prompt,
                 agent: submission.agent,
                 options: submission.options,
@@ -147,7 +143,7 @@ public struct NewSessionPane: View {
             await startEach(submission.numbers) { number, reveals in
                 await model.createSession(
                     fromIssue: number,
-                    repository: repository,
+                    repository: submission.repository,
                     context: submission.context,
                     agent: submission.agent,
                     options: submission.options,
@@ -160,7 +156,7 @@ public struct NewSessionPane: View {
             await startEach(submission.numbers) { number, reveals in
                 await model.createSession(
                     fromPullRequest: number,
-                    repository: repository,
+                    repository: submission.repository,
                     context: submission.context,
                     agent: submission.agent,
                     options: submission.options,
@@ -169,10 +165,10 @@ public struct NewSessionPane: View {
             }
 
         case .discussion:
-            await submission.startDiscussion(model: model, repository: repository)
+            await submission.startDiscussion(model: model, repository: submission.repository)
 
         case .advisory:
-            await submission.startAdvisory(model: model, repository: repository)
+            await submission.startAdvisory(model: model, repository: submission.repository)
         }
     }
 }

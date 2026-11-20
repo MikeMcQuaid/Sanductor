@@ -46,6 +46,7 @@ extension DashboardView {
     func rowLabel(for item: WorktreeItem) -> some View {
         WorktreeRowView(
             item: item,
+            status: model.sidebarStatus(for: item),
             pullRequest: model.pullRequest(for: item),
             standing: model.stackStanding(for: item),
             load: model.paneLoads[item.worktree.path],

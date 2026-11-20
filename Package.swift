@@ -135,6 +135,7 @@ let package = Package(
             name: "MobileFeature",
             dependencies: [
                 "SanductorRemote", "SanductorInterface", "SanductorDomain", "SanductorCloud",
+                .product(name: "Textual", package: "textual"),
                 .product(name: "SwiftTerm", package: "SwiftTerm"),
             ],
             swiftSettings: mainActorByDefault,

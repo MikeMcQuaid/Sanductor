@@ -14,19 +14,20 @@ public extension SessionService {
         let branch = prompt.branch(for: due)
         let worktrees = try await git.worktrees(of: repository)
         let existing = worktrees.first { $0.branch == branch }
-        let path: String
-        if let existing {
-            path = existing.path
-            if await hasLiveSession(worktreePath: path) {
-                return SessionName.make(repository: repository.name, branch: branch, agent: prompt.agent)
-            }
-        } else {
-            path = try await git.withRemoteOperation(worktreePath: repository.path) {
-                try await service.createWorktreePath(repository: repository, branch: branch)
-            }
+        if let existing, await hasLiveSession(worktreePath: existing.path) {
+            return SessionName.make(repository: repository.name, branch: branch, agent: prompt.agent)
         }
+        let prepared = try await preparePrompt(prompt.prompt)
+        let path: String =
+            if let existing {
+                existing.path
+            } else {
+                try await git.withRemoteOperation(worktreePath: repository.path) {
+                    try await service.createWorktreePath(repository: repository, branch: branch)
+                }
+            }
         return try await service.start(
-            prompt: prompt.prompt,
+            prompt: prepared,
             agent: prompt.agent,
             options: AgentLaunchOptions(
                 model: prompt.model.isEmpty ? nil : prompt.model,

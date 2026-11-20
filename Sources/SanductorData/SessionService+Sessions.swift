@@ -30,6 +30,14 @@ public extension SessionService {
         return transcriptEntries(for: transcript).lastReply
     }
 
+    /// Submit only to the agent pane this reader opened.
+    func reply(_ reply: ReaderReply, paneID: String) async throws {
+        let result = try await herdr.herdr(reply.arguments(paneID: paneID), allowFailure: true)
+        guard result.succeeded, ReaderReply.wasSubmitted(result.standardOutput, to: paneID) else {
+            throw SessionServiceError("herdr could not confirm the reply. Check the agent’s terminal before resending.")
+        }
+    }
+
     /// The argv that attaches a terminal to a session's pane.
     func attachCommand(paneID: String) -> [String] {
         herdr.attachCommand(paneID: paneID)

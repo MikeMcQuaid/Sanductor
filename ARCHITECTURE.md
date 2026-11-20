@@ -75,7 +75,8 @@ Boundary facts the design relies on:
 - The sandbox has no GitHub credentials: `gh` is unauthenticated there
   and agent settings deny `git push`. Pushing and everything
   credentialled happens host-side.
-- Host credentials stay outside the sandbox; agent sign-in happens in
+- Users can explicitly share individual named secrets in prompts. Other
+  host credentials stay outside the sandbox. Agent sign-in happens in
   the sandbox user's own account.
 
 All agents share that sandbox account and workspace, including any files
@@ -694,8 +695,9 @@ opens the existing new-session form through
 worktree’s branch when it belongs to that repository, otherwise using
 the default branch. Placeholders and host directories supply no base.
 
-Settings' Prompts pane manages one library of named, reusable text in the
-host metadata. Each prompt can optionally run in a selected repository
+Settings' Prompts pane manages one library of named, reusable text,
+backed by the host metadata and the private settings file. Each prompt
+can optionally run in a selected repository
 on a daily, weekly or monthly schedule. Removing its schedule keeps
 the prompt reusable; pausing keeps its repository and recurrence.
 Existing saved prompts and scheduled jobs migrate into this library,
@@ -712,8 +714,14 @@ schedules. Choosing one prepends its text and a blank line to the live
 draft, preserving pasted text and unfinished edits,
 then focuses the editor. It changes neither the selected source nor the
 agent, model or effort, and never launches or advances a schedule.
-Names and previews mask recognised Sentry and GitHub tokens;
-editing and insertion retain the original text.
+Settings → Secrets manages named values in the host login Keychain.
+The Mac substitutes `$NAME` or `${NAME}` in user-entered prompt text
+when delivering it to the agent, including saved and scheduled prompts
+and review briefs. Unknown names stay literal. Values are inserted once.
+GitHub content, diffs and agent output cannot trigger a Keychain lookup.
+Branch naming, retry drafts and saved templates use the original text.
+The sandbox user and the agent provider receive the expanded prompt
+and their transcripts and backups can retain it.
 
 1. Input: a prompt, an issue or pull request number, a repository or
    organisation discussion or a security advisory's GHSA id, plus
@@ -960,8 +968,8 @@ and deduplication are case-insensitive.
 The Mac publishes visibility in its sidebar snapshot; the iPhone follows
 that state on refresh or reconnect, without configuring or evaluating a
 working schedule of its own.
-Schedule previews mask recognised Sentry and GitHub tokens; editing and
-launching retain the original prompt.
+Prompt names and text are displayed, saved and delivered verbatim.
+Only explicit references to named Keychain secrets are expanded.
 
 Scheduled prompts add a repository path, agent, model, effort and
 recurrence to the same saved prompt. Only prompts with a schedule can
@@ -1069,15 +1077,16 @@ reads git before offering branches not held by other worktrees.
   This affects sidebar presentation only; herdr's state still drives
   notifications, automation and event waits.
   On worktree rows, the shared slot shows the newer agent event or
-  PR state change. PR timestamps come from opening, draft changes,
-  reopening, queue entry or removal, merging and closing, never
-  comments, reviews or CI. Unchanged readings keep their timestamps.
+  PR workflow event. A successful push, GitHub updates, submitted reviews
+  and check start or completion times count alongside PR state changes.
+  Unchanged readings keep their timestamps.
   Initial agent listings do not count as new events.
-  Equal or unavailable timestamps fall back to priority: questions,
+  An undated completed turn yields to a dated PR event. Other ties or
+  unavailable timestamps fall back to priority: questions,
   working turns and recent completed turns precede PR states, while
   idle, unknown and exited agents yield. Host directories and launch
-  failures stay first. The PR state-event lookup is cached until the
-  PR or its queue membership changes.
+  failures stay first. The PR lifecycle lookup is cached until the PR
+  or its queue membership changes.
   Notifications fire for a finished turn and for input
   needed, each with its own toggle and chime: any audio file, played
   in the app's own process through `NSSound`, the way a Mac app plays
@@ -1232,14 +1241,16 @@ main checkout only while it has a session, with unknown activity last.
 Status groups the same entries across repositories, showing the owner
 avatar and repository name on each row and retaining selection when an
 entry moves.
-Within each status, the existing repository and worktree order stands.
+On the Mac, each status lists the most recent worktree, agent or PR
+event first.
 When Git cannot name a branch, directory-derived labels decode percent
 escapes once; names read from Git and filesystem paths stay literal.
 Each status header has a disclosure caret and keeps its count visible
 when collapsed; each device remembers collapsed groups independently.
 Both platforms use Domain's status classification and priority:
-launch failures, agent questions, working turns, PRs ready to merge,
-completed turns, then other pull request states, Idle agents, Worktree,
+launch failures and agent questions come first, followed by local
+actions (including unpushed commits, failing CI and reviews to address),
+working turns and external waits, completed turns, Idle agents, Worktree,
 Branch and exited sessions. Idle agents contain a running recognised
 agent; idle entries without one group as Worktree for linked worktrees,
 Branch for the main checkout on another or unknown branch and Default
@@ -1252,6 +1263,14 @@ unaddressed comments, ready to merge, running CI and waiting for review,
 alongside queued, draft and ordinary open states. Ready to merge needs
 confirmed passing checks, approval and mergeability, with no unresolved
 review conversations; missing information never claims readiness.
+The sidebar compares a branch with its published tip. A restack that
+only replays published patches or a merged layer whose remote was
+pruned does not by itself require a push. Unpublished branches must
+have commits absent from the remote refs. A confirmed
+push supersedes older counts and review decisions until GitHub sees its
+new head. A first push also shows the CI wait while GitHub discovers
+the PR, bounded by the same push timeout. The host also sends a fallback
+status that earlier phones can decode.
 
 A row's Block action applies to its worktree or current branch and
 records a note, a date or a dependency on another worktree, open issue
@@ -2379,12 +2398,16 @@ steps.
   session with none yet is asked again on
   `RefreshCadence.transcriptDiscoverySeconds`: the agent creates the
   file, and a new worktree's directory with it, so nothing is there to
-  watch. The reader is read-only and nothing typed there reaches the
-  agent: the terminal stays mounted and hidden underneath, and typing
-  to the agent or answering it means switching back. The choice lasts
-  until the app quits. Selections copy as formatted text, as everywhere
-  Markdown renders. Replies appear whole once the agent has written
-  them, and its reasoning is not shown.
+  watch. The iPhone opens the latest 256 KiB over SSH and follows
+  appends from the same file position. It shows up to three user
+  turns, keeping at most 256 KiB of text across 100 entries, even when
+  an agent runs for a long time between prompts. The phone orders
+  its live sessions by the Mac's status and latest event. Reader on
+  either device accepts short single-line replies for the selected
+  agent. Drafts live only in the native field, which clears when herdr
+  confirms submission to that pane. On the Mac, selections copy as
+  formatted text. Replies appear whole once the agent has written them,
+  and its reasoning is not shown.
 - Claude Code stores a typed prompt as plain text where every other
   message is a list of blocks; `TranscriptReader` reads both. Its
   command echoes, task notifications and compaction summaries are
@@ -2432,7 +2455,32 @@ steps.
 | Prompt history, per-repository settings, session names and resume ids, drafts, blockers, last sidebar snapshot | metadata store | sole owner |
 | Window frame, display and fullscreen state | `UserDefaults` | sole owner |
 
-The window's own shape is the exception to the metadata store.
+The installed and development builds share a bundle identifier and
+preferences. This keeps the two in sync, including edits made while
+testing a development build.
+The host keeps portable agent, review model, font, sidebar and notification
+preferences in an XML property list at `~/.sanductor/settings.plist`.
+Move the file to a dotfiles checkout and symlink it back while the app
+is closed. On launch the file supplies the preferences; changing one in
+the app updates its entry. A private symlink can name a file directly in
+the shared checkout. Notification sound paths and phone delivery choices
+travel with it. Host commands, signing and workspace paths restored from
+another configuration can be reviewed in General settings before use.
+Performance logging and pairing stay local.
+
+Saved prompts, schedules, custom review briefs and Work settings live in
+`~/.sanductor/private/settings.plist`. The upgrade copies these entries
+out of older dotfiles before removing them. Both signing modes use the same
+local file, including existing symlinks. Entitled builds back up and
+restore these settings through the user's private CloudKit database.
+The Prompts pane shows the backup status.
+Changes since the last successful backup merge by preference and prompt
+ID. A new Mac keeps its unique prompts and restores the cloud copy of
+matching entries. Development and Production have separate databases.
+Imported schedules start paused. Review restored custom briefs in
+General. Launch claims and history stay local.
+
+The window's own shape is stored independently.
 `WindowConfigurator` keeps the frame, the display it was on and whether
 it was fullscreen in `UserDefaults`. AppKit's frame autosave is not
 used: SwiftUI names it when it makes the window and restores that entry
@@ -2484,7 +2532,8 @@ outside the shared workspace so agents can neither read nor corrupt it.
 Deleting it loses settings and the attribution of conversations to
 deleted worktrees. Rules:
 
-- Every change goes through `MetadataStore.update`, which loads, changes
+- A write first requires a successful decode of any existing metadata.
+  Every change goes through the metadata store, which loads, changes
   and saves under one lock. Load-modify-save on a copy silently erased
   concurrent writes.
 - One decoded copy stays in memory; loads after the first are
@@ -2664,8 +2713,8 @@ agents can alter displayed status, which never authorises a GitHub action.
 No GitHub token is copied into the sandbox or stored by the phone.
 The SSH login authorises access to this metadata; viewing it requires no
 separate GitHub sign-in on the phone.
-Descriptions, conversations and logs remain outside this basic phone UI's
-scope, rather than being excluded for repository privacy.
+Pull request descriptions, review conversations and CI logs stay on the
+Mac.
 Phone rows and the selected terminal first try opening the HTTPS PR link
 as a Universal Link in its installed app, then fall back to the browser
 if iOS cannot open it there. GitHub Mobile must have Universal Links
@@ -2678,7 +2727,9 @@ without PR details remain readable. Status icons are shared with the Mac.
 Open PRs with known conflicts carry the conflict field and show the Mac's
 conflict badge, with its rebase guidance available to accessibility.
 Other mergeability values are omitted, and older snapshots without the
-field remain readable.
+field remain readable. The phone follows atomic replacements of the
+sidebar file over SSH, so a new PR event or transcript reaches the
+visible view even when the agent is idle.
 Repository listings omit symlinked aliases, matching the desktop and
 creation's physical-path check. Creation accepts listed names, including
 spaces and non-ASCII characters, but rejects path separators and traversal.
@@ -2898,7 +2949,7 @@ after transient resizes).
    an empty value is the empty command, which git forks.
 5. **Transcripts**: sandvault applies inheriting group-read ACLs; the
    app relies on read and never widens it.
-6. **iCloud**: only the host app writes alerts, into the user's own
+6. **iCloud**: the host writes private settings and alerts into the user's
    private database; the sandbox user has no iCloud account. Alert
    text is the Mac banner's own and is not end-to-end encrypted.
 
@@ -2906,9 +2957,11 @@ The embedded browser uses the shared persistent data store so a GitHub
 login survives restarts; it holds no app state and no token.
 
 Never: modify sudoers or the profile; run credentialled commands inside
-the sandbox; write secrets or app-critical state into the shared
-workspace; execute agent-suggested commands as the host user without an
-explicit action; bypass `GitClient`; widen transcript ACLs.
+the sandbox with the host account’s credentials; store the Keychain or
+app-critical state in the shared workspace; execute agent-suggested
+commands as the host user without an explicit action; bypass
+`GitClient`; widen transcript ACLs. A prompt that explicitly references
+a named secret shares its value through the session’s prompt file.
 
 ## Dependencies and toolchain
 
@@ -3479,7 +3532,7 @@ notarised and stapled so Homebrew's signing audit and Gatekeeper accept
 it. Releases are full releases, never drafts or prereleases, which lets
 `brew livecheck` discover the next version without a custom strategy.
 
-#### iCloud for iPhone alerts
+#### iCloud for private settings and iPhone alerts
 
 Once per team, before the first build that carries the entitlements:
 

@@ -41,6 +41,7 @@ struct SnapshotTests {
         let width: CGFloat = 320
         let view = WorktreeRowView(
             item: item,
+            status: .needsPush,
             pullRequest: pullRequest,
             standing: StackStanding(position: 1, height: 1),
             load: nil,

@@ -64,9 +64,11 @@ public struct AgentSession: Identifiable, Hashable, Sendable {
         paneID: String? = nil,
         activity: AgentActivity? = nil,
         version: String? = nil,
+        transcriptPath: String? = nil,
         lastActivityAt: Date? = nil,
         now: Date = Date(),
     ) {
+        self.transcriptPath = transcriptPath
         self.version = version
         self.name = name
         self.agent = agent
@@ -109,6 +111,9 @@ public struct AgentSession: Identifiable, Hashable, Sendable {
     /// point of showing it.
     public let version: String?
 
+    /// The sandbox transcript currently associated with this pane.
+    public let transcriptPath: String?
+
     /// The stable identity, the session name.
     public var id: String {
         name
@@ -116,12 +121,16 @@ public struct AgentSession: Identifiable, Hashable, Sendable {
 
     /// Event recency decides the shared slot; priority breaks ties
     /// and readings whose clocks are unavailable.
-    public func precedes(_ pullRequest: PullRequestSummary?) -> Bool {
-        guard let pullRequest else {
+    public func precedes(_ pullRequest: PullRequestSummary?, pendingPushAt: Date? = nil) -> Bool {
+        guard pullRequest != nil || pendingPushAt != nil else {
             return true
         }
 
-        if let lastActivityAt, let changedAt = pullRequest.stateChangedAt, lastActivityAt != changedAt {
+        let changedAt = pullRequest?.lastEventAt ?? pendingPushAt
+        if sidebarActivity == .done, lastActivityAt == nil, changedAt != nil {
+            return false
+        }
+        if let lastActivityAt, let changedAt, lastActivityAt != changedAt {
             return lastActivityAt > changedAt
         }
         return status == .running && sidebarActivity.map { [.blocked, .working, .done].contains($0) } == true

@@ -1,6 +1,7 @@
 import DashboardFeature
 import ReviewFeature
 import SanductorData
+import SanductorDomain
 import SanductorInterface
 import TerminalUI
 
@@ -10,13 +11,15 @@ import TerminalUI
 final class AppDependencies {
     // MARK: Lifecycle
 
-    init() {
-        defer { Self.shared = self }
+    init() throws {
         let paths = WorkspacePaths.current()
+        let metadataStore = MetadataStore(file: paths.metadataFile)
+        try PortableSettings.backfill()
+        settings = try PortableSettings()
+        try settings.restorePrompts(in: metadataStore)
         let runner = FoundationProcessRunner()
         let gitClient = GitClient(runner: runner)
         let githubClient = GitHubClient(runner: runner)
-        let metadataStore = MetadataStore(file: paths.metadataFile)
         metadataStore.resumeFeedbackLoops()
         let launchProgress = LaunchProgress()
         let herdr = HerdrClient(
@@ -50,9 +53,13 @@ final class AppDependencies {
             launchProgress: launchProgress,
         )
         prompts = dashboard.prompts
+        prompts.portableSettings = settings
+        settings.privateSettingsChanged = { [weak prompts] in prompts?.syncPrivateSettings() }
+        prompts.syncPrivateSettings()
         // The machine's own power state, wired here rather than read
         // by the model, so the model under test is always plugged in.
         dashboard.isOnBattery = { PowerSource.isOnBattery }
+        Self.shared = self
     }
 
     deinit {
@@ -80,4 +87,38 @@ final class AppDependencies {
     let dashboard: DashboardModel
     let prompts: PromptsModel
     let store: MetadataStore
+
+    let settings: PortableSettings
+
+    func saveSettings() {
+        do {
+            try settings.saveChanges()
+            lastSettingsError = nil
+        } catch {
+            let message = "Saving settings.plist: " + error.localizedDescription
+            guard message != lastSettingsError else {
+                return
+            }
+
+            lastSettingsError = message
+            PerformanceLog.recordMessage(message, isError: true)
+            Task {
+                await Task.yield()
+                guard lastSettingsError == message else {
+                    return
+                }
+
+                do {
+                    try settings.saveChanges()
+                    lastSettingsError = nil
+                } catch {
+                    ErrorLog.shared.report(message + ". Retrying failed: " + error.localizedDescription)
+                }
+            }
+        }
+    }
+
+    // MARK: Private
+
+    private var lastSettingsError: String?
 }

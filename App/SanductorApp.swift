@@ -27,6 +27,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         launch.didFinishLaunching()
     }
 
+    func applicationDidBecomeActive(_: Notification) {
+        AppDependencies.shared?.prompts.syncPrivateSettings()
+    }
+
+    func applicationWillTerminate(_: Notification) {
+        AppDependencies.shared?.saveSettings()
+    }
+
     func applicationShouldTerminateAfterLastWindowClosed(_: NSApplication) -> Bool {
         true
     }
@@ -58,8 +66,10 @@ struct SanductorApp: App {
         ] {
             UserDefaults.standard.set(false, forKey: key)
         }
-        if LegacyMigration.isNeeded() == false, LegacyMigration.isSandboxMigrationNeeded() == false {
-            _dependencies = State(initialValue: AppDependencies())
+        if LegacyMigration.isNeeded() == false, LegacyMigration.isSandboxMigrationNeeded() == false,
+           LegacyMigration.needsPromptBackfill() == false
+        {
+            _dependencies = State(initialValue: try? AppDependencies())
         }
     }
 
@@ -98,6 +108,12 @@ struct SanductorApp: App {
                 } else {
                     opening
                 }
+            }
+            .onReceive(NotificationCenter.default
+                .publisher(for: UserDefaults.didChangeNotification)
+                .receive(on: RunLoop.main))
+            { _ in
+                dependencies?.saveSettings()
             }
             .environment(\.openURL, LinkOpener.action)
             .interfaceFont(.body)
@@ -202,32 +218,22 @@ struct SanductorApp: App {
             for attempt in 0 ..< Self.migrationAttempts {
                 do {
                     progress.begin(attempt == 0 ? "Restoring saved work" : "Retrying saved work restoration")
-                    let previous = NSRunningApplication.runningApplications(
-                        withBundleIdentifier: "com.mikemcquaid.AgentIDE",
-                    )
-                    for application in previous {
-                        application.terminate()
+                    if LegacyMigration.isNeeded() || LegacyMigration.isSandboxMigrationNeeded() {
+                        try await restoreLegacyState()
                     }
-                    // Process state also covers exits before a termination notification can be observed.
-                    for _ in 0 ..< Self.terminationAttempts where previous.allSatisfy(\.isTerminated) == false {
-                        try await Task.sleep(for: Self.terminationPause)
+                    if LegacyMigration.needsPromptBackfill() {
+                        progress.report("Recovering saved prompts")
+                        let recovered = try await Task.detached(priority: .userInitiated) {
+                            let store = MetadataStore(file: WorkspacePaths.current().metadataFile)
+                            return try LegacyMigration.backfillPrompts(into: store)
+                        }.value
+                        if recovered > 0 {
+                            let noun = recovered == 1 ? "prompt" : "prompts"
+                            ErrorLog.shared.note("Recovered \(recovered) saved \(noun) in Settings → Prompts.")
+                        }
                     }
-                    guard previous.allSatisfy(\.isTerminated) else {
-                        throw NSError(
-                            domain: "SanductorMigration",
-                            code: 1,
-                            userInfo: [NSLocalizedDescriptionKey: "AgentIDE is still closing. Close it, then retry."],
-                        )
-                    }
-
-                    progress.report("Restoring settings and conversations")
-                    try await Task.detached(priority: .userInitiated) {
-                        try LegacyMigration.run()
-                    }.value
-                    progress.report("Restoring agent sessions")
-                    try await LegacyMigration.prepareSandbox(paths: .current())
                     try Task.checkCancellation()
-                    dependencies = AppDependencies()
+                    dependencies = try AppDependencies()
                     break
                 } catch is CancellationError {
                     return
@@ -239,5 +245,32 @@ struct SanductorApp: App {
             }
         }
         await dependencies?.setup.checkOnLaunch()
+    }
+
+    private func restoreLegacyState() async throws {
+        let previous = NSRunningApplication.runningApplications(
+            withBundleIdentifier: "com.mikemcquaid.AgentIDE",
+        )
+        for application in previous {
+            application.terminate()
+        }
+        // Process state also covers exits before a termination notification can be observed.
+        for _ in 0 ..< Self.terminationAttempts where previous.allSatisfy(\.isTerminated) == false {
+            try await Task.sleep(for: Self.terminationPause)
+        }
+        guard previous.allSatisfy(\.isTerminated) else {
+            throw NSError(
+                domain: "SanductorMigration",
+                code: 1,
+                userInfo: [NSLocalizedDescriptionKey: "AgentIDE is still closing. Close it, then retry."],
+            )
+        }
+
+        progress.report("Restoring settings and conversations")
+        try await Task.detached(priority: .userInitiated) {
+            try LegacyMigration.run()
+        }.value
+        progress.report("Restoring agent sessions")
+        try await LegacyMigration.prepareSandbox(paths: .current())
     }
 }

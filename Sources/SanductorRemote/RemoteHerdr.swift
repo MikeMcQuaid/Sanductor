@@ -59,9 +59,7 @@ public actor RemoteHerdr {
 
     /// Reads the optional sidebar projection last published by this Mac app.
     public func sidebar() async throws -> [SidebarRepository] {
-        let script = #"cat "${SHARED_WORKSPACE:-/Users/Shared/sv-${USER#sandvault-}}/sanductor/"#
-            + #"sidebar-${HERDR_SESSION}.json""#
-            + " 2>/dev/null || true"
+        let script = "cat " + Self.sidebarFile + " 2>/dev/null || true"
         let text = try await connection.execute(configuration.command(["/bin/sh", "-c", script]))
         return (try? JSONDecoder().decode([SidebarRepository].self, from: Data(text.utf8))) ?? []
     }
@@ -107,6 +105,9 @@ public actor RemoteHerdr {
     }
 
     // MARK: Internal
+
+    static let sidebarFile = #""${SHARED_WORKSPACE:-/Users/Shared/sv-${USER#sandvault-}}/sanductor/"#
+        + #"sidebar-${HERDR_SESSION}.json""#
 
     let configuration: SSHConfiguration
     let connection: SSHConnection = .init()

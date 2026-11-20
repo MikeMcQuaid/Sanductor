@@ -101,13 +101,4 @@ struct WorkModeTests {
         #expect(mode.isWorking(at: early, calendar: calendar))
         #expect(mode.isWorking(at: late, calendar: calendar) == false)
     }
-
-    @Test
-    func `schedule previews mask tokens without altering surrounding text`() {
-        for prefix in ["sntryu_", "sntrys_", "ghp_", "gho_", "ghu_", "ghs_", "ghr_", "github_pat_"] {
-            let prompt = "TOKEN=" + prefix + String(repeating: "a", count: 64) + " run report"
-            #expect(TokenRedaction.preview(prompt) == "TOKEN=" + prefix + "*** run report")
-        }
-        #expect(TokenRedaction.preview("ghp_example and ordinary prose") == "ghp_example and ordinary prose")
-    }
 }

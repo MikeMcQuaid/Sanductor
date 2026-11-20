@@ -23,6 +23,8 @@ actor RepositoryFacts {
 
     static let shared: RepositoryFacts = .init()
 
+    private(set) var pushStatus: [String: (revision: String, published: Bool)] = [:]
+
     /// The remembered name, unless the file it was read against has
     /// been written since.
     func name(of repositoryPath: String, at modified: Date?) -> Answer? {
@@ -64,6 +66,10 @@ actor RepositoryFacts {
     /// moved it.
     func forget(_ repositoryPath: String) {
         baseRefs[Self.repositoryKey(repositoryPath)] = nil
+    }
+
+    func remember(published: Bool, at path: String, revision: String) {
+        pushStatus[path] = (revision, published)
     }
 
     // MARK: Private

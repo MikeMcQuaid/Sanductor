@@ -110,7 +110,8 @@ extension GitHubClient {
                 requirement: required.map { $0.contains(check.name) ? .required : .optional } ?? .unknown,
                 link: check.link,
                 startedAt: row.startedAt,
-                completedAt: row.completedAt,
+                completedAt: row.completedAt ?? (check.status == "COMPLETED"
+                    ? row.createdAt.flatMap { try? Date($0, strategy: .iso8601) } : nil),
                 workflowName: row.workflowName,
             )
         }

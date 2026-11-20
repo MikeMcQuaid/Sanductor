@@ -284,7 +284,7 @@ struct AgentSessionForm: View {
     }
 
     private func submit() {
-        guard isStarting == false else {
+        guard let repository, isStarting == false else {
             return
         }
         guard let text = promptEditor.capture() else {
@@ -294,6 +294,7 @@ struct AgentSessionForm: View {
 
         isStarting = true
         let submission = Submission(
+            repository: repository,
             source: source,
             numbers: pickedNumbers.sorted(),
             ghsaID: ghsaID,
@@ -306,10 +307,6 @@ struct AgentSessionForm: View {
             ),
             discussionURL: discussionURL,
         )
-        // Cleared now, not once the launch lands: the next form
-        // opened while this launch runs must not start from the
-        // draft it is starting. A failure keeps the draft for its
-        // retry (`LaunchRetry`).
         prompt = ""
         Task {
             await onSubmit(submission)

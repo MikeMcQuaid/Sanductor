@@ -44,8 +44,13 @@ extension MobileModel {
                     worktrees: sidebar.first { $0.name == repository }?.worktrees ?? [],
                 )
             }
-        let grouped = Dictionary(grouping: ordered, by: sidebarStatus(for:))
-        return SidebarStatus.allCases.compactMap { status in grouped[status].map { (status, $0) } }
+        let rows = ordered.map { session in
+            let entry = sidebarEntry(for: session)
+            return (session: session, status: entry?.status ?? session.sidebarStatus(), date: entry?.lastEventAt)
+        }
+        let recent = rows.sorted { ($0.date ?? .distantPast) > ($1.date ?? .distantPast) }
+        let grouped = Dictionary(grouping: recent, by: \.status)
+        return SidebarStatus.allCases.compactMap { status in grouped[status].map { (status, $0.map(\.session)) } }
     }
 
     func sidebarRequest(_ request: SidebarRequest) async -> SidebarResponse {

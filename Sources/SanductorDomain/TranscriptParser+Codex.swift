@@ -1,10 +1,8 @@
-import SanductorDomain
-
 /// Reading Codex's rollouts, split from the reader for length.
-extension TranscriptReader {
+extension TranscriptParser {
     /// Whether user-role text is Codex's own injected context rather
     /// than something the user typed.
-    static func isInjectedCodexContext(_ text: String) -> Bool {
+    package static func isInjectedCodexContext(_ text: String) -> Bool {
         text.hasPrefix("# AGENTS.md instructions")
             || text.hasPrefix("<user_instructions>")
             || text.hasPrefix("<environment_context>")
@@ -40,27 +38,28 @@ extension TranscriptReader {
     /// Rollouts often record one utterance twice: as a flat event
     /// payload and again as a typed response item. Adjacent repeats
     /// of the same role and text collapse to one entry.
-    func appendCodexEntry(_ payload: CodexPayload, to results: inout [TranscriptEntry]) {
+    static func appendCodexEntry(_ payload: CodexPayload, to results: inout [TranscriptEntry]) {
+        let id = (results.last?.id ?? -1) + 1
         let entry: TranscriptEntry? =
             switch payload.type {
             case "message":
-                codexMessage(payload, id: results.count)
+                codexMessage(payload, id: id)
 
             case "custom_tool_call":
                 codexToolLine(
                     name: payload.name,
                     detail: payload.input?.split(separator: "\n").first.map(String.init),
-                    id: results.count,
+                    id: id,
                 )
 
             case "user_message":
-                codexProse(payload.message, role: .user, id: results.count)
+                codexProse(payload.message, role: .user, id: id)
 
             case "agent_message":
-                codexProse(payload.message, role: .assistant, id: results.count)
+                codexProse(payload.message, role: .assistant, id: id)
 
             case "function_call":
-                codexToolLine(name: payload.name, detail: payload.arguments, id: results.count)
+                codexToolLine(name: payload.name, detail: payload.arguments, id: id)
 
             default:
                 nil
@@ -70,7 +69,7 @@ extension TranscriptReader {
         }
     }
 
-    private func codexMessage(_ payload: CodexPayload, id: Int) -> TranscriptEntry? {
+    private static func codexMessage(_ payload: CodexPayload, id: Int) -> TranscriptEntry? {
         let role: TranscriptEntry.Role? =
             switch payload.role {
             case "user":
@@ -90,7 +89,7 @@ extension TranscriptReader {
         return TranscriptEntry(id: id, role: role, text: text)
     }
 
-    private func codexProse(_ message: String?, role: TranscriptEntry.Role, id: Int) -> TranscriptEntry? {
+    private static func codexProse(_ message: String?, role: TranscriptEntry.Role, id: Int) -> TranscriptEntry? {
         guard let message, message.isEmpty == false else {
             return nil
         }
@@ -98,7 +97,7 @@ extension TranscriptReader {
         return TranscriptEntry(id: id, role: role, text: message)
     }
 
-    private func codexToolLine(name: String?, detail: String?, id: Int) -> TranscriptEntry? {
+    private static func codexToolLine(name: String?, detail: String?, id: Int) -> TranscriptEntry? {
         guard let name else {
             return nil
         }

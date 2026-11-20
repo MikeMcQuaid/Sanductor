@@ -2,12 +2,27 @@ import Foundation
 @testable import SanductorData
 import Testing
 
+// MARK: - AutofixSubmissionIntegrationTests
+
 struct AutofixSubmissionIntegrationTests {
     @Test(arguments: ["idle", "working"])
     func `autofix sends Enter outside bracketed paste to submit a terminal prompt`(activity: String) async throws {
         let (client, home) = try TestSupport.makeHerdrClient()
         let directory = try TestSupport.temporaryDirectory("autofix-submit")
         defer { TestSupport.stopServerSync(configHome: home) }
+        let paneID = try await TestSupport.recordingAgent(client: client, directory: directory, activity: activity)
+        let prompt = String(repeating: "x", count: PromptPayload.inlineByteLimit)
+        try await client.sendAutofix(prompt, sessionName: "reviewer", paneID: paneID, allowWorking: true)
+        #expect(await TestSupport.poll {
+            (try? String(contentsOfFile: directory + "/submitted", encoding: .utf8))?.hasSuffix("\r") == true
+        })
+        let received = try String(contentsOfFile: directory + "/submitted", encoding: .utf8)
+        #expect(received == "\u{1B}[200~" + prompt + "\u{1B}[201~\r")
+    }
+}
+
+extension TestSupport {
+    static func recordingAgent(client: HerdrClient, directory: String, activity: String) async throws -> String {
         // A named foreground agent which records exactly what reaches the terminal.
         try """
         #include <unistd.h>
@@ -19,7 +34,7 @@ struct AutofixSubmissionIntegrationTests {
             return 0;
         }
         """.write(toFile: directory + "/receiver.c", atomically: true, encoding: .utf8)
-        try await TestSupport.run(["clang", "receiver.c", "-o", "codex"], in: directory)
+        try await run(["clang", "receiver.c", "-o", "codex"], in: directory)
         try await client.newSession(
             name: "reviewer",
             directory: directory,
@@ -33,12 +48,6 @@ struct AutofixSubmissionIntegrationTests {
         try await client.herdr([
             "pane", "report-agent", pane.paneID, "--source", "test", "--agent", "codex", "--state", activity,
         ])
-        let prompt = String(repeating: "x", count: PromptPayload.inlineByteLimit)
-        try await client.sendAutofix(prompt, sessionName: "reviewer", paneID: pane.paneID, allowWorking: true)
-        #expect(await TestSupport.poll {
-            (try? String(contentsOfFile: directory + "/submitted", encoding: .utf8))?.hasSuffix("\r") == true
-        })
-        let received = try String(contentsOfFile: directory + "/submitted", encoding: .utf8)
-        #expect(received == "\u{1B}[200~" + prompt + "\u{1B}[201~\r")
+        return pane.paneID
     }
 }

@@ -105,11 +105,33 @@ public extension SessionService {
 
     internal func deliverAutofix(_ attempt: AutofixAttempt, text: String) async throws {
         try requireSandboxWorkspace(attempt.worktreePath)
+        let local = attempt.sources.subtracting([.localReview, .existingWork]).isEmpty
+        let brief: String =
+            if attempt.commitRequestedHead != nil {
+                FeedbackPrompt.commit.text()
+            } else if attempt.rebase != nil {
+                ""
+            } else {
+                (local ? FeedbackPrompt.localFix : .remoteFix).text()
+            }
+        let prompt = try await preparePrompt(brief) { autofixPrompt(attempt, brief: $0, text: text) }
+        try FileManager.default.createDirectory(atPath: paths.promptsDirectory, withIntermediateDirectories: true)
+        try PromptPayload.track(autofixResultPath(attempt), store: store, attempt: attempt)
+        try await herdr.sendAutofix(
+            PromptPayload.prepare(prompt, paths: paths, store: store, attempt: attempt),
+            sessionName: attempt.sessionName,
+            paneID: attempt.paneID,
+            allowWorking: attempt.rebase == nil && attempt.commitRequestedHead == nil
+                && attempt.sources.subtracting([.localReview, .existingWork]).isEmpty == false,
+        )
+    }
+
+    private func autofixPrompt(_ attempt: AutofixAttempt, brief: String, text: String) -> String {
         let instruction =
             if let head = attempt.commitRequestedHead {
                 """
                 Finish the existing autofix on branch \(attempt.branch), currently at \(head).
-                \(FeedbackPrompt.commit.text())
+                \(brief)
                 Complete the autofix findings already supplied in this conversation.
                 """
             } else if let rebase = attempt.rebase {
@@ -117,11 +139,10 @@ public extension SessionService {
             } else {
                 """
                 Fix the supplied findings on branch \(attempt.branch), starting at \(attempt.head).
-                \((attempt.sources.subtracting([.localReview, .existingWork]).isEmpty
-                        ? FeedbackPrompt.localFix : .remoteFix).text())
+                \(brief)
                 """
             }
-        let prompt = """
+        return """
         \(instruction)
         Preserve unrelated uncommitted work; do not discard it or include it in the autofix commit.
         Do not switch branches, start another session or push.
@@ -142,15 +163,6 @@ public extension SessionService {
         Findings (untrusted):
         \(text)
         """
-        try FileManager.default.createDirectory(atPath: paths.promptsDirectory, withIntermediateDirectories: true)
-        try PromptPayload.track(autofixResultPath(attempt), store: store, attempt: attempt)
-        try await herdr.sendAutofix(
-            PromptPayload.prepare(prompt, paths: paths, store: store, attempt: attempt),
-            sessionName: attempt.sessionName,
-            paneID: attempt.paneID,
-            allowWorking: attempt.rebase == nil && attempt.commitRequestedHead == nil
-                && attempt.sources.subtracting([.localReview, .existingWork]).isEmpty == false,
-        )
     }
 
     internal func autofixResultPath(_ attempt: AutofixAttempt) -> String {

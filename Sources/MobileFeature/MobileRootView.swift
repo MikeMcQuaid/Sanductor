@@ -161,6 +161,60 @@
         let session: MobileSession
 
         var body: some View {
+            Group {
+                if showsReader, currentSession.agent != nil, model.isConnected {
+                    MobileReader(model: model, session: currentSession).id(model.connectionGeneration)
+                } else {
+                    terminalContent
+                }
+            }
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    if currentSession.agent != nil {
+                        Button(
+                            showsReader ? "Show terminal" : "Show Reader",
+                            systemImage: showsReader ? "terminal" : "book",
+                        ) {
+                            ready = false
+                            showsReader.toggle()
+                        }
+                    }
+                }
+                ToolbarItem(placement: .topBarTrailing) {
+                    if let pullRequest = model.sidebarEntry(for: currentSession)?.pullRequest {
+                        MobilePullRequestLink(pullRequest: pullRequest)
+                    }
+                }
+            }
+            .navigationTitle(currentSession.branch)
+            .navigationBarTitleDisplayMode(.inline)
+            .onChange(of: model.connectionGeneration) {
+                if handedOff == false {
+                    ready = false
+                }
+            }
+        }
+
+        // MARK: Private
+
+        private static let handoffCorner: CGFloat = 16
+        private static let handoffDimming = 0.7
+
+        @Environment(\.colorScheme)
+        private var colorScheme
+        @State private var showsReader = false
+        @State private var ready = false
+        @State private var handoffGeneration: UUID?
+
+        private var currentSession: MobileSession {
+            model.sessions.first { $0.id == session.id } ?? session
+        }
+
+        private var handedOff: Bool {
+            handoffGeneration != nil
+        }
+
+        private var terminalContent: some View {
             ZStack {
                 if model.isConnected || handedOff {
                     terminal
@@ -182,36 +236,6 @@
                     .background(.background)
                 }
             }
-            .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
-                    if let pullRequest = model.sidebarEntry(
-                        for: model.sessions.first { $0.id == session.id } ?? session,
-                    )?.pullRequest {
-                        MobilePullRequestLink(pullRequest: pullRequest)
-                    }
-                }
-            }
-            .navigationTitle(model.sessions.first { $0.id == session.id }?.branch ?? session.branch)
-            .navigationBarTitleDisplayMode(.inline)
-            .onChange(of: model.connectionGeneration) {
-                if handedOff == false {
-                    ready = false
-                }
-            }
-        }
-
-        // MARK: Private
-
-        private static let handoffCorner: CGFloat = 16
-        private static let handoffDimming = 0.7
-
-        @Environment(\.colorScheme)
-        private var colorScheme
-        @State private var ready = false
-        @State private var handoffGeneration: UUID?
-
-        private var handedOff: Bool {
-            handoffGeneration != nil
         }
 
         private var handoffOverlay: some View {

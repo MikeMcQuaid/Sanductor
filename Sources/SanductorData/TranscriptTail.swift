@@ -61,14 +61,13 @@ public actor TranscriptTail {
         let whole = data[...end]
         offset += UInt64(whole.count)
         if let lines = String(bytes: whole, encoding: .utf8) {
-            reader.append(lines, to: &log)
+            TranscriptParser.append(lines, to: &log)
         }
         return log
     }
 
     // MARK: Private
 
-    private let reader: TranscriptReader = .init()
     private var offset: UInt64 = 0
     private var log: [TranscriptEntry] = []
 }

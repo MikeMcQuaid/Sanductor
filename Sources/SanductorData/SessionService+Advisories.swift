@@ -22,9 +22,10 @@ public extension SessionService {
         await clearQuarantine(for: agent)
         async let probed = probeVersion(of: agent)
         let advisory = try await github.securityAdvisory(repositoryPath: repository.path, ghsaID: ghsaID)
+        let prompt = try await preparePrompt(context) { GitHubClient.advisoryPrompt(advisory, context: $0) }
         let slot = try await createWorktree(repository: repository, named: Self.advisoryBranch, base: baseBranch)
         return try await start(
-            prompt: GitHubClient.advisoryPrompt(advisory, context: context),
+            prompt: prompt,
             agent: agent,
             options: options,
             slot: slot,
@@ -43,12 +44,9 @@ public extension SessionService {
         options: AgentLaunchOptions = AgentLaunchOptions(),
     ) async throws -> String {
         let advisory = try await github.securityAdvisory(repositoryPath: worktree.repositoryPath, ghsaID: ghsaID)
-        return try await launchAgent(
-            in: worktree,
-            prompt: GitHubClient.advisoryPrompt(advisory, context: context),
-            agent: agent,
-            options: options,
-        )
+        return try await launchAgent(in: worktree, prompt: context, agent: agent, options: options) { userText in
+            GitHubClient.advisoryPrompt(advisory, context: userText)
+        }
     }
 
     /// The repository's advisories in triage or draft, for the

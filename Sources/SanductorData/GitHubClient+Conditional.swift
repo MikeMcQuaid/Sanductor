@@ -102,12 +102,14 @@ public extension GitHubClient {
                 author: row.user?.login,
                 body: row.body,
                 closedAt: row.closedAt,
+                updatedAt: row.updatedAt,
                 headCommit: row.head.sha,
                 // Read here as well as by `gh pr view`: the poll's
                 // listing repaints the header, and a flag only the
                 // other reader carried lit the Copilot icon again
                 // while GitHub still showed the request waiting.
                 awaitsCopilotReview: (row.requestedReviewers ?? []).contains { Self.isCopilot($0.login) },
+                requestedReviewers: row.reviewerNames,
                 labels: (row.labels ?? []).map(\.name).sorted(),
                 headRepository: row.head.repo?.fullName,
                 stackStanding: row.stack.flatMap { stack in
@@ -160,6 +162,10 @@ private struct RESTPullRow: Decodable {
         let login: String?
     }
 
+    struct Team: Decodable {
+        let slug: String?
+    }
+
     struct AutoMerge: Decodable {
         // Presence is the signal.
     }
@@ -175,6 +181,8 @@ private struct RESTPullRow: Decodable {
     // Absent when nobody is asked.
     // swiftlint:disable:next discouraged_optional_collection
     let requestedReviewers: [User]?
+    // swiftlint:disable:next discouraged_optional_collection - GitHub can omit team requests.
+    let requestedTeams: [Team]?
     let title: String
     // Snake-case decoding maps `html_url` to exactly this name.
     // swiftformat:disable:next acronyms
@@ -189,4 +197,9 @@ private struct RESTPullRow: Decodable {
     let autoMerge: AutoMerge?
     let mergedAt: Date?
     let closedAt: Date?
+    let updatedAt: Date?
+
+    var reviewerNames: Set<String> {
+        Set((requestedReviewers ?? []).compactMap(\.login) + (requestedTeams ?? []).compactMap(\.slug))
+    }
 }

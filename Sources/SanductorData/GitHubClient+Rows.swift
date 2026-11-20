@@ -52,6 +52,7 @@ extension GitHubClient {
 
     struct ReviewRequestRow: Decodable {
         let login: String?
+        let slug: String?
     }
 
     struct ReviewRow: Decodable {
