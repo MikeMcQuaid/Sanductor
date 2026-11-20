@@ -29,7 +29,7 @@ let package = Package(
         .package(url: "https://github.com/apple/swift-nio-ssh.git", from: "0.15.0"),
         .package(url: "https://github.com/apple/swift-nio.git", from: "2.81.0"),
         .package(url: "https://github.com/apple/swift-crypto.git", from: "5.0.3"),
-        .package(url: "https://github.com/migueldeicaza/SwiftTerm", exact: "1.99.2"),
+        .package(url: "https://github.com/migueldeicaza/SwiftTerm", exact: "1.99.3"),
         // Apple's GitHub-flavoured markdown parser; parsing by hand
         // kept misreading real review comments.
         .package(url: "https://github.com/swiftlang/swift-markdown", from: "0.5.0"),
