@@ -101,6 +101,34 @@ struct TranscriptReaderTests {
     }
 
     @Test
+    func `a typed prompt stored as plain text is read and titles its session`() throws {
+        let directory = try TestSupport.temporaryDirectory("typed-prompts")
+        defer { try? FileManager.default.removeItem(atPath: directory) }
+        let transcript = directory + "/ffff.jsonl"
+        // Claude Code 2.1.325's shapes: its own bookkeeping shares
+        // the user role with what the user typed.
+        let lines = """
+        {"type":"user","isMeta":true,"message":{"content":"<local-command-caveat>Caveat</local-command-caveat>"}}
+        {"type":"user","message":{"content":"<command-name>/model</command-name>"}}
+        {"type":"user","promptSource":"system","message":{"content":"<task-notification>done</task-notification>"}}
+        {"type":"user","isCompactSummary":true,"message":{"content":"This session is being continued"}}
+        {"type":"user","promptSource":"typed","message":{"content":"<details> renders\\nbadly"}}
+        {"type":"assistant","message":{"content":[{"type":"thinking","thinking":""},\
+        {"type":"text","text":"fixed"}]}}
+        {"type":"user","promptSource":"queued","message":{"content":"and the tests"}}
+        {"type":"user","message":{"content":"<local-command-stdout>Set model</local-command-stdout>"}}
+        {"type":"user","message":{"content":"<div>fix this</div>"}}
+        """
+        try lines.write(toFile: transcript, atomically: true, encoding: .utf8)
+
+        let reader = TranscriptReader()
+        let entries = reader.entries(in: URL(fileURLWithPath: transcript))
+        #expect(entries.map(\.role) == [.user, .assistant, .user, .user])
+        #expect(entries.map(\.text) == ["<details> renders\nbadly", "fixed", "and the tests", "<div>fix this</div>"])
+        #expect(reader.sessions(in: directory, agent: .claudeCode).first?.title == "<details> renders badly")
+    }
+
+    @Test
     func `parses codex rollout payloads into log entries`() throws {
         let directory = try TestSupport.temporaryDirectory("codex-entries")
         defer { try? FileManager.default.removeItem(atPath: directory) }

@@ -26,6 +26,22 @@ extension TerminalRepresentable.Coordinator {
         channel?.send(HerdrTerminal.resizeCommand(columns: columns, rows: rows))
     }
 
+    /// Tells herdr the pane's size once it stops changing: every size
+    /// on the way through a drag made the agent redraw for a width
+    /// it held for a frame. A client that went meanwhile is left to
+    /// its replacement, which sends the view's size as it attaches.
+    func resizeWhenSettled(columns: Int, rows: Int) {
+        settlingResize?.cancel()
+        settlingResize = Task { [weak self] in
+            try? await Task.sleep(for: .milliseconds(Self.resizeSettleMilliseconds))
+            guard Task.isCancelled == false, let self, channel != nil else {
+                return
+            }
+
+            sendResize(columns: columns, rows: rows)
+        }
+    }
+
     func handle(_ event: HerdrTerminalEvent, from sender: HerdrTerminalChannel) {
         // A discarded client's buffered events must not bleed
         // into the replacement's conversation.
@@ -108,6 +124,9 @@ extension TerminalRepresentable.Coordinator {
     }
 
     // MARK: Private
+
+    /// How long a size has to hold before herdr hears of it.
+    private static let resizeSettleMilliseconds = 150
 
     /// Whether the client's reason for ending is the terminal simply
     /// being gone: herdr words a closed target as the session having

@@ -99,16 +99,31 @@ extension RootView {
             // the conversations page would claim the session ended.
             LaunchProgressView("Attaching to the agent…", waitingOn: "herdr to answer")
         } else if let session = item.session {
-            agentTerminal(for: session, isActive: isSelected && isCovered == false)
-                .id(session.name)
-                // Dropped files stage into the shared workspace (the
-                // sandbox cannot read host paths) and their staged
-                // paths type into the agent.
-                // The drop-session overload answers nothing, so the
-                // staging's own verdict is let go here.
-                .dropDestination(for: URL.self) { urls, _ in
-                    _ = dropFiles(urls, into: session.name)
+            let isOnScreen = isSelected && isCovered == false
+            let showsReader = dependencies.dashboard.readerSessions.contains(session.name)
+            // The reader covers the terminal rather than replacing
+            // it: the pane keeps its client and its size underneath,
+            // hidden, so going back to it attaches nothing.
+            ZStack {
+                agentTerminal(for: session, in: item.worktree.path, isActive: isOnScreen && showsReader == false)
+                    // Dropped files stage into the shared workspace
+                    // (the sandbox cannot read host paths) and their
+                    // staged paths type into the agent.
+                    // The drop-session overload answers nothing, so
+                    // the staging's own verdict is let go here.
+                    .dropDestination(for: URL.self) { urls, _ in
+                        _ = dropFiles(urls, into: session.name)
+                    }
+                if showsReader {
+                    SessionReaderView(
+                        session: session,
+                        worktreePath: item.worktree.path,
+                        service: dependencies.service,
+                        isActive: isOnScreen && dependencies.dashboard.isWindowVisible,
+                    )
                 }
+            }
+            .id(session.name)
         } else if centreShowsEditor(for: item) {
             // Chosen from the conversations page; the branches above
             // are why a live session can never sit underneath it.

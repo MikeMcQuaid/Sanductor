@@ -340,6 +340,11 @@ Rules that follow from that shape:
   half-height screen before the agent redrew at the window's size.
   Unvisited agents do not attach, and removing a session or worktree
   releases its pane. A real window resize still sizes hidden panes.
+- **A resize reaches herdr once it settles.** The pane holds each new
+  size briefly and sends only the last, so dragging the window or a
+  divider makes the agent redraw once, not at every column crossed.
+  Until then the pane shows herdr's frames at the old size. The attach
+  still sends its size at once.
 - **Frames carry the screen, never the modes.** Cursor moves, colours
   and synchronised updates arrive; the private modes an agent set
   (bracketed paste, kitty keyboard) never do. So the local terminal
@@ -390,6 +395,21 @@ Rules that follow from that shape:
   is hidden. Copy All Output reads `pane read --source recent-unwrapped`,
   because a selection can never reach what scrolled past. Known
   limitation: herdr does not rewrap scrollback on resize.
+- **Copy Last Reply takes the reply from the transcript.** The screen
+  holds the agent's own rendering of its Markdown, which pastes as
+  neither Markdown nor formatted text. The pane's menu and the session
+  strip's read the newest reply from the live transcript instead (the
+  last unbroken run of the agent's prose, since a reply's text blocks
+  are separate entries, ended by a tool call as by a prompt, so what
+  the agent said on its way to an answer stays out) and put it on the
+  clipboard as HTML, through swift-markdown's formatter, beside the
+  Markdown itself (`MarkdownClipboard`): Word and Slack take the
+  formatting, plain-text fields the source. Anything copied while the
+  reply was being read is left alone. That formatter writes text, code
+  and attributes out as they stand, so the tree is rewritten first:
+  everything written is escaped, the agent's raw HTML included, where a
+  `<name>` in a path read as a tag and vanished, and code names a
+  monospaced font, for receivers that keep fonts rather than tags.
 - **`--takeover`** replaces a controller leaked by an earlier app run,
   which would otherwise own the pane's input forever. Full herdr
   clients over SSH attach independently and are never dropped.
@@ -2349,6 +2369,28 @@ steps.
   page: the recorded session names attribute orphaned transcript
   directories, and every directory under the repository's `worktrees`
   containers is scanned too.
+- A live session can show its conversation in place of its terminal:
+  the session strip's reader button swaps in the rendered log the
+  conversations page uses, read from the transcript the agent is
+  writing (its newest in the worktree, the one the list leaves out).
+  `TranscriptTail` decodes only what was appended, woken by the file's
+  own change events while the pane is on screen in a visible window,
+  and a change in the agent's state looks for a newer transcript. A
+  session with none yet is asked again on
+  `RefreshCadence.transcriptDiscoverySeconds`: the agent creates the
+  file, and a new worktree's directory with it, so nothing is there to
+  watch. The reader is read-only and nothing typed there reaches the
+  agent: the terminal stays mounted and hidden underneath, and typing
+  to the agent or answering it means switching back. The choice lasts
+  until the app quits. Selections copy as formatted text, as everywhere
+  Markdown renders. Replies appear whole once the agent has written
+  them, and its reasoning is not shown.
+- Claude Code stores a typed prompt as plain text where every other
+  message is a list of blocks; `TranscriptReader` reads both. Its
+  command echoes, task notifications and compaction summaries are
+  machinery, kept out of the log and the titles, told by their flags,
+  a system source or the tags that wrap them; any other prompt that
+  opens with a tag is the user's own.
 - Transcripts live only in the disposable sandbox home, so each
   worktree's newest conversation is copied out (`ConversationBackup`)
   on close, on resume and hourly while running, to the host's private

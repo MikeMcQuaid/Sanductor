@@ -24,6 +24,10 @@ public enum RefreshCadence {
     /// GitHub state has no herdr event; the phone refreshes its host projection while Status is visible.
     public static let sidebarStatusSeconds = 60
 
+    /// A session's first transcript has no event: the agent creates the file, and for a new
+    /// worktree its directory, so nothing exists to watch until it does. Only the reader on screen asks.
+    public static let transcriptDiscoverySeconds = 2
+
     /// Result checks while a merge action waits for GitHub's async fallback.
     public static let mergeResultSeconds = 2
 

@@ -12,6 +12,24 @@ public extension SessionService {
         transcripts.entries(in: URL(fileURLWithPath: past.path))
     }
 
+    /// The transcript a live session's agent is writing: its newest
+    /// in the worktree, the one `pastSessions` leaves out of the list.
+    @concurrent
+    func liveTranscript(agent: AgentKind?, in worktreePath: String) async -> TranscriptSession? {
+        sessionsInDirectories(of: worktreePath, liveSession: nil).first { $0.agent == agent }
+    }
+
+    /// The Markdown of a live session's newest reply, nil before its
+    /// agent has written one.
+    @concurrent
+    func lastReply(agent: AgentKind?, in worktreePath: String) async -> String? {
+        guard let transcript = await liveTranscript(agent: agent, in: worktreePath) else {
+            return nil
+        }
+
+        return transcriptEntries(for: transcript).lastReply
+    }
+
     /// The argv that attaches a terminal to a session's pane.
     func attachCommand(paneID: String) -> [String] {
         herdr.attachCommand(paneID: paneID)

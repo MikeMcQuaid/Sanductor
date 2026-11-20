@@ -10,7 +10,7 @@ import TerminalUI
 extension RootView {
     /// The agent terminal: copies are prose, so multi-line copies
     /// reflow for pasting into chat and pull request bodies.
-    func agentTerminal(for session: AgentSession, isActive: Bool) -> some View {
+    func agentTerminal(for session: AgentSession, in worktreePath: String, isActive: Bool) -> some View {
         // A pasted file or screenshot reaches the agent the way a
         // dropped one does. Bound first: as the call's last argument
         // the formatter would make it trailing, which fights SwiftLint.
@@ -24,12 +24,35 @@ extension RootView {
             reflowsCopies: true,
             isActive: isActive,
             onPasteFiles: pasteFiles,
+            onCopyReply: { await dependencies.service.lastReply(agent: session.agent, in: worktreePath) },
             onCopyAllOutput: readAll,
             reattachRequest: dependencies.dashboard.reattachRequests[session.name] ?? 0,
         )
         // A hair of room either side: the agent's own frames draw to
         // their last column, which sat against the pane's edges.
         .padding(.horizontal, Self.terminalInset)
+    }
+
+    /// Swaps a live session between its terminal and its reader.
+    func readerToggle(for session: AgentSession) -> some View {
+        PaneIconButton(
+            "book",
+            help: "Read the conversation as rendered text that copies with its formatting;"
+                + " the agent keeps running, and typing to it means switching back to the terminal",
+            isOn: dependencies.dashboard.readerSessions.contains(session.name),
+        ) {
+            dependencies.dashboard.readerSessions.formSymmetricDifference([session.name])
+        }
+    }
+
+    /// The strip's Copy Last Reply, for a session showing its
+    /// reader, whose terminal and its menu are out of reach.
+    func copyLastReply(of session: AgentSession, in worktreePath: String) {
+        Task {
+            await MarkdownClipboard.copy {
+                await dependencies.service.lastReply(agent: session.agent, in: worktreePath)
+            }
+        }
     }
 
     /// The host shell terminal, a plain local shell on the pane's

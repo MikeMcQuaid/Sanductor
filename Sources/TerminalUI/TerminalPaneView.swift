@@ -29,6 +29,7 @@ public struct TerminalPaneView: View {
         reflowsCopies: Bool = false,
         isActive: Bool = true,
         onPasteFiles: (([URL]) -> Bool)? = nil,
+        onCopyReply: (() async -> String?)? = nil,
         onCopyAllOutput: (() async -> String?)? = nil,
         onProcessTerminated: (@MainActor () -> Void)? = nil,
         reattachRequest: Int = 0,
@@ -37,6 +38,7 @@ public struct TerminalPaneView: View {
         self.reflowsCopies = reflowsCopies
         self.isActive = isActive
         self.onPasteFiles = onPasteFiles
+        self.onCopyReply = onCopyReply
         self.onCopyAllOutput = onCopyAllOutput
         self.onProcessTerminated = onProcessTerminated
         ownerReattachRequest = reattachRequest
@@ -57,6 +59,7 @@ public struct TerminalPaneView: View {
         reflowsCopies = false
         self.isActive = isActive
         onPasteFiles = nil
+        onCopyReply = nil
         onCopyAllOutput = nil
         self.onProcessTerminated = onProcessTerminated
         ownerReattachRequest = 0
@@ -71,6 +74,7 @@ public struct TerminalPaneView: View {
                 reflowsCopies: reflowsCopies,
                 isActive: isActive,
                 onPasteFiles: onPasteFiles,
+                onCopyReply: onCopyReply,
                 onCopyAllOutput: onCopyAllOutput,
                 clearRequest: clearShellRequest,
                 onProcessTerminated: onProcessTerminated,
@@ -105,6 +109,9 @@ public struct TerminalPaneView: View {
     /// Where a paste of files or an image goes, for agent panes.
     private let onPasteFiles: (([URL]) -> Bool)?
 
+    /// Reads the newest reply's Markdown, for agent panes.
+    private let onCopyReply: (() async -> String?)?
+
     /// Reads the whole recent output, for agent panes.
     private let onCopyAllOutput: (() async -> String?)?
 
@@ -132,6 +139,7 @@ struct TerminalRepresentable: NSViewRepresentable {
     let isActive: Bool
 
     let onPasteFiles: (([URL]) -> Bool)?
+    let onCopyReply: (() async -> String?)?
     let onCopyAllOutput: (() async -> String?)?
     let clearRequest: Int
     let onProcessTerminated: (@MainActor () -> Void)?
@@ -178,6 +186,7 @@ struct TerminalRepresentable: NSViewRepresentable {
         view.font = codeStyle.appKitFont
         view.reflowsCopies = reflowsCopies
         view.onPasteFiles = onPasteFiles
+        view.onCopyReply = onCopyReply
         view.onCopyAllOutput = onCopyAllOutput
         context.coordinator.installBlockSelection(on: view)
         applyTheme(to: view, context: context)
