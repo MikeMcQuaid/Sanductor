@@ -23,7 +23,7 @@ No Sanductor account, subscription or hosted relay exists or is planned.
 - Signs and pushes from any published stack layer, with rebasing, labels, merge queues, automerge and branch and temporary file cleanup.
 - Keeps agents running and reachable over SSH after quitting, with private backups and 30-day retention that preserves ongoing work.
 - Saves reusable prompts and schedules recurring repository tasks.
-- Tracks agents, PRs and blockers by repository or status, with unblock dates, bulk actions, alerts, usage and resets in Messages.
+- Groups work by repository or latest event, with unpushed commits, CI, reviews, dated blockers, bulk actions and alerts.
 - Edits code with syntax highlighting, fuzzy file search and shell tabs.
 - Starts tasks and checks blockers through Shortcuts and Siri, with an [iPhone companion](#-iphone-companion-app) and agent shortcut keys.
 
@@ -57,18 +57,18 @@ Symlinks can point here but cannot grant access outside the workspace.
 Install shared dependencies yourself in Shell from the main checkout; agents cannot run `brew install`.
 Agents survive quitting via [`herdr`][herdr]; Shell tabs close.
 Agents can change shared files and upload readable code; [review their work](https://mikemcquaid.com/why-open-source-maintainers-thrive-in-the-llm-era/) before trusting it.
-Follow setup's keychain guidance; never reset your main user's keychain.
-For permission popups see [`sandvault` recovery](https://github.com/webcoyote/sandvault#fix-the-security-popup).
+Keep your main keychain; see [`sandvault` recovery](https://github.com/webcoyote/sandvault#fix-the-security-popup) for permission prompts.
 
 Upgrading from the former app preserves settings and conversations; keep old session files, update custom app paths and repeat iPhone setup.
 
 ## ⚙️ Configuration
 
-Settings (Cmd-,):
+Quit the app and link `~/.sanductor/settings.plist` to your dotfiles.
 
-- **General**: Choose session defaults, signing and the browser.
-- **Work**: Hide and silence work outside working hours, pause work schedules for holidays and snooze hiding for 15 minutes.
-- **Prompts**: Save reusable text, optionally scheduled per repository.
+- **General**: Set defaults and review restored host settings.
+- **Work**: Set work hours, holidays and a 15-minute snooze.
+- **Prompts**: Back up prompts, schedules and Work settings in iCloud.
+- **Secrets**: Save a named Keychain value and use `$NAME` in prompts.
 - **Sessions**: Inspect and stop agents and browser pages.
 - **Review**: Pick reviewers, models, effort and review or fix prompts.
 - **Notifications**: Set Mac and iPhone alerts, sounds and a Dock badge.
@@ -90,6 +90,7 @@ fi
 
 Use [TestFlight](https://apps.apple.com/app/testflight/id899247664) on iOS 26+ to [join the beta](https://testflight.apple.com/join/zA5bSe4d).
 Or clone this repo, put `DEVELOPMENT_TEAM = <your paid team ID>` in `Signing.xcconfig` at its root, run `script/bootstrap` and `script/install`, then build `Sanductor-iOS` in Xcode.
+Read and reply in Reader, with up to three recent turns on iPhone.
 Shows public and private PR status with conflict badges and prefers GitHub Mobile, falling back to GitHub.com; private PRs require sign-in.
 
 1. Copy the public key from iPhone Settings to your Mac's clipboard, then install it for the `sandvault-<you>` user:

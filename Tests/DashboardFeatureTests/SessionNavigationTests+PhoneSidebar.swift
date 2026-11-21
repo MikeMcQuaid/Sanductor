@@ -72,20 +72,17 @@ extension SessionNavigationTests {
         fixture.model.groups = groups
         fixture.model.cacheSidebar(groups)
         let file = fixture.root + "/shared/sanductor/sidebar-sanductor-dev.json"
-        #expect(try JSONDecoder().decode([SidebarRepository].self, from: Data(contentsOf: URL(filePath: file))) == [
-            SidebarRepository(
-                name: "repo",
-                owner: "Homebrew",
-                worktrees: [fixture.repository.path],
-                entries: [
-                    SidebarEntry(
-                        target: SidebarTarget(original.worktree), status: .defaultBranch, activity: nil, block: nil,
-                    ),
-                ],
-                fullName: "Homebrew/remote-name",
-                defaultBranch: "main",
-            ),
-        ])
+        let data = try Data(contentsOf: URL(filePath: file))
+        #expect(data.last == UInt8(ascii: "\n"))
+        let sidebar = try JSONDecoder().decode([SidebarRepository].self, from: data)
+        #expect(sidebar.map(\.name) == ["repo"])
+        let repo = try #require(sidebar.first)
+        #expect(repo.fullName == "Homebrew/remote-name" && repo.owner == "Homebrew")
+        #expect(repo.defaultBranch == "main" && repo.worktrees == [fixture.repository.path])
+        #expect(repo.entries.map(\.target) == [SidebarTarget(original.worktree)])
+        let row = try #require(repo.entries.first)
+        #expect(row.status == .defaultBranch && row.paneID == "pane" && row.hasUnpushedCommits == false)
+        #expect(row.lastEventAt == Date(timeIntervalSince1970: TimeInterval(original.lastActivityAt)))
         #expect(FileManager.default.fileExists(
             atPath: fixture.root + "/shared/sanductor/sidebar-sanductor.json",
         ) == false)

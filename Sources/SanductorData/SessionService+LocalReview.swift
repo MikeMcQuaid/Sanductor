@@ -57,12 +57,15 @@ public extension SessionService {
     ) async throws -> LocalReview {
         try requireSandboxWorkspace(worktreePath)
         let options = try validate(AppSettings.reviewOptions(for: reviewer), for: reviewer)
-        let input = try LocalReviewInput.prompt(
-            instructions: instructions,
-            snapshot: LocalReviewInput.snapshot(files: files),
-            commitContext: commitContext,
-            uncommittedSnapshot: uncommittedSnapshot,
-        )
+        let snapshot = LocalReviewInput.snapshot(files: files)
+        let input = try await preparePrompt(instructions) { brief in
+            try LocalReviewInput.prompt(
+                instructions: brief,
+                snapshot: snapshot,
+                commitContext: commitContext,
+                uncommittedSnapshot: uncommittedSnapshot,
+            )
+        }
 
         let revision = try await localReviewRevision(worktreePath: worktreePath)
         let source = await localReviewSource(worktreePath: worktreePath)
@@ -79,7 +82,7 @@ public extension SessionService {
         defer { try? FileManager.default.removeItem(atPath: directory) }
         let promptFile = directory + "/prompt.txt"
         let schemaFile = directory + "/schema.json"
-        try input.write(toFile: promptFile, atomically: true, encoding: .utf8)
+        try input.delivery.write(toFile: promptFile, atomically: true, encoding: .utf8)
         try LocalReviewInput.schema.write(toFile: schemaFile, atomically: true, encoding: .utf8)
         let adapter = runner(for: reviewer)
         let payload = "export TMPDIR=" + directory.shellQuoted + "; cd " + directory.shellQuoted + " && "
@@ -98,7 +101,7 @@ public extension SessionService {
             outputLimit: LocalReviewInput.byteLimit,
         )
         var review = LocalReviewInput.review(
-            result: result, files: files, adapter: adapter, revision: revision, input: input,
+            result: result, files: files, adapter: adapter, revision: revision, input: input.template,
         )
         review.instructions = instructions
         review.model = options.model

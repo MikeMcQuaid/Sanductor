@@ -1,3 +1,5 @@
+import Foundation
+
 // MARK: - WorktreeItem
 
 /// One worktree with everything the dashboard shows about it.
@@ -16,6 +18,7 @@ public struct WorktreeItem: Identifiable, Hashable, Sendable {
         behindUpstream: Int? = nil,
         lastActivityAt: Int = 0,
         revision: String? = nil,
+        onlyPublishedChanges: Bool = false,
     ) {
         self.worktree = worktree
         self.session = session
@@ -27,6 +30,7 @@ public struct WorktreeItem: Identifiable, Hashable, Sendable {
         self.behindUpstream = behindUpstream
         self.lastActivityAt = lastActivityAt
         self.revision = revision
+        self.onlyPublishedChanges = onlyPublishedChanges
     }
 
     // MARK: Public
@@ -57,6 +61,9 @@ public struct WorktreeItem: Identifiable, Hashable, Sendable {
     /// one: with `aheadOfUpstream`, how far the branch and what was
     /// pushed have drifted apart.
     public let behindUpstream: Int?
+
+    /// Whether Git confirmed that apparent local commits are already published.
+    public let onlyPublishedChanges: Bool
 
     /// When the worktree last saw work: a commit, agent output, a
     /// running session or uncommitted edits. Seconds since 1970.
@@ -92,6 +99,20 @@ public struct WorktreeItem: Identifiable, Hashable, Sendable {
     /// The stable identity, the worktree path.
     public var id: String {
         worktree.id
+    }
+
+    /// A newly created branch has no upstream until its first push.
+    public func needsPush(hasPullRequest: Bool, lastPush: Date?) -> Bool {
+        if let lastPush, lastPush.timeIntervalSince1970 >= Double(lastActivityAt) {
+            return false
+        }
+        if onlyPublishedChanges {
+            return false
+        }
+        if let aheadOfUpstream {
+            return aheadOfUpstream > 0
+        }
+        return hasPullRequest == false && (aheadOfDefault ?? 0) > 0
     }
 
     /// The same row with its session re-read: what runs where is a

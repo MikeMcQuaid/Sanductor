@@ -37,8 +37,7 @@ extension RootView {
     func readerToggle(for session: AgentSession) -> some View {
         PaneIconButton(
             "book",
-            help: "Read the conversation as rendered text that copies with its formatting;"
-                + " the agent keeps running, and typing to it means switching back to the terminal",
+            help: "Read the formatted conversation and send a short reply",
             isOn: dependencies.dashboard.readerSessions.contains(session.name),
         ) {
             dependencies.dashboard.readerSessions.formSymmetricDifference([session.name])

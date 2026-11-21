@@ -34,6 +34,47 @@ extension SessionNavigationTests {
     }
 
     @Test
+    func `reopening preserves the published status of a restacked branch`() {
+        let fixture = Fixture()
+        defer { fixture.close() }
+        let row = WorktreeItem(
+            worktree: Fixture.item("upper", repository: fixture.repository).worktree,
+            session: nil,
+            isDirty: false,
+            aheadOfUpstream: 1,
+            behindUpstream: 8,
+            onlyPublishedChanges: true,
+        )
+        fixture.model.groups[0].items = [row]
+        fixture.model.cacheSidebar(fixture.model.groups)
+        fixture.model.restoreCachedSidebar()
+        #expect(fixture.model.statusGroups.first?.status == .worktree)
+    }
+
+    @Test
+    func `a push moves a finished branch to the top of the CI group before PR discovery`() {
+        let fixture = Fixture()
+        defer { fixture.close() }
+        let items = ["first", "second"].map { branch in
+            WorktreeItem(
+                worktree: Fixture.item(branch, repository: fixture.repository).worktree,
+                session: AgentSession(name: branch, agent: .codexCLI, status: .running, activity: .done),
+                isDirty: false,
+                aheadOfUpstream: 1,
+            )
+        }
+        fixture.model.groups[0].items = items
+        #expect(fixture.model.statusGroups.first?.status == .needsPush)
+        for item in items {
+            fixture.model.pullRequests.markChecksPending(
+                repositoryPath: fixture.repository.path, branches: [item.worktree.branch],
+            )
+        }
+        #expect(fixture.model.statusGroups.first?.status == .waitingForCI)
+        #expect(fixture.model.statusGroups.first?.items.map(\.id) == items.reversed().map(\.id))
+    }
+
+    @Test
     func `repository sorting follows visible status without changing its rows`() throws {
         let fixture = Fixture()
         defer { fixture.close() }

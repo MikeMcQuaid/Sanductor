@@ -197,7 +197,7 @@ struct CodexTranscriptIndex {
         }
 
         let text = (payload.content ?? []).compactMap(\.text).joined(separator: "\n")
-        guard text.isEmpty == false, TranscriptReader.isInjectedCodexContext(text) == false else {
+        guard text.isEmpty == false, TranscriptParser.isInjectedCodexContext(text) == false else {
             return nil
         }
 

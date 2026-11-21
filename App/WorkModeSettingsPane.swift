@@ -55,7 +55,14 @@ struct WorkModeSettingsPane: View {
                 settings.snoozeUntil = nil
             }
         }
+        .onChange(of: storedWorkMode) {
+            settings = AppSettings.workMode
+        }
         .onChange(of: settings) {
+            guard settings != AppSettings.workMode else {
+                return
+            }
+
             AppSettings.workMode = settings
             dashboard.refreshWorkMode()
         }
@@ -68,6 +75,8 @@ struct WorkModeSettingsPane: View {
     // swiftlint:disable:next no_magic_numbers - The single user-facing snooze duration.
     private static let snoozeDuration: TimeInterval = 15 * 60
 
+    @AppStorage("workMode")
+    private var storedWorkMode: Data?
     @State private var settings: WorkMode = AppSettings.workMode
     @State private var organisations: [String] = []
 

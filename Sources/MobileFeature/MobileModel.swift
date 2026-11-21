@@ -269,6 +269,15 @@ public final class MobileModel {
         try Task.checkCancellation()
         progress.report("Reading repositories and subscribing to agent changes")
         eventPaneIDs = try await MobileSession.sessions(in: client.snapshot()).map(\.id)
+        let projection = Task {
+            // Older Macs still supply their snapshot at connect and manual refresh.
+            try? await client.followSidebar { @MainActor latest in
+                if Task.isCancelled == false, remote === client, latest != sidebar {
+                    sidebar = latest
+                }
+            }
+        }
+        defer { projection.cancel() }
         try await subscribe(open: client.events) { try await receiveEvents($0, client: client) }
     }
 

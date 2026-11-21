@@ -10,7 +10,7 @@ struct SavedPromptLabel: View {
 
     var body: some View {
         Label {
-            Text(TokenRedaction.preview(prompt.name))
+            Text(prompt.name)
         } icon: {
             OwnerAvatar(owner: owner, size: Self.iconSize).menuImage
         }

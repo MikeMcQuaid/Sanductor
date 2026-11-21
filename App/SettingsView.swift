@@ -17,7 +17,7 @@ struct SettingsView: View {
 
     var body: some View {
         TabView(selection: $pane) {
-            GeneralSettingsPane(dashboard: dependencies.dashboard)
+            GeneralSettingsPane(dashboard: dependencies.dashboard, settings: dependencies.settings)
                 .tabItem { Label("General", systemImage: "gearshape") }
                 .tag("general")
             WorkModeSettingsPane(dashboard: dependencies.dashboard)
@@ -26,12 +26,10 @@ struct SettingsView: View {
             PromptsView(model: dependencies.prompts, dashboard: dependencies.dashboard)
                 .tabItem { Label("Prompts", systemImage: "text.bubble") }
                 .tag("prompts")
-            SessionManagerView(service: dependencies.service) { path in
-                UserDefaults.standard.set(path, forKey: "closeBrowserPath")
-                closeBrowserRequest += 1
-            }
-            .tabItem { Label("Sessions", systemImage: "terminal") }
-            .tag("sessions")
+            SecretsSettingsPane()
+                .tabItem { Label("Secrets", systemImage: "key") }
+                .tag("secrets")
+            sessionsPane
             ReviewSettingsPane(dashboard: dependencies.dashboard)
                 .tabItem { Label("Review", systemImage: "text.bubble") }
                 .tag("review")
@@ -65,6 +63,15 @@ struct SettingsView: View {
     private var pane = "general"
     @AppStorage("closeBrowserRequest")
     private var closeBrowserRequest = 0
+
+    private var sessionsPane: some View {
+        SessionManagerView(service: dependencies.service) { path in
+            UserDefaults.standard.set(path, forKey: "closeBrowserPath")
+            closeBrowserRequest += 1
+        }
+        .tabItem { Label("Sessions", systemImage: "terminal") }
+        .tag("sessions")
+    }
 }
 
 // MARK: - GeneralSettingsPane
@@ -74,6 +81,7 @@ private struct GeneralSettingsPane: View {
     // MARK: Internal
 
     let dashboard: DashboardModel
+    let settings: PortableSettings
 
     var body: some View {
         Form {
@@ -87,6 +95,20 @@ private struct GeneralSettingsPane: View {
                 Text("What the new session form starts on; each form remembers later changes.")
                     .interfaceFont(.caption)
                     .foregroundStyle(.secondary)
+            }
+            if settings.restoredHostSettings.isEmpty == false {
+                Section("Restored host settings") {
+                    ForEach(settings.restoredHostSettings.keys.sorted(), id: \.self) { key in
+                        if let value = settings.restoredHostSettings[key],
+                           let title = PortableSettings.hostSettingTitles[key]
+                        {
+                            LabeledContent(title) {
+                                Text(verbatim: value).textSelection(.enabled)
+                                Button("Use on this Mac") { settings.useHostSetting(key, value: value) }
+                            }
+                        }
+                    }
+                }
             }
             signingSection
             linksSection
@@ -172,8 +194,6 @@ private struct AdvancedSettingsPane: View {
 
     // MARK: Private
 
-    private static let pollRange = 2 ... 60
-    private static let stackRange: ClosedRange<Double> = 15 ... 600
     private static let stackStep: Double = 15
 
     /// Literal defaults, matching `AppSettings`' own: the formatter
@@ -227,7 +247,7 @@ private struct AdvancedSettingsPane: View {
     private var cadenceSection: some View {
         Section("Cadence") {
             LabeledContent("Refresh every") {
-                Stepper(String(pollSeconds) + " s", value: $pollSeconds, in: Self.pollRange)
+                Stepper(String(pollSeconds) + " s", value: $pollSeconds, in: AppSettings.pollRange)
             }
             Text("How often herdr, git and transcripts are re-read while the window is "
                 + "visible; hidden windows drop to a minute regardless.")
@@ -237,7 +257,7 @@ private struct AdvancedSettingsPane: View {
                 Stepper(
                     String(Int(stackSeconds)) + " s",
                     value: $stackSeconds,
-                    in: Self.stackRange,
+                    in: AppSettings.stackRange,
                     step: Self.stackStep,
                 )
             }

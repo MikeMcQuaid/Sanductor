@@ -17,6 +17,18 @@ DEFINE SCHEMA
         GRANT READ TO "_world"
     );
 
+    RECORD TYPE PrivateSettings (
+        "___createTime" TIMESTAMP,
+        "___createdBy"  REFERENCE,
+        "___etag"       STRING,
+        "___modTime"    TIMESTAMP,
+        "___modifiedBy" REFERENCE,
+        "___recordID"   REFERENCE QUERYABLE,
+        archive         BYTES,
+        GRANT WRITE TO "_creator",
+        GRANT CREATE TO "_icloud"
+    );
+
     RECORD TYPE Users (
         "___createTime" TIMESTAMP,
         "___createdBy"  REFERENCE,

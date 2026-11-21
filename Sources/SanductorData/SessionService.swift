@@ -97,12 +97,14 @@ public struct SessionService: Sendable {
     /// Creates a worktree and branch for a prompt and starts the
     /// agent in herdr with the picked model, effort and the prompt
     /// as its initial message. Returns the session name.
+    @preconcurrency
     public func createSession(
         repository: Repository,
         prompt: String,
         agent: AgentKind,
         options: AgentLaunchOptions = AgentLaunchOptions(),
         baseBranch: String? = nil,
+        composing: @Sendable (String) -> String = \.self,
     ) async throws -> String {
         // The version probe costs a sandbox launch of its own, so it
         // runs beside the naming and the worktree rather than in
@@ -110,15 +112,16 @@ public struct SessionService: Sendable {
         // takes the probe with it, and after the quarantine is
         // cleared, since Gatekeeper kills the probe on an install
         // Homebrew left quarantined just as it would the agent.
+        let prepared = try await preparePrompt(prompt, composing: composing)
         try validate(options, for: agent)
         await clearQuarantine(for: agent)
         async let probed = probeVersion(of: agent)
         await progress("Naming the branch from the prompt, and asking the CLI its version beside it")
-        let name = await branchName(for: prompt)
+        let name = await branchName(for: prepared.template)
         await progress("Creating the worktree for `" + name + "`")
         let slot = try await createWorktree(repository: repository, named: name, base: baseBranch)
         return try await start(
-            prompt: prompt,
+            prompt: prepared,
             agent: agent,
             options: options,
             slot: slot,
@@ -155,6 +158,8 @@ public struct SessionService: Sendable {
     let runners: [any AgentRunner]
     let processes: any ProcessRunner
     let launcher: SandvaultLauncher
+
+    var promptSecret: @Sendable (String) throws -> String? = PromptSecrets.read
 
     /// Where launches narrate their steps.
     var progress: LaunchReporter
@@ -221,7 +226,7 @@ public struct SessionService: Sendable {
     /// Launches an agent in a prepared worktree slot: prompt file,
     /// herdr workspace, paste, metadata.
     func start(
-        prompt: String,
+        prompt: SessionPrompt,
         agent: AgentKind,
         options: AgentLaunchOptions,
         slot: WorktreeSlot,
@@ -233,7 +238,7 @@ public struct SessionService: Sendable {
         let sessionName = SessionName.make(repository: slot.repository.name, branch: slot.branch, agent: agent)
         let arguments = runner(for: agent).optionArguments(model: launch.model, effort: launch.effort)
         await progress("Writing the prompt file")
-        let promptFile = try PromptPayload.write(prompt, paths: paths, store: store)
+        let promptFile = try PromptPayload.write(prompt.delivery, paths: paths, store: store)
 
         // The prompt travels inside the launch command, read from
         // its file as the agent starts: pasting it after launch
@@ -249,7 +254,7 @@ public struct SessionService: Sendable {
 
         await progress("Recording the session `" + sessionName + "`")
         store.update { metadata in
-            metadata.prompts[sessionName] = prompt
+            metadata.prompts[sessionName] = prompt.template
             metadata.arguments[sessionName] = arguments
             metadata.sessionsByWorktree[slot.path] = sessionName
             metadata.intentionallyClosed.removeAll { $0 == slot.path }

@@ -1,6 +1,6 @@
 # Sanductor privacy policy
 
-Last updated: 18 November 2026.
+Last updated: 21 November 2026.
 
 Sanductor is developed by Mike McQuaid. This policy covers the Mac app and its iPhone companion. Sanductor has no developer-operated account service or relay, advertising or tracking analytics. Your repositories and terminal sessions are not automatically sent to the developer.
 
@@ -17,6 +17,8 @@ Connection addresses, ports, username, session choice and display preferences ar
 Both apps request public repository-owner avatars from GitHub. These requests disclose the requested owner name and normal connection information, such as your IP address, to GitHub. Avatar requests do not include your GitHub credentials. Opening a pull request uses GitHub's app or website, with its own sign-in and privacy practices.
 
 The Mac uses your configured GitHub tools and account to fetch project information and carry out actions such as publishing changes or requesting a review. The iPhone receives status from the Mac; Sanductor does not copy the Mac's GitHub credentials to the phone.
+
+Settings → Secrets stores named values in your Mac login Keychain. Using `$NAME` or `${NAME}` in a Sanductor prompt sends that value to the agent running as the sandbox user and to its provider. Session prompt files, transcripts and their backups can contain the value. Sanductor stores saved prompts, custom review briefs and Work settings in a separate private file on your Mac. Prompt text is saved verbatim, including any literal credentials you enter. When iCloud is available, Sanductor automatically backs up these settings to your private iCloud database and restores them on your other Macs. Saved references contain only the name.
 
 Coding agents and review services you use can send prompts, source code, terminal output and other accessible project information to their providers. Sanductor can also request account usage information from the configured agent providers. These services run under your chosen accounts and terms. A sandbox limits access to local files; it does not prevent an agent from uploading files it can read.
 

@@ -15,26 +15,27 @@ public extension PullRequestStore {
     /// last reported, when its rollup is about the new commits.
     func markChecksPending(repositoryPath: String, branches: [String]) {
         let pushed = Set(branches)
+        let push = Date()
         store.update { metadata in
             var numbers = Set<Int>()
             for branch in pushed {
                 let key = Self.branchKey(repositoryPath: repositoryPath, branch: branch)
                 let known = metadata.pullRequestCache[key]
                 metadata.pendingChecks[key] = known?.headCommit ?? ""
-                metadata.fetchedAt[Self.pendingKey(key)] = Date()
+                metadata.fetchedAt[Self.pendingKey(key)] = push
                 guard let known else {
                     continue
                 }
 
-                metadata.pullRequestCache[key] = known.awaitingChecks()
+                metadata.pullRequestCache[key] = known.awaitingChecks(at: push)
                 numbers.insert(known.number)
             }
-            numbers.formUnion(Self.paintListings(of: pushed, repositoryPath: repositoryPath, in: &metadata))
+            numbers.formUnion(Self.paintListings(of: pushed, at: push, repositoryPath: repositoryPath, in: &metadata))
             for number in numbers {
                 let key = Self.summaryKey(repositoryPath: repositoryPath, number: number)
                 if let cached = metadata.enrichedSummaryCache[key] {
                     metadata.enrichedSummaryCache[key] = CachedSummary(
-                        summary: cached.summary.awaitingChecks(),
+                        summary: cached.summary.awaitingChecks(at: push),
                         savedAt: cached.savedAt,
                         requiresHeadRefresh: cached.requiresHeadRefresh,
                     )
@@ -43,14 +44,26 @@ public extension PullRequestStore {
         }
     }
 
+    /// A push may reach the remote before its first PR is discoverable.
+    func pendingPushAt(repositoryPath: String, branch: String) -> Date? {
+        let key = Self.branchKey(repositoryPath: repositoryPath, branch: branch)
+        guard let push = store.load().fetchedAt[Self.pendingKey(key)],
+              Date().timeIntervalSince(push) <= Self.pendingPatience
+        else {
+            return nil
+        }
+
+        return push
+    }
+
     // MARK: Internal
 
     /// Paints the pushed branches' rows in every listing of the
     /// repository; the numbers of the rows painted, for the
     /// enriched summaries beside them.
-    static func paintListings(of pushed: Set<String>, repositoryPath: String, in metadata: inout AppMetadata)
-        -> Set<Int>
-    {
+    static func paintListings(
+        of pushed: Set<String>, at push: Date, repositoryPath: String, in metadata: inout AppMetadata,
+    ) -> Set<Int> {
         var numbers = Set<Int>()
         let prefix = "list#" + repositoryPath + "#"
         for (key, listing) in metadata.pullRequestListsCache where key.hasPrefix(prefix) {
@@ -61,7 +74,7 @@ public extension PullRequestStore {
                 }
 
                 numbers.insert(row.number)
-                return row.awaitingChecks()
+                return row.awaitingChecks(at: push)
             }
             metadata.pullRequestListsCache[key] = rewritten
         }
@@ -90,7 +103,7 @@ public extension PullRequestStore {
             return summary
         }
 
-        return summary.state == "OPEN" ? summary.awaitingChecks() : summary
+        return summary.state == "OPEN" ? summary.awaitingChecks(at: since) : summary
     }
 
     /// The same for a listing.

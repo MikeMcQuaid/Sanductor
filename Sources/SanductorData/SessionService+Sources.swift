@@ -58,7 +58,9 @@ public extension SessionService {
         prompt: String,
         agent: AgentKind,
         options: AgentLaunchOptions = AgentLaunchOptions(),
+        composing: @Sendable (String) -> String = \.self,
     ) async throws -> String {
+        let prepared = try await preparePrompt(prompt, composing: composing)
         let sessionName = SessionName.make(repository: worktree.repositoryName, branch: worktree.branch, agent: agent)
         // Cleared first and probed beside the kill, as creation does.
         try validate(options, for: agent)
@@ -71,7 +73,7 @@ public extension SessionService {
             path: worktree.path,
         )
         return try await start(
-            prompt: prompt,
+            prompt: prepared,
             agent: agent,
             options: options,
             slot: slot,
@@ -100,12 +102,9 @@ public extension SessionService {
         await clearQuarantine(for: agent)
         async let probed = probeVersion(of: agent)
         let issue = try await github.issue(repositoryPath: repository.path, number: number)
-        let prompt = GitHubClient.issuePrompt(
-            number: number,
-            title: issue.title,
-            body: issue.body,
-            context: context,
-        )
+        let prompt = try await preparePrompt(context) { userText in
+            GitHubClient.issuePrompt(number: number, title: issue.title, body: issue.body, context: userText)
+        }
         let slot = try await createWorktree(
             repository: repository,
             named: branchName(for: "issue-\(number)-" + issue.title),
@@ -246,13 +245,9 @@ public extension SessionService {
         options: AgentLaunchOptions = AgentLaunchOptions(),
     ) async throws -> String {
         let issue = try await github.issue(repositoryPath: worktree.repositoryPath, number: number)
-        let prompt = GitHubClient.issuePrompt(
-            number: number,
-            title: issue.title,
-            body: issue.body,
-            context: context,
-        )
-        return try await launchAgent(in: worktree, prompt: prompt, agent: agent, options: options)
+        return try await launchAgent(in: worktree, prompt: context, agent: agent, options: options) { userText in
+            GitHubClient.issuePrompt(number: number, title: issue.title, body: issue.body, context: userText)
+        }
     }
 
     /// The base ref whole-branch reviews diff against: the open pull

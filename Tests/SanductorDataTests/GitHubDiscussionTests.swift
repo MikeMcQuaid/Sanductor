@@ -38,9 +38,10 @@ struct GitHubDiscussionTests {
         let runner = RecordingRunner()
         runner.standardOutput = #"{"title":"Proposal","body":"The requested behaviour","url":"#
             + #""https://github.com/owner/community/discussions/12"}"#
-        let prompt = try await GitHubClient(runner: runner) { true }.discussionPrompt(
-            repositoryPath: "/repo", url: "https://github.com/owner/community/discussions/12", context: "Keep it small",
+        let compose = try await GitHubClient(runner: runner) { true }.discussionPrompt(
+            repositoryPath: "/repo", url: "https://github.com/owner/community/discussions/12",
         )
+        let prompt = compose("Keep it small")
         #expect(prompt.contains("The requested behaviour"))
         #expect(prompt.contains("https://github.com/owner/community/discussions/12"))
         #expect(prompt.contains("Keep it small"))

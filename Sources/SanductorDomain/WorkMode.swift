@@ -34,6 +34,18 @@ public struct WorkMode: Codable, Equatable, Sendable {
     // swiftlint:disable:next no_magic_numbers - Default working hours.
     public var endMinute = 17 * Self.minutesPerHour
 
+    public func encode(to encoder: any Encoder) throws {
+        var values = encoder.container(keyedBy: CodingKeys.self)
+        try values.encode(isEnabled, forKey: .isEnabled)
+        try values.encode(organisations.sorted(), forKey: .organisations)
+        try values.encode(repositories.sorted(), forKey: .repositories)
+        try values.encode(weekdays.sorted(), forKey: .weekdays)
+        try values.encode(startMinute, forKey: .startMinute)
+        try values.encode(endMinute, forKey: .endMinute)
+        try values.encodeIfPresent(holidayUntil, forKey: .holidayUntil)
+        try values.encodeIfPresent(snoozeUntil, forKey: .snoozeUntil)
+    }
+
     public func isWorking(at date: Date, calendar: Calendar = .current) -> Bool {
         let minute = calendar.component(.hour, from: date) * Self.minutesPerHour
             + calendar.component(.minute, from: date)
@@ -99,6 +111,17 @@ public struct WorkMode: Codable, Equatable, Sendable {
     }
 
     // MARK: Private
+
+    private enum CodingKeys: CodingKey {
+        case isEnabled
+        case organisations
+        case repositories
+        case weekdays
+        case startMinute
+        case endMinute
+        case holidayUntil
+        case snoozeUntil
+    }
 
     private static let minutesPerHour = 60
 

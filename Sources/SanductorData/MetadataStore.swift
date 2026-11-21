@@ -23,7 +23,7 @@ public struct MetadataStore: Sendable {
     /// The metadata: the in-memory copy, read from disk only the
     /// first time; empty when absent or unreadable.
     public func load() -> AppMetadata {
-        load(read: loadFromDisk)
+        (try? loadChecked()) ?? AppMetadata()
     }
 
     /// Changes the metadata in one step: loads, changes and saves
@@ -40,7 +40,7 @@ public struct MetadataStore: Sendable {
     public func updatePersisting(_ change: (inout AppMetadata) -> Void) throws {
         Self.lock.lock()
         defer { Self.lock.unlock() }
-        let previous = load()
+        let previous = try loadChecked()
         var metadata = previous
         change(&metadata)
         for key in metadata.pullRequestAutomation.keys {
@@ -53,12 +53,17 @@ public struct MetadataStore: Sendable {
 
     let file: String
 
-    func load(read: () -> AppMetadata) -> AppMetadata {
+    /// Restores private state before migration and leaves unreadable files available for repair.
+    func loadChecked() throws -> AppMetadata {
+        try load(read: loadFromDisk)
+    }
+
+    func load(read: () throws -> AppMetadata) rethrows -> AppMetadata {
         if let remembered = Self.cached.withLock({ $0[file] }) {
             return remembered
         }
 
-        let loaded = read()
+        let loaded = try read()
         return Self.cached.withLock { cache in
             // Another first load may have landed while this one read
             // the file; the copy already there is at least as new.
@@ -80,14 +85,17 @@ public struct MetadataStore: Sendable {
     /// same file.
     private static let cached: Mutex<[String: AppMetadata]> = .init([:])
 
-    private func loadFromDisk() -> AppMetadata {
-        guard let data = FileManager.default.contents(atPath: file) else {
+    private func loadFromDisk() throws -> AppMetadata {
+        do {
+            let data = try Data(contentsOf: URL(filePath: file))
+            let decoder = JSONDecoder()
+            decoder.dateDecodingStrategy = .iso8601
+            return try decoder.decode(AppMetadata.self, from: data)
+        } catch CocoaError.fileReadNoSuchFile {
             return AppMetadata()
+        } catch {
+            throw SessionServiceError("Cannot read " + file + ": " + error.localizedDescription)
         }
-
-        let decoder = JSONDecoder()
-        decoder.dateDecodingStrategy = .iso8601
-        return (try? decoder.decode(AppMetadata.self, from: data)) ?? AppMetadata()
     }
 
     /// Caps, remembers and persists one metadata value, under the

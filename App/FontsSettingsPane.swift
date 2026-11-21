@@ -111,7 +111,11 @@ private struct FontSettingsSection: View {
             }
             LabeledContent("Size") {
                 HStack {
-                    Stepper(String(Int(sizeBinding.wrappedValue)) + " pt", value: sizeBinding, in: Self.sizeRange)
+                    Stepper(
+                        String(Int(sizeBinding.wrappedValue)) + " pt",
+                        value: sizeBinding,
+                        in: AppSettings.fontSizeRange,
+                    )
                     Button("Reset") {
                         fontName = defaultName
                         fontSize = defaultSize
@@ -128,7 +132,6 @@ private struct FontSettingsSection: View {
 
     // MARK: Private
 
-    private static let sizeRange: ClosedRange<Double> = 9 ... 32
     private static let installedFamilies = NSFontManager.shared.availableFontFamilies.sorted()
     private static let monospaceFamilies = installedFamilies.filter { family in
         NSFont(name: family, size: CodeStyle.defaultPointSize)?.isFixedPitch == true

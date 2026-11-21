@@ -297,7 +297,7 @@ public extension SessionService {
         // stamp: stamping the moment in changed every active row on
         // every poll, and an unchanged row is what a tick may skip.
         let lastActivity = max(known?.committedAt ?? 0, Int(lastEvent.timeIntervalSince1970))
-        return WorktreeItem(
+        return await WorktreeItem(
             worktree: worktree,
             session: session,
             isDirty: local.isDirty,
@@ -308,6 +308,7 @@ public extension SessionService {
             behindUpstream: known?.behindUpstream,
             lastActivityAt: lastActivity,
             revision: (known?.revision ?? "") + "\n" + (local.revision ?? ""),
+            onlyPublishedChanges: git.onlyPublishedChanges(in: worktree, facts: known, base: baseRef),
         )
     }
 
@@ -324,15 +325,15 @@ public extension SessionService {
         return pane.map { pane in
             let agent = agentKind(of: pane.sessionName)
             var lastActivity = [reading.activity[pane.sessionName], pane.stateChangedAt].compactMap(\.self).max()
+            var transcriptPath: String?
             if let agent {
                 let resumeID = reading.metadata.resumeIDs[pane.sessionName]
-                if let modifiedAt = sessionsInDirectories(of: worktree.path, liveSession: nil)
-                    .filter({ $0.agent == agent && (resumeID == nil || $0.resumeID == resumeID) })
-                    .map(\.modifiedAt)
-                    .max()
-                {
+                let transcripts = sessionsInDirectories(of: worktree.path, liveSession: nil)
+                    .filter { $0.agent == agent }
+                transcriptPath = transcripts.first?.path
+                if let newest = transcripts.first(where: { resumeID == nil || $0.resumeID == resumeID }) {
                     lastActivity = max(
-                        lastActivity ?? .distantPast, Date(timeIntervalSince1970: TimeInterval(modifiedAt)),
+                        lastActivity ?? .distantPast, Date(timeIntervalSince1970: TimeInterval(newest.modifiedAt)),
                     )
                 }
             }
@@ -343,6 +344,7 @@ public extension SessionService {
                 paneID: pane.paneID,
                 activity: pane.activity,
                 version: reading.metadata.agentVersions[pane.sessionName],
+                transcriptPath: transcriptPath,
                 lastActivityAt: lastActivity,
             )
         }

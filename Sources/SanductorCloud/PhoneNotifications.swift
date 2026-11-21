@@ -1,9 +1,6 @@
 import CloudKit
 import CryptoKit
 import Foundation
-#if os(macOS)
-    import Security
-#endif
 
 // MARK: - PhoneNotificationKind
 
@@ -61,17 +58,11 @@ public struct PhoneNotifications: Sendable {
     /// the Mac reads its own signature first; the iPhone target always
     /// carries it.
     public init?(bundleIdentifier: String? = Bundle.main.bundleIdentifier) {
-        guard let bundleIdentifier else {
+        guard let entitled = SanductorContainer(bundleIdentifier: bundleIdentifier) else {
             return nil
         }
 
-        containerIdentifier = "iCloud." + bundleIdentifier
-        #if os(macOS)
-            guard Self.isEntitled(to: containerIdentifier) else {
-                return nil
-            }
-
-        #endif
+        cloud = entitled
     }
 
     // MARK: Public
@@ -85,13 +76,13 @@ public struct PhoneNotifications: Sendable {
     /// Whether an iCloud account is signed in, so Settings can say
     /// why nothing would arrive.
     public func accountIsAvailable() async -> Bool {
-        await (try? container.accountStatus()) == .available
+        await (try? cloud.container.accountStatus()) == .available
     }
 
     /// The worktree an alert's record names, read from iCloud rather
     /// than the alert, whose copy of a long path may be cut short.
     public func target(of recordID: CKRecord.ID) async throws -> PhoneNotificationTarget? {
-        let record = try await container.privateCloudDatabase.record(for: recordID)
+        let record = try await cloud.container.privateCloudDatabase.record(for: recordID)
         guard let path = record["path"] as? String, let session = record["session"] as? String else {
             return nil
         }
@@ -114,7 +105,7 @@ public struct PhoneNotifications: Sendable {
         record["body"] = body
         record["path"] = target.path
         record["session"] = target.session
-        let (saved, _) = try await container.privateCloudDatabase.modifyRecords(
+        let (saved, _) = try await cloud.container.privateCloudDatabase.modifyRecords(
             saving: [record], deleting: [], savePolicy: .allKeys,
         )
         for result in saved.values {
@@ -125,7 +116,7 @@ public struct PhoneNotifications: Sendable {
     /// Keeps exactly the wanted kinds' subscriptions. Wanted ones are
     /// saved every time, so a changed alert format replaces the old.
     public func subscribe(to kinds: Set<PhoneNotificationKind>) async throws {
-        let database = container.privateCloudDatabase
+        let database = cloud.container.privateCloudDatabase
         let existing = try await Set(database.allSubscriptions().map(\.subscriptionID))
         let unwanted = PhoneNotificationKind.allCases
             .filter { kinds.contains($0) == false }
@@ -160,11 +151,7 @@ public struct PhoneNotifications: Sendable {
 
     // MARK: Private
 
-    private let containerIdentifier: String
-
-    private var container: CKContainer {
-        CKContainer(identifier: containerIdentifier)
-    }
+    private let cloud: SanductorContainer
 
     private static func subscription(_ kind: PhoneNotificationKind) -> CKQuerySubscription {
         let subscription = CKQuerySubscription(
@@ -184,17 +171,4 @@ public struct PhoneNotifications: Sendable {
         subscription.notificationInfo = information
         return subscription
     }
-
-    #if os(macOS)
-        private static func isEntitled(to container: String) -> Bool {
-            guard let task = SecTaskCreateFromSelf(nil) else {
-                return false
-            }
-
-            let value = SecTaskCopyValueForEntitlement(
-                task, "com.apple.developer.icloud-container-identifiers" as CFString, nil,
-            )
-            return (value as? [String])?.contains(container) == true
-        }
-    #endif
 }

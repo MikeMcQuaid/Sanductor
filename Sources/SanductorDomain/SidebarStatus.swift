@@ -1,18 +1,21 @@
+import Foundation
+
 // MARK: - SidebarStatus
 
 /// Shared sidebar groups, in their display priority.
 public enum SidebarStatus: String, CaseIterable, Codable, Sendable {
     case launchFailed = "Launch failed"
     case needsInput = "Needs input"
-    case working = "Working"
-    case readyToMerge = "Ready to merge"
-    case done = "Done"
+    case needsPush = "Needs push"
     case ciFailing = "CI failing"
     case changesRequested = "Changes requested"
     case unaddressedComments = "Unaddressed comments"
+    case readyToMerge = "Ready to merge"
+    case working = "Working"
     case waitingForCI = "Waiting for CI"
     case waitingForReview = "Waiting for review"
     case queued = "Queued"
+    case done = "Done"
     case draft = "Draft"
     case open = "Open"
     case merged = "Merged"
@@ -44,6 +47,8 @@ public enum SidebarStatus: String, CaseIterable, Codable, Sendable {
         launchFailed: Bool = false,
         blocked: Bool = false,
         reviewThreadsKnown: Bool = false,
+        hasUnpushedCommits: Bool = false,
+        pendingPushAt: Date? = nil,
     ) -> Self {
         if isHostDirectory {
             return .hostDirectory
@@ -54,30 +59,39 @@ public enum SidebarStatus: String, CaseIterable, Codable, Sendable {
         if blocked {
             return .blocked
         }
-        if let session, session.precedes(pullRequest) {
-            guard session.status == .running else {
-                return .exited
+        let next: Self =
+            if let session, session.precedes(pullRequest, pendingPushAt: pendingPushAt) {
+                agentStatus(session, inactiveStatus: inactiveStatus)
+            } else if let pullRequest {
+                pullRequestStatus(pullRequest, reviewThreadsKnown: reviewThreadsKnown)
+            } else {
+                pendingPushAt == nil ? inactiveStatus : .waitingForCI
             }
-
-            return switch session.sidebarActivity {
-            case .blocked:
-                .needsInput
-
-            case .working:
-                .working
-
-            case .done:
-                .done
-
-            case .idle,
-                 nil:
-                session.agent == nil ? inactiveStatus : .idleAgent
-            }
-        }
-        return pullRequest.map { pullRequestStatus($0, reviewThreadsKnown: reviewThreadsKnown) } ?? inactiveStatus
+        return hasUnpushedCommits && next != .working && next != .needsInput ? .needsPush : next
     }
 
     // MARK: Private
+
+    private static func agentStatus(_ session: AgentSession, inactiveStatus: Self) -> Self {
+        guard session.status == .running else {
+            return .exited
+        }
+
+        return switch session.sidebarActivity {
+        case .blocked:
+            .needsInput
+
+        case .working:
+            .working
+
+        case .done:
+            .done
+
+        case .idle,
+             nil:
+            session.agent == nil ? inactiveStatus : .idleAgent
+        }
+    }
 
     private static func pullRequestStatus(_ pullRequest: PullRequestSummary, reviewThreadsKnown: Bool) -> Self {
         switch pullRequest.state {
@@ -89,6 +103,9 @@ public enum SidebarStatus: String, CaseIterable, Codable, Sendable {
 
         default:
             break
+        }
+        if pullRequest.pendingPushAt != nil {
+            return .waitingForCI
         }
         if pullRequest.isQueued {
             return .queued
@@ -109,16 +126,18 @@ public enum SidebarStatus: String, CaseIterable, Codable, Sendable {
     }
 
     private static func reviewStatus(_ pullRequest: PullRequestSummary, reviewThreadsKnown: Bool) -> Self {
+        if pullRequest.checks == "PENDING" {
+            return .waitingForCI
+        }
+        if pullRequest.reviewDecision == "REVIEW_REQUIRED" || pullRequest.awaitsCopilotReview
+            || pullRequest.requestedReviewers.isEmpty == false
+        {
+            return .waitingForReview
+        }
         if reviewThreadsKnown, pullRequest.checks == "SUCCESS", pullRequest.reviewDecision == "APPROVED",
            pullRequest.mergeable == "MERGEABLE"
         {
             return .readyToMerge
-        }
-        if pullRequest.checks == "PENDING" {
-            return .waitingForCI
-        }
-        if pullRequest.reviewDecision == "REVIEW_REQUIRED" || pullRequest.awaitsCopilotReview {
-            return .waitingForReview
         }
         return .open
     }

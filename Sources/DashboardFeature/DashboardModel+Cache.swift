@@ -132,6 +132,7 @@ extension DashboardModel {
                     behindUpstream: worktree.behindUpstream,
                     lastActivityAt: worktree.lastActivityAt,
                     revision: worktree.revision,
+                    onlyPublishedChanges: worktree.onlyPublishedChanges ?? false,
                 )
             }
             return RepositoryGroup(
@@ -191,6 +192,7 @@ extension DashboardModel {
                 worktree.behindUpstream = item.behindUpstream
                 worktree.lastActivityAt = item.lastActivityAt
                 worktree.revision = item.revision
+                worktree.onlyPublishedChanges = item.onlyPublishedChanges
                 worktree.hasSession = item.session != nil
                 if let stack = derivedStacks[item.worktree.path] {
                     worktree.stackBase = stack.base
@@ -216,12 +218,17 @@ extension DashboardModel {
                 owner: group.repository.owner,
                 worktrees: items.map(\.worktree.path),
                 entries: items.map { item in
-                    SidebarEntry(
+                    let state = sidebarState(for: item)
+                    return SidebarEntry(
                         target: SidebarTarget(item.worktree),
-                        status: sidebarStatus(for: item),
+                        status: state.status,
                         activity: item.session?.activity,
                         block: block(for: item),
                         pullRequest: pullRequest(for: item).map(SidebarPullRequest.init),
+                        lastEventAt: state.date,
+                        hasUnpushedCommits: state.needsPush,
+                        paneID: item.session?.paneID,
+                        transcriptPath: item.session?.transcriptPath,
                     )
                 },
                 lastActivityAt: SessionService.repositoryActivity(of: group),

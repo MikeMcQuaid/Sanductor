@@ -96,6 +96,7 @@ public struct PullRequestSummary: ReferencedItem, Hashable, Sendable, Codable {
         closedAt = try container.decodeIfPresent(Date.self, forKey: .closedAt)
         updatedAt = try container.decodeIfPresent(Date.self, forKey: .updatedAt)
         stateChangedAt = try container.decodeIfPresent(Date.self, forKey: .stateChangedAt) ?? closedAt
+        pendingPushAt = try container.decodeIfPresent(Date.self, forKey: .pendingPushAt)
         headCommit = try container.decodeIfPresent(String.self, forKey: .headCommit)
         awaitsCopilotReview = try container.decodeIfPresent(Bool.self, forKey: .awaitsCopilotReview) ?? false
         requestedReviewers = try container.decodeIfPresent(Set<String>.self, forKey: .requestedReviewers) ?? []
@@ -170,12 +171,14 @@ public struct PullRequestSummary: ReferencedItem, Hashable, Sendable, Codable {
     /// summaries cached by earlier releases still decode.
     public let closedAt: Date?
 
-    /// Invalidates the state-event lookup, without making comments
-    /// or reviews themselves compete for the sidebar icon.
+    /// When GitHub last updated the pull request.
     public let updatedAt: Date?
 
-    /// The last PR state transition, excluding comments, reviews and CI.
+    /// The latest known lifecycle event, submitted review or local push.
     public var stateChangedAt: Date?
+
+    /// The time of a confirmed push whose new head GitHub has yet to report.
+    public private(set) var pendingPushAt: Date?
 
     /// The commit GitHub last reported as the head, which is how a
     /// listing fetched after a push is told from one fetched before
@@ -217,6 +220,21 @@ public struct PullRequestSummary: ReferencedItem, Hashable, Sendable, Codable {
     // swiftlint:enable discouraged_optional_collection
 
     public let optionalFailures: Int
+
+    /// A refresh has no clock of its own. CI can finish without GitHub updating the PR.
+    public var lastEventAt: Date? {
+        guard state == "OPEN" else {
+            return closedAt ?? stateChangedAt
+        }
+
+        let details = checkDetails ?? []
+        let required = details.contains { $0.requirement == .required }
+        let latestCheck = details.lazy
+            .filter { required == false || $0.requirement == .required }
+            .compactMap { $0.completedAt ?? $0.startedAt }
+            .max()
+        return [updatedAt, stateChangedAt, pendingPushAt, latestCheck].compactMap(\.self).max()
+    }
 
     /// Whether the checks rollup is red: a check the branch requires
     /// has concluded failing, even while the rest still runs. Pending
@@ -298,7 +316,7 @@ public struct PullRequestSummary: ReferencedItem, Hashable, Sendable, Codable {
             stackStanding: stackStanding,
             checkDetails: checkDetails,
         )
-        edited.unresolvedComments = unresolvedComments
+        edited.pendingPushAt = pendingPushAt
         return edited
     }
 
@@ -306,7 +324,7 @@ public struct PullRequestSummary: ReferencedItem, Hashable, Sendable, Codable {
     /// run the push starts has not reported yet, and no failing check
     /// to go to, since the one that failed ran on commits that are
     /// gone. Everything else stands until GitHub answers.
-    public func awaitingChecks() -> Self {
+    public func awaitingChecks(at push: Date = Date()) -> Self {
         var pending = Self(
             number: number,
             title: title,
@@ -336,7 +354,7 @@ public struct PullRequestSummary: ReferencedItem, Hashable, Sendable, Codable {
             headRepository: headRepository,
             stackStanding: stackStanding,
         )
-        pending.unresolvedComments = unresolvedComments
+        pending.pendingPushAt = state == "OPEN" ? push : nil
         return pending
     }
 }

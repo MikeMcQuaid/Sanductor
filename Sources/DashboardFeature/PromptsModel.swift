@@ -1,5 +1,6 @@
 import Foundation
 import Observation
+import SanductorCloud
 import SanductorData
 import SanductorDomain
 import TerminalUI
@@ -26,6 +27,8 @@ public final class PromptsModel {
 
     /// The in-memory library shared by Settings and prompt menus.
     public private(set) var prompts: [SavedPrompt]
+    /// The Mac app’s file for user-edited prompt text.
+    public var portableSettings: PortableSettings?
     /// The schedule whose agent is currently being launched.
     public private(set) var runningID: UUID?
     /// The last persistence failure, also preventing unrecorded launches.
@@ -57,12 +60,18 @@ public final class PromptsModel {
         return persist { prompts in
             prompts.removeAll { $0.id == prompt.id }
             prompts.append(prompt)
+        } portable: {
+            try self.portableSettings?.savePrompt(prompt)
         }
     }
 
     /// Removes future runs while preserving existing sessions.
     public func delete(_ prompt: SavedPrompt) {
-        _ = persist { $0.removeAll { $0.id == prompt.id } }
+        _ = persist { prompts in
+            prompts.removeAll { $0.id == prompt.id }
+        } portable: {
+            try self.portableSettings?.deletePrompt(id: prompt.id)
+        }
     }
 
     /// Runs each overdue schedule once. Claiming before awaiting also
@@ -118,9 +127,24 @@ public final class PromptsModel {
 
     // MARK: Internal
 
+    var cloudStatus = "Private settings are saved on this Mac."
+    let cloud: PrivateSettingsCloud? = PrivateSettingsCloud()
+    @ObservationIgnored var cloudSyncRequested = false
+    @ObservationIgnored var cloudTask: Task<Void, Never>?
+
     var now: () -> Date = Date.init
     var workMode: () -> WorkMode = { AppSettings.workMode }
     var launch: (SavedPrompt, Date) async throws -> String
+
+    let store: MetadataStore
+
+    func reloadPrompts() {
+        let saved = store.load().savedPrompts
+        if prompts != saved {
+            prompts = saved
+            armTimer()
+        }
+    }
 
     func availablePrompts(repositoryPath: String?) -> [SavedPrompt] {
         prompts.filter { $0.isValid && ($0.schedule == nil || $0.repositoryPath == repositoryPath) }
@@ -144,7 +168,6 @@ public final class PromptsModel {
 
     private static let saveAttempts = 2
 
-    private let store: MetadataStore
     private var timer: Timer?
 
     private func run(_ prompt: SavedPrompt, due: Date, advancesSchedule: Bool) async {
@@ -188,11 +211,18 @@ public final class PromptsModel {
         UtilityTabTarget.requestSidebarRefresh()
     }
 
-    private func persist(_ change: (inout [SavedPrompt]) -> Void) -> Bool {
+    private func persist(_ change: (inout [SavedPrompt]) -> Void, portable: (() throws -> Void)? = nil) -> Bool {
         var firstFailure: String?
         for _ in 0 ..< Self.saveAttempts {
             do {
+                let previous = store.load().savedPrompts
                 try store.updatePersisting { change(&$0.savedPrompts) }
+                do {
+                    try portable?()
+                } catch {
+                    try store.updatePersisting { $0.savedPrompts = previous }
+                    throw error
+                }
                 prompts = store.load().savedPrompts
                 error = nil
                 armTimer()

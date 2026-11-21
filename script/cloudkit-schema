@@ -1,6 +1,6 @@
 #!/bin/bash
-# Import CloudKit/Schema.ckdb into the iPhone alerts container's
-# Development environment, validating it first. Production only changes
+# Import CloudKit/Schema.ckdb into the container's Development
+# environment, validating it first. Production only changes
 # through the CloudKit Console's Deploy Schema Changes. Needs the
 # management token `xcrun cktool save-token --type management` keeps in
 # the host's keychain, so never runs in the sandbox.

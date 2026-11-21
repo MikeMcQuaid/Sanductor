@@ -11,6 +11,7 @@ struct WorktreeRowView: View {
     // MARK: Internal
 
     let item: WorktreeItem
+    let status: SidebarStatus
     let pullRequest: PullRequestSummary?
     /// Where this branch sits in its stack, how tall the stack is,
     /// and what it is built on.
@@ -189,6 +190,10 @@ struct WorktreeRowView: View {
                 .hoverHelp("The agent did not start: " + failure.message)
         } else if let block {
             Octicon("hand.raised.fill", colour: .orange).hoverHelp("Blocked: " + block.dependency.label)
+        } else if status == .needsPush {
+            Octicon("arrow.up.circle", colour: .orange).hoverHelp("Unpushed commits")
+        } else if status == .waitingForCI, pullRequest == nil {
+            Octicon("clock", colour: .secondary).hoverHelp("Waiting for CI after push")
         } else if let session = item.session, session.precedes(pullRequest) {
             SessionStatusIcon(status: session.status, activity: session.sidebarActivity)
                 .font(nameStyle.small)

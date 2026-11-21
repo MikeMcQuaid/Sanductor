@@ -8,6 +8,13 @@ import SanductorDomain
 public enum AppSettings {
     // MARK: Public
 
+    /// Point sizes accepted by the font picker.
+    public static let fontSizeRange: ClosedRange<Double> = 9 ... 32
+    /// Seconds between visible dashboard refreshes.
+    public static let pollRange = 2 ... 60
+    /// Seconds between stack refreshes.
+    public static let stackRange: ClosedRange<Double> = 15 ... 600
+
     /// The default reviewer; empty selects the other agent.
     public static let reviewAgentKey = "reviewAgent"
 

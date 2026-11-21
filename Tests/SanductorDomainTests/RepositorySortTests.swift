@@ -8,6 +8,7 @@ struct RepositorySortTests {
             ("blocked", .init(name: "a/blocked", statuses: [.blocked], activity: 50)),
             ("ready", .init(name: "a/ready", statuses: [.readyToMerge], activity: 0)),
             ("working10", .init(name: "a/repo10", statuses: [.blocked, .working], activity: 0)),
+            ("push", .init(name: "a/push", statuses: [.needsPush], activity: 0)),
             ("done", .init(name: "a/done", statuses: [.done], activity: 0)),
             ("working2", .init(name: "a/repo2", statuses: [.working, .worktree], activity: 0)),
             ("host", .init(name: "a/host", statuses: [.hostDirectory], activity: 0)),
@@ -15,7 +16,7 @@ struct RepositorySortTests {
             ("empty", .init(name: "a/empty", statuses: [], activity: 0)),
         ]
         #expect(RepositorySort.status.sorted(repositories) { $0.1 }.map(\.0)
-            == ["working2", "working10", "ready", "done", "host", "blocked", "default", "empty"])
+            == ["push", "ready", "working2", "working10", "done", "host", "blocked", "default", "empty"])
     }
 
     @Test

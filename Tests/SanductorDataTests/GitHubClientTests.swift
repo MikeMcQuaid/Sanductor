@@ -34,13 +34,15 @@ struct GitHubClientTests {
     func `rest pull rows decode into light summaries`() {
         let json = """
         [{"number": 7, "title": "Work", "html_url": "https://example.com/7", "head": {"ref": "work"},
-          "base": {"ref": "main"}, "state": "open", "draft": false, "user": {"login": "mike"}, "body": ""}]
+          "base": {"ref": "main"}, "state": "open", "draft": false, "user": {"login": "mike"}, "body": "",
+          "requested_teams": [{"slug": "maintainers"}]}]
         """
         let summaries = GitHubClient.summaries(fromRESTJSON: json)
         #expect(summaries.map(\.number) == [7])
         #expect(summaries.first?.headBranch == "work")
         #expect(summaries.first?.state == "OPEN")
         #expect(summaries.first?.author == "mike")
+        #expect(summaries.first?.requestedReviewers == ["maintainers"])
 
         let (headers, body) = GitHubClient.splitHeaders("HTTP/2.0 200 OK\netag: \"t\"\n\n[]")
         #expect(headers == ["HTTP/2.0 200 OK", "etag: \"t\""])

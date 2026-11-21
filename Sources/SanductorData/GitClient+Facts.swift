@@ -8,6 +8,8 @@ import SanductorDomain
 /// the default branch and from its own upstream, and when it last
 /// took a commit.
 public struct BranchFacts: Sendable {
+    // MARK: Public
+
     public let ahead: Int?
     public let behind: Int?
 
@@ -20,6 +22,10 @@ public struct BranchFacts: Sendable {
     public let behindUpstream: Int?
     public let committedAt: Int
     public var revision: String?
+
+    // MARK: Internal
+
+    var upstream: String?
 }
 
 /// The two facts a repository does not change while the app runs:
@@ -110,6 +116,7 @@ public extension GitClient {
                 behindUpstream: Self.upstreamCount("behind", upstream: upstream, track: track),
                 committedAt: Int(committed) ?? 0,
                 revision: fingerprint,
+                upstream: upstream.isEmpty ? nil : upstream,
             )
         }
         return facts

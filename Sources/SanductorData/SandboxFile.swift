@@ -56,18 +56,22 @@ enum SandboxFile {
             return
         }
 
+        try? replace(name, in: folder, with: Data(replacement.utf8), mode: 0o644)
+    }
+
+    static func replace(_ name: String, in folder: Int32, with data: Data, mode: mode_t) throws {
         let temporary = "." + name + "." + UUID().uuidString
-        let descriptor = unsafe openat(folder, temporary, O_WRONLY | O_CREAT | O_EXCL | O_NOFOLLOW, 0o644)
+        let descriptor = unsafe openat(folder, temporary, O_WRONLY | O_CREAT | O_EXCL | O_NOFOLLOW, mode)
         guard descriptor >= 0 else {
-            return
+            throw POSIXError(POSIXErrorCode(rawValue: errno) ?? .EIO)
         }
 
+        defer { _ = unsafe unlinkat(folder, temporary, 0) }
         let handle = FileHandle(fileDescriptor: descriptor, closeOnDealloc: true)
-        let written = (try? handle.write(contentsOf: Data(replacement.utf8))) != nil
-        try? handle.close()
-        guard written, unsafe renameat(folder, temporary, folder, name) == 0 else {
-            _ = unsafe unlinkat(folder, temporary, 0)
-            return
+        try handle.write(contentsOf: data)
+        try handle.close()
+        guard unsafe renameat(folder, temporary, folder, name) == 0 else {
+            throw POSIXError(POSIXErrorCode(rawValue: errno) ?? .EIO)
         }
     }
 

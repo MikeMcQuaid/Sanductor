@@ -2,6 +2,25 @@ import Foundation
 import SanductorDomain
 
 public extension RemoteHerdr {
+    /// Follow atomic replacements of the Mac's sidebar, including the first publication.
+    func followSidebar(update: @Sendable ([SidebarRepository]) async -> Void) async throws {
+        let stream = try await followFile("set -- " + Self.sidebarFile, options: "-n 1 -F")
+        defer { stream.close() }
+        try await withTaskCancellationHandler {
+            var lines = RemoteLines()
+            for try await packet in stream.output {
+                try Task.checkCancellation()
+                for line in try lines.append(packet) {
+                    if let rows = try? JSONDecoder().decode([SidebarRepository].self, from: Data(line.utf8)) {
+                        await update(rows)
+                    }
+                }
+            }
+        } onCancel: {
+            stream.close()
+        }
+    }
+
     /// Sends one idempotent metadata edit or picker request, awaiting host acknowledgement.
     func sidebarRequest(_ request: SidebarRequest) async throws -> SidebarResponse {
         let data = try JSONEncoder().encode(request)

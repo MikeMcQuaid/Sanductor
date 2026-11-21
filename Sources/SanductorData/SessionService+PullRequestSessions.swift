@@ -19,12 +19,9 @@ public extension SessionService {
         await clearQuarantine(for: agent)
         async let probed = probeVersion(of: agent)
         let detail = try await github.pullRequestDetail(repositoryPath: repository.path, number: number)
-        let prompt = GitHubClient.pullRequestPrompt(
-            number: number,
-            title: detail.title,
-            body: detail.body,
-            context: context,
-        )
+        let prompt = try await preparePrompt(context) { userText in
+            GitHubClient.pullRequestPrompt(number: number, title: detail.title, body: detail.body, context: userText)
+        }
         let branch = detail.headBranch.isEmpty ? "pr-\(number)" : detail.headBranch
         // One checkout at a time per repository, since `gh pr
         // checkout` writes the branch's config.

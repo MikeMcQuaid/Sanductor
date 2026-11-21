@@ -1,5 +1,6 @@
 import SanductorData
 import SanductorDomain
+import SanductorInterface
 import SwiftUI
 import TerminalUI
 
@@ -210,7 +211,7 @@ public struct RepositorySessionsView: View {
 
     @ViewBuilder private var log: some View {
         if let selected = model.selected {
-            TranscriptLogView(entries: model.service.transcriptEntries(for: selected))
+            TranscriptLogView(entries: model.service.transcriptEntries(for: selected)) { MarkdownText($0) }
         } else {
             ContentUnavailableView(
                 "No conversation selected",

@@ -30,6 +30,15 @@ extension PullRequestStoreTests {
 
         store.markChecksPending(repositoryPath: "/repo", branches: ["feature"])
 
+        let pending = try #require(store.cachedSummary(repositoryPath: "/repo", number: 7))
+        let done = AgentSession(
+            name: "agent",
+            agent: .codexCLI,
+            status: .running,
+            activity: .done,
+            lastActivityAt: Date().addingTimeInterval(-60),
+        )
+        #expect(SidebarStatus.status(session: done, pullRequest: pending) == .waitingForCI)
         // The row, the tab's listing and the pane's header all say
         // pending, and a pull request nothing pushed is left alone.
         #expect(store.branchSummary(repositoryPath: "/repo", branch: "feature")?.checks == "PENDING")

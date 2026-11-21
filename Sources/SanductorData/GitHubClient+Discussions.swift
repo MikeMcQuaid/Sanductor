@@ -36,20 +36,22 @@ public extension GitHubClient {
             .filter { $0.closed == false }
     }
 
-    /// Fetches the selected discussion as context for an editable task.
-    func discussionPrompt(repositoryPath: String, url: String, context: String) async throws -> String {
+    /// Fetch once and append just the context entered by the user at delivery.
+    func discussionPrompt(repositoryPath: String, url: String) async throws -> @Sendable (String) -> String {
         let result = try await gh([
             "api", "graphql", "-f",
             "query=query($url: URI!) { resource(url: $url) { ... on Discussion { title body url } } }",
             "-f", "url=" + url, "--jq", ".data.resource",
         ], in: repositoryPath)
         let discussion = try JSONDecoder().decode(DiscussionBody.self, from: Data(result.standardOutput.utf8))
-        return Self.prompt(
-            heading: "Work on discussion: " + discussion.title + "\n" + discussion.url,
-            body: discussion.body,
-            context: context,
-            closing: "Commit your work, referencing the discussion URL. Do not push.",
-        )
+        return { context in
+            Self.prompt(
+                heading: "Work on discussion: " + discussion.title + "\n" + discussion.url,
+                body: discussion.body,
+                context: context,
+                closing: "Commit your work, referencing the discussion URL. Do not push.",
+            )
+        }
     }
 }
 
