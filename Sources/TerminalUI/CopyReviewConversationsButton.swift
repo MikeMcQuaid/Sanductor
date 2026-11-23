@@ -36,9 +36,12 @@ public struct CopyReviewConversationsButton: View {
 
     // MARK: Internal
 
-    func copy(resolve: Bool, toClipboard: (String) -> Bool = { PromptClipboard.copy($0) }) async {
+    func copy(
+        resolve: Bool,
+        toClipboard: (@escaping @Sendable () -> String) async -> Bool = { await ClipboardCopy().writePrompt($0) },
+    ) async {
         let copied = open
-        guard toClipboard(feedbackStackPrefix + ReviewCopy.digest(of: copied)) else {
+        guard await toClipboard({ [feedbackStackPrefix] in feedbackStackPrefix + ReviewCopy.digest(of: copied) }) else {
             return
         }
 

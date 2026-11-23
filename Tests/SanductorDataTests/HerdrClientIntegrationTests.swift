@@ -1,5 +1,7 @@
 import Foundation
 @testable import SanductorData
+import SanductorDomain
+import Synchronization
 import Testing
 
 /// Exercises the herdr adapter against a real server on a private
@@ -71,29 +73,48 @@ struct HerdrClientIntegrationTests {
     }
 
     @Test
-    func `typed text reaches the pane's terminal`() async throws {
-        let (herdr, home) = try TestSupport.makeHerdrClient()
-        let directory = try TestSupport.temporaryDirectory("type")
-        defer { TestSupport.stopServerSync(configHome: home) }
-
-        // `command cat` sidesteps interactive aliases; the terminal
-        // is line-buffered, so the newline is what lands the line.
-        try await herdr.newSession(
-            name: "sanductor--r--type--claude",
-            directory: directory,
-            command: "command cat > typed.txt",
+    func `a slow drop pastes its staged paths before later input even when a file fails`() async throws {
+        let world = try await World.make()
+        defer { world.tearDown() }
+        let output = world.root + "/typed.txt"
+        try await world.herdr.newSession(
+            name: "sanductor--r--type--claude", directory: world.root, command: "command cat > typed.txt",
         )
-        let running = await TestSupport.poll {
-            let panes = await (try? herdr.panes()) ?? []
-            return panes.contains { $0.isFinished == false }
+        try #require(await TestSupport.poll { FileManager.default.fileExists(atPath: output) })
+        let pane = try #require(try await world.herdr.panes().first)
+        let channel = HerdrTerminalChannel(command: world.herdr.attachCommand(paneID: pane.paneID))
+        _ = try await channel.start()
+        channel.send(HerdrTerminal.resizeCommand(columns: 80, rows: 24))
+        let gate = DispatchSemaphore(value: 0)
+        let reported = Mutex(false)
+        channel.send(HerdrTerminal.inputCommand(bytes: "first: ".utf8))
+        channel.attach([
+            .image(Data([1]), named: "first.png"), .file(URL(fileURLWithPath: world.root + "/missing")),
+            .image(Data(), named: "skipped.png"),
+        ], staging: { attachment in
+            #expect(Thread.isMainThread == false)
+            if case .image = attachment {
+                try #require(gate.wait(timeout: .now() + 10) == .success)
+            }
+            return try world.service.stageDroppedFile(attachment)
+        }, onError: { _ in reported.withLock { $0 = true } })
+        channel.send(HerdrTerminal.inputCommand(bytes: "\rsecond: ".utf8))
+        channel.attach([.image(Data([2]), named: "second.png")], staging: world.service.stageDroppedFile) { error in
+            Issue.record(error)
         }
-        #expect(running)
+        channel.send(HerdrTerminal.inputCommand(bytes: "\r".utf8))
+        gate.signal()
 
-        try await herdr.typeText("ping\n", sessionName: "sanductor--r--type--claude")
         let delivered = await TestSupport.poll {
-            let typed = try? String(contentsOfFile: directory + "/typed.txt", encoding: .utf8)
-            return typed?.contains("ping") ?? false
+            (try? String(contentsOfFile: output, encoding: .utf8))?.hasSuffix("second.png \n") == true
+                && reported.withLock { $0 }
         }
-        #expect(delivered)
+        await channel.stop()
+        try #require(delivered)
+        let staged = world.service.store.load().temporaryPromptFiles.keys
+        #expect(staged.count == 2)
+        let first = try #require(staged.first { $0.hasSuffix("-first.png") })
+        let second = try #require(staged.first { $0.hasSuffix("-second.png") })
+        #expect(try String(contentsOfFile: output, encoding: .utf8) == "first: \(first) \nsecond: \(second) \n")
     }
 }

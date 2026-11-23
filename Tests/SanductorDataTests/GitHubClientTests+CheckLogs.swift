@@ -3,8 +3,10 @@ import SanductorDomain
 import Testing
 
 extension GitHubClientTests {
-    @Test(arguments: ["success", "failure", "cancelled", ""])
-    func `only successful maintenance steps are omitted from check logs`(conclusion: String) async throws {
+    @Test(arguments: ["success", "failure", "cancelled", ""], [false, true])
+    func `successful steps are omitted according to the copy scope`(conclusion: String, failedStepsOnly: Bool)
+        async throws
+    {
         let runner = ScriptedGitHubRunner(answers: [
             "gh run view 9 --repo upstream/repo --json jobs --jq .jobs": .success(
                 #"""
@@ -44,17 +46,16 @@ extension GitHubClientTests {
                 requirement: .required,
                 link: "https://github.com/upstream/repo/actions/runs/9/job/11",
             ),
+            failedStepsOnly: failedStepsOnly,
         )
+        let text = log.plainText(showTimestamps: false)
+        #expect(text.contains("test output") == (failedStepsOnly == false || conclusion != "failure"))
         for noise in ["runner setup noise", "checkout cleanup noise", "job completion noise"] {
-            #expect(log.contains(noise) == (conclusion != "success"))
+            #expect(text.contains(noise) == (conclusion != "success"))
         }
-        for kept in ["setup", "tests", "cleanup"] {
-            #expect(log.contains(kept + " boundary"))
-        }
-        for kept in ["test output", "Cache upload failed", "cache diagnostic context", "untimed diagnostic"] {
-            #expect(log.contains(kept))
-        }
-        #expect(CheckLogDocument(log).lines.first { $0.text == "test output" }?.depth == 0)
+        #expect(["setup boundary", "tests boundary", "cleanup boundary"].allSatisfy(text.contains))
+        #expect(["Cache upload failed", "cache diagnostic context", "untimed diagnostic"].allSatisfy(text.contains))
+        #expect(log.lines.first { $0.text == "tests boundary" }?.depth == 0)
     }
 
     @Test
@@ -69,8 +70,7 @@ extension GitHubClientTests {
             2026-11-10T13:40:24.2046313Z ##[error]No test report files were found
             """),
         ])
-        let log = try await GitHubClient(runner: runner) { true }.jobLog(repositoryPath: "/repo", jobID: 11)
-        let document = CheckLogDocument(log)
+        let document = try await GitHubClient(runner: runner) { true }.jobLog(repositoryPath: "/repo", jobID: 11)
         #expect(document.plainText(showTimestamps: false) == """
         Listing files
           git ls-files -z
@@ -79,8 +79,6 @@ extension GitHubClientTests {
         """)
         #expect(document.plainText(showTimestamps: true)
             .contains("2026-11-10T13:40:24.2030000Z unexpected separator"))
-        #expect(log.contains("\0") == false)
-        #expect(log.contains("README.md") == false)
     }
 
     @Test(arguments: [11, 99], ["", "?pr=7"])
@@ -109,6 +107,6 @@ extension GitHubClientTests {
                 link: "https://github.com/upstream/repo/actions/runs/9/job/" + String(linkedID) + query,
             ),
         )
-        #expect(log == "2026-11-10T10:00:00Z complete log\n")
+        #expect(log.plainText(showTimestamps: true) == "2026-11-10T10:00:00Z complete log\n")
     }
 }

@@ -23,7 +23,7 @@ extension GitHubClient {
     }
 
     /// Step outcomes and timings identify successful maintenance output.
-    struct RunStep: Decodable {
+    public struct RunStep: Decodable, Sendable {
         let conclusion: String?
         let name: String?
         let startedAt: String?
@@ -119,7 +119,9 @@ extension GitHubClient {
     }
 
     /// Reads a finished check's log with terminal controls and download progress omitted.
-    public func checkLog(repositoryPath: String, check: PullRequestCheck) async throws -> String {
+    public func checkLog(
+        repositoryPath: String, check: PullRequestCheck, failedStepsOnly: Bool = false,
+    ) async throws -> CheckLogDocument {
         guard check.canReadLog, let repository = GitHubRemote.fullName(ofURL: check.link) else {
             throw JobLogUnavailable()
         }
@@ -130,13 +132,19 @@ extension GitHubClient {
             jobID: job.databaseId, // swiftformat:disable:this acronyms
             repository: repository,
             steps: job.steps ?? [],
+            failedStepsOnly: failedStepsOnly,
         )
     }
 
     /// Reads one job's diagnostics independently of its workflow run's state.
+    @concurrent
     func jobLog(
-        repositoryPath: String, jobID: Int, repository: String = "{owner}/{repo}", steps: [RunStep] = [],
-    ) async throws -> String {
+        repositoryPath: String,
+        jobID: Int,
+        repository: String = "{owner}/{repo}",
+        steps: [RunStep] = [],
+        failedStepsOnly: Bool = false,
+    ) async throws -> CheckLogDocument {
         let raw: ProcessResult
         do {
             raw = try await gh(
@@ -150,7 +158,7 @@ extension GitHubClient {
             throw JobLogUnavailable()
         }
 
-        return CheckLog.lines(raw.standardOutput, steps: steps).joined(separator: "\n")
+        return CheckLogDocument(raw.standardOutput, steps: steps, failedStepsOnly: failedStepsOnly)
     }
 
     /// The run's own address, which every one of its jobs hangs
@@ -247,6 +255,6 @@ extension GitHubClient {
         // The REST log has no job or step columns, so the job is
         // named once in front of its tail.
         return "[job " + (job.name ?? jobID) + "]\n"
-            + raw.trimmingCharacters(in: .newlines)
+            + raw.plainText(showTimestamps: true).trimmingCharacters(in: .newlines)
     }
 }

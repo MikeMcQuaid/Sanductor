@@ -263,18 +263,6 @@ public extension HerdrClient {
         return await readPane(paneID: row.paneID, lines: lines)
     }
 
-    /// Types literal text into a session's terminal.
-    func typeText(_ text: String, sessionName: String) async throws {
-        guard let row = try await snapshotRows().first(where: { $0.sessionName == sessionName }) else {
-            throw CommandError(
-                command: "herdr pane send-text",
-                result: ProcessResult(status: 1, standardOutput: "", standardError: "No session named " + sessionName),
-            )
-        }
-
-        try await herdr(["pane", "send-text", row.paneID, text])
-    }
-
     /// The pane's shell process id, the root of everything the
     /// session runs, for resource usage.
     func shellPID(paneID: String) async -> Int? {

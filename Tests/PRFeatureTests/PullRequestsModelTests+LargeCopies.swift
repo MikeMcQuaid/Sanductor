@@ -1,6 +1,7 @@
 import AppKit
 @testable import PRFeature
 import SanductorData
+import TerminalUI
 import Testing
 
 extension PullRequestsModelTests {
@@ -20,10 +21,10 @@ extension PullRequestsModelTests {
         let summary = summary(1, head: "feature", failingCheckLinks: ["https://github.com/o/r/actions/runs/1"])
         let pasteboard = NSPasteboard.withUniqueName()
         defer { pasteboard.releaseGlobally() }
-        #expect(await model.copyFailingLogs(summary, pasteboard: pasteboard))
+        #expect(await model.copyFailingLogs(summary, to: ClipboardCopy(to: pasteboard, clearing: true)))
         let first = try #require(pasteboard.string(forType: .string))
         #expect(first.utf8.count < PromptPayload.inlineByteLimit)
-        #expect(await model.copyFailingLogs(summary, pasteboard: pasteboard))
+        #expect(await model.copyFailingLogs(summary, to: ClipboardCopy(to: pasteboard, clearing: true)))
         #expect(pasteboard.string(forType: .string) != first)
         #expect(store.load().temporaryPromptFiles.count == 2)
         for file in store.load().temporaryPromptFiles.keys {

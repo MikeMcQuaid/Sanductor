@@ -3,6 +3,7 @@ import SanductorDomain
 
 extension GitHubClient {
     /// Available diagnostics for the selected failed jobs.
+    @concurrent
     func autofixPrompt(
         _ candidate: AutofixCandidate,
         summary: PullRequestSummary,
@@ -34,7 +35,7 @@ extension GitHubClient {
             }
 
             sections.append("CI · " + failure.name + "\n[job " + failure.name + "]\n"
-                + CheckLogDocument(log).plainText(showTimestamps: false).trimmingCharacters(in: .newlines))
+                + log.plainText(showTimestamps: false).trimmingCharacters(in: .newlines))
             if isPublic {
                 sections.append(failure.link)
             }

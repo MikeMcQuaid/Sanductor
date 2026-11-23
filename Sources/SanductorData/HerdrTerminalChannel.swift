@@ -79,9 +79,27 @@ public actor HerdrTerminalChannel {
 
     /// A serial interactive queue preserves order without blocking UI events on a full pipe.
     public nonisolated func send(_ line: String) {
-        let data = Data((line + "\n").utf8)
-        writes.async { [input] in
-            try? input.fileHandleForWriting.write(contentsOf: data)
+        writes.async { try? self.write(line) }
+    }
+
+    /// Reserve this drop's place among keystrokes before staging the first file.
+    @preconcurrency
+    public nonisolated func attach(
+        _ attachments: [PromptAttachment],
+        staging: @escaping @Sendable (PromptAttachment) throws -> String,
+        onError: @escaping @MainActor @Sendable (any Error) -> Void,
+    ) {
+        writes.async {
+            do {
+                for attachment in attachments {
+                    let path = try staging(attachment)
+                    try self.write(HerdrTerminal.inputCommand(bytes: HerdrTerminal.pasteBytes(path + " ")))
+                }
+            } catch {
+                Task { @MainActor in
+                    onError(error)
+                }
+            }
         }
     }
 
@@ -138,5 +156,9 @@ public actor HerdrTerminalChannel {
             events.append(.frame(bytes: frames))
         }
         return events
+    }
+
+    private nonisolated func write(_ line: String) throws {
+        try input.fileHandleForWriting.write(contentsOf: Data((line + "\n").utf8))
     }
 }

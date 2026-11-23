@@ -106,14 +106,6 @@ extension RootView {
             // hidden, so going back to it attaches nothing.
             ZStack {
                 agentTerminal(for: session, in: item.worktree.path, isActive: isOnScreen && showsReader == false)
-                    // Dropped files stage into the shared workspace
-                    // (the sandbox cannot read host paths) and their
-                    // staged paths type into the agent.
-                    // The drop-session overload answers nothing, so
-                    // the staging's own verdict is let go here.
-                    .dropDestination(for: URL.self) { urls, _ in
-                        _ = dropFiles(urls, into: session.name)
-                    }
                     .allowsHitTesting(showsReader == false)
                 if showsReader {
                     SessionReaderView(

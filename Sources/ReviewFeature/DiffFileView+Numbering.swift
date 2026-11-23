@@ -32,7 +32,7 @@ extension DiffFileView {
     /// stands a space in for a blank line so its change colour has
     /// something to paint, and copying that would put a space where
     /// the file has nothing at all.
-    static func copyText(of hunk: DiffHunk) -> String {
+    nonisolated static func copyText(of hunk: DiffHunk) -> String {
         hunk.lines.map(\.content).joined(separator: "\n")
     }
 }

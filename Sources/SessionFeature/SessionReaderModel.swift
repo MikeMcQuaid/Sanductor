@@ -29,6 +29,7 @@ final class SessionReaderModel {
 
     // MARK: Internal
 
+    private(set) var omitsEarlierRecords = false
     private(set) var entries: [TranscriptEntry] = []
 
     /// False until the first read lands, so the pane shows loading
@@ -63,11 +64,12 @@ final class SessionReaderModel {
         tail = following
         for await _ in following.changes() {
             let latest = await following.entries()
+            let omitted = await following.omitsEarlierRecords
             guard Task.isCancelled == false else {
                 return
             }
 
-            show(latest)
+            show(latest, omitted: omitted)
         }
     }
 
@@ -79,7 +81,10 @@ final class SessionReaderModel {
 
     /// Publishes only what changed: a write that adds no entry (a
     /// tool result, the agent's bookkeeping) must redraw nothing.
-    private func show(_ latest: [TranscriptEntry]) {
+    private func show(_ latest: [TranscriptEntry], omitted: Bool = false) {
+        if omitsEarlierRecords != omitted {
+            omitsEarlierRecords = omitted
+        }
         if latest != entries {
             entries = latest
         }

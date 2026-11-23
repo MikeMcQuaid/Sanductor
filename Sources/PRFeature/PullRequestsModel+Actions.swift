@@ -76,8 +76,10 @@ extension PullRequestsModel {
         let remote = copyableRemoteReviews(for: summary)
         let local = localReview(for: summary)
         let threads = (remote + (local?.review.threads ?? [])).filter { $0.isResolved == false }
-        let text = threads.isEmpty ? "" : feedbackPrefix(for: summary) + ReviewCopy.digest(of: threads)
-        guard PromptClipboard.copy(text, to: pasteboard, prepare: preparePrompt) else {
+        let prefix = feedbackPrefix(for: summary)
+        guard await ClipboardCopy(to: pasteboard).writeText({ [preparePrompt] in
+            try preparePrompt(threads.isEmpty ? "" : prefix + ReviewCopy.digest(of: threads))
+        }) else {
             return
         }
 

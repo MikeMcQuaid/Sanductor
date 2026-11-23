@@ -54,12 +54,12 @@ extension PullRequestFooterView {
         ) { modifiers in
             if modifiers.isDisjoint(with: [.command, .shift]) == false {
                 model.openFailingChecks(selected, inExternalBrowser: modifiers.contains(.command))
-            } else if await model.copyFailingLogs(selected, pasteboard: .general) == false {
-                utilityTab = UtilityTabTarget.errors
+            } else {
+                await copyLogs(for: selected, failedStepsOnly: true)
             }
         }
         .hoverHelp("Copy logs from " + String(checks.count) + " finished failing Actions checks, "
-            + "including diagnostics from long logs; unfinished checks are excluded, "
+            + "keeping failed steps and diagnostics; unfinished checks are excluded. "
             + "Right-click to include optional checks for this PR. "
             + "Cmd-click opens failing checks in your browser, Shift-click in the Browser tab")
         .contextMenu {
@@ -77,12 +77,8 @@ extension PullRequestFooterView {
                 await model.copyUnresolvedComments(selected, pasteboard: .general)
             }
             .disabled(reviewCount(for: selected) == 0)
-            Button("Failing CI logs") {
-                Task {
-                    if await model.copyFailingLogs(selected, pasteboard: .general) == false {
-                        utilityTab = UtilityTabTarget.errors
-                    }
-                }
+            BusyButton("Failing CI logs", busy: "Copying") {
+                await copyLogs(for: selected, failedStepsOnly: false)
             }
             .disabled(PullRequestsModel.copyableFailingChecks(
                 in: selected, includeOptional: model.includesOptionalLogs(for: selected),
@@ -96,6 +92,15 @@ extension PullRequestFooterView {
     /// `Push ↑9` puts its arrow: a character that looked like it did
     /// not look like it.
     static let copyIcon = "doc.on.doc"
+
+    private func copyLogs(for selected: PullRequestSummary, failedStepsOnly: Bool) async {
+        let clipboard = ClipboardCopy(clearing: true)
+        if await model.copyFailingLogs(selected, to: clipboard, failedStepsOnly: failedStepsOnly) == false,
+           clipboard.isCurrent
+        {
+            utilityTab = UtilityTabTarget.errors
+        }
+    }
 
     private func reviewCount(for summary: PullRequestSummary) -> Int {
         _ = reviewGeneration

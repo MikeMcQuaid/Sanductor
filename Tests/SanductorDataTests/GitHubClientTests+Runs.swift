@@ -124,7 +124,8 @@ extension GitHubClientTests {
             "gh api --allow-escape-sequences repos/{owner}/{repo}/actions/jobs/11/logs": .success(output),
         ])
         let log = try await GitHubClient(runner: runner) { true }.jobLog(repositoryPath: "/repo", jobID: 11)
-        #expect(log == "2026-10-17T10:00:00Z success\n" + String(repeating: "line\n", count: 400))
+        let expected = "2026-10-17T10:00:00Z success\n" + String(repeating: "line\n", count: 400)
+        #expect(log.plainText(showTimestamps: true) == expected)
     }
 
     @Test

@@ -41,7 +41,7 @@ struct AgentSessionForm: View {
                     LaunchProgressView("Preparing the agent launch…", waitingOn: "the launch to begin")
                 }
             } else {
-                form
+                form.disabled(promptEditor.isStaging)
             }
         }
         .task(id: repository?.id ?? "") { await reloadSources() }
@@ -83,7 +83,7 @@ struct AgentSessionForm: View {
     /// typing away.
     @AppStorage(Self.promptKey)
     private var prompt = ""
-    @State private var promptEditor: PromptEditorHost = .init(rootView: AnyView(EmptyView()))
+    @StateObject private var promptEditor: PromptTextView = .init()
     @AppStorage("agentModel")
     private var agentModel = ""
     @AppStorage("agentEffort")
@@ -141,7 +141,9 @@ struct AgentSessionForm: View {
     }
 
     private var startTitle: String {
-        if pickedNumbers.count > 1 {
+        if promptEditor.isStaging {
+            "Attaching…"
+        } else if pickedNumbers.count > 1 {
             "Start " + String(pickedNumbers.count) + " agents"
         } else {
             submitTitle
@@ -195,7 +197,7 @@ struct AgentSessionForm: View {
     @ViewBuilder private var sourceFields: some View {
         switch source {
         case .prompt:
-            PromptEditor(text: $prompt, view: promptEditor)
+            PromptEditor(text: $prompt, view: promptEditor, service: model.service)
                 .frame(minHeight: Self.promptHeight)
                 .border(.separator)
 
@@ -217,7 +219,7 @@ struct AgentSessionForm: View {
                 isLoadingSources: isLoadingSources,
             )
             .id(repository?.id ?? "")
-            PromptEditor(text: $prompt, view: promptEditor)
+            PromptEditor(text: $prompt, view: promptEditor, service: model.service)
                 .frame(minHeight: Self.contextHeight)
                 .border(.separator)
                 .hoverHelp("Context appended to each fetched title and body; anything typed first is kept")
@@ -284,7 +286,7 @@ struct AgentSessionForm: View {
     }
 
     private func submit() {
-        guard let repository, isStarting == false else {
+        guard let repository, isStarting == false, promptEditor.isStaging == false else {
             return
         }
         guard let text = promptEditor.capture() else {

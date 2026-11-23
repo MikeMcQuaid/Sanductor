@@ -6,7 +6,7 @@ import Testing
 extension SessionNavigationTests {
     @Test(arguments: [false, true])
     func `prompt capture ignores stale bindings and the focused neighbouring editor`(marked: Bool) async throws {
-        let input = AgentSessionForm.PromptEditorHost(rootView: AnyView(EmptyView()))
+        let input = AgentSessionForm.PromptTextView()
         let host = NSHostingView(rootView: HStack {
             AgentSessionForm.PromptEditor(text: .constant("Makes "), view: input)
             TextEditor(text: .constant("Another editor"))

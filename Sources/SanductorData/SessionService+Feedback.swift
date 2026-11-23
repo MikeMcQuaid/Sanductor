@@ -1,6 +1,39 @@
+import Foundation
 import SanductorDomain
 
 public extension SessionService {
+    /// Copies one attachment into shared storage and registers it for expiry.
+    func stageDroppedFile(_ attachment: PromptAttachment) throws -> String {
+        switch attachment {
+        case let .file(url):
+            try stageDroppedFile(named: url.lastPathComponent) { destination in
+                let source = url.resolvingSymlinksInPath()
+                guard try source.resourceValues(forKeys: [.isSymbolicLinkKey]).isSymbolicLink == false else {
+                    throw CocoaError(.fileReadNoSuchFile)
+                }
+
+                try FileManager.default.copyItem(at: source, to: destination)
+            }
+
+        case let .image(data, name):
+            try stageDroppedFile(named: name) { try data.write(to: $0, options: .withoutOverwriting) }
+        }
+    }
+
+    private func stageDroppedFile(named name: String, write: (URL) throws -> Void) throws -> String {
+        let directory = paths.sharedWorkspace + "/tmp"
+        try FileManager.default.createDirectory(atPath: directory, withIntermediateDirectories: true)
+        let destination = directory + "/drop-" + UUID().uuidString + "-" + URL(fileURLWithPath: name).lastPathComponent
+        do {
+            try write(URL(fileURLWithPath: destination))
+            try PromptPayload.track(destination, store: store, attempt: nil)
+        } catch {
+            try? FileManager.default.removeItem(atPath: destination)
+            throw error
+        }
+        return destination
+    }
+
     /// Prepares feedback for the existing agent composer without truncating it.
     func promptForPasting(_ text: String) throws -> String {
         try PromptPayload.prepare(text, paths: paths, store: store)

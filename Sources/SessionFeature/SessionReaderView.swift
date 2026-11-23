@@ -29,7 +29,9 @@ public struct SessionReaderView: View {
     public var body: some View {
         Group {
             if model.hasLoaded {
-                TranscriptLogView(entries: model.entries) { MarkdownText($0) }
+                TranscriptLogView(entries: model.entries, omitsEarlierRecords: model.omitsEarlierRecords) { text in
+                    MarkdownText(text)
+                }
             } else {
                 LaunchProgressView("Reading the conversation…", waitingOn: "the agent's transcript")
             }

@@ -1,3 +1,4 @@
+import SanductorDomain
 import SwiftTerm
 import SwiftUI
 
@@ -28,7 +29,7 @@ public struct TerminalPaneView: View {
         command: [String],
         reflowsCopies: Bool = false,
         isActive: Bool = true,
-        onPasteFiles: (([URL]) -> Bool)? = nil,
+        stageAttachment: (@Sendable (PromptAttachment) throws -> String)? = nil,
         onCopyReply: (() async -> String?)? = nil,
         onCopyAllOutput: (() async -> String?)? = nil,
         onProcessTerminated: (@MainActor () -> Void)? = nil,
@@ -37,7 +38,7 @@ public struct TerminalPaneView: View {
         transport = .control(command: command)
         self.reflowsCopies = reflowsCopies
         self.isActive = isActive
-        self.onPasteFiles = onPasteFiles
+        self.stageAttachment = stageAttachment
         self.onCopyReply = onCopyReply
         self.onCopyAllOutput = onCopyAllOutput
         self.onProcessTerminated = onProcessTerminated
@@ -58,7 +59,7 @@ public struct TerminalPaneView: View {
         transport = .shell(directory: directory, environment: environment)
         reflowsCopies = false
         self.isActive = isActive
-        onPasteFiles = nil
+        stageAttachment = nil
         onCopyReply = nil
         onCopyAllOutput = nil
         self.onProcessTerminated = onProcessTerminated
@@ -73,7 +74,7 @@ public struct TerminalPaneView: View {
                 transport: transport,
                 reflowsCopies: reflowsCopies,
                 isActive: isActive,
-                onPasteFiles: onPasteFiles,
+                stageAttachment: stageAttachment,
                 onCopyReply: onCopyReply,
                 onCopyAllOutput: onCopyAllOutput,
                 clearRequest: clearShellRequest,
@@ -107,7 +108,7 @@ public struct TerminalPaneView: View {
     private let isActive: Bool
 
     /// Where a paste of files or an image goes, for agent panes.
-    private let onPasteFiles: (([URL]) -> Bool)?
+    private let stageAttachment: (@Sendable (PromptAttachment) throws -> String)?
 
     /// Reads the newest reply's Markdown, for agent panes.
     private let onCopyReply: (() async -> String?)?
@@ -138,7 +139,7 @@ struct TerminalRepresentable: NSViewRepresentable {
     let reflowsCopies: Bool
     let isActive: Bool
 
-    let onPasteFiles: (([URL]) -> Bool)?
+    let stageAttachment: (@Sendable (PromptAttachment) throws -> String)?
     let onCopyReply: (() async -> String?)?
     let onCopyAllOutput: (() async -> String?)?
     let clearRequest: Int
@@ -168,6 +169,7 @@ struct TerminalRepresentable: NSViewRepresentable {
             view.hideScroller()
             view.dropLocalScrollback()
             view.isHerdrBacked = true
+            view.registerForDraggedTypes(AttachmentPasteboard.types)
             view.onReattach = { [weak coordinator = context.coordinator, weak view] in
                 if let view {
                     coordinator?.reattach(in: view)
@@ -185,9 +187,6 @@ struct TerminalRepresentable: NSViewRepresentable {
         // alone scroll and select natively without any modifier.
         view.font = codeStyle.appKitFont
         view.reflowsCopies = reflowsCopies
-        view.onPasteFiles = onPasteFiles
-        view.onCopyReply = onCopyReply
-        view.onCopyAllOutput = onCopyAllOutput
         context.coordinator.installBlockSelection(on: view)
         applyTheme(to: view, context: context)
         context.coordinator.startWhenSized(transport, in: view)
@@ -201,6 +200,21 @@ struct TerminalRepresentable: NSViewRepresentable {
         if view.font != codeStyle.appKitFont {
             view.font = codeStyle.appKitFont
         }
+        view.onAttach = stageAttachment.map { stage in
+            { [weak coordinator = context.coordinator] attachments in
+                guard let channel = coordinator?.channel else {
+                    ErrorLog.shared.report("Could not attach the dropped item because the terminal is disconnected.")
+                    return false
+                }
+
+                channel.attach(attachments, staging: stage) { error in
+                    ErrorLog.shared.report("Could not attach the dropped item: " + error.localizedDescription)
+                }
+                return true
+            }
+        }
+        view.onCopyReply = onCopyReply
+        view.onCopyAllOutput = onCopyAllOutput
         applyTheme(to: view, context: context)
         context.coordinator.startWhenSized(transport, in: view)
         // Hidden in AppKit's sense, not merely transparent: a pane

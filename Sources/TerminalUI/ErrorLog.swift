@@ -22,7 +22,7 @@ public final class ErrorLog {
     // MARK: Public
 
     /// One reported message.
-    public struct Entry: Identifiable, Sendable {
+    public nonisolated struct Entry: Identifiable, Sendable {
         /// The entry's position in the log.
         public let id: Int
 

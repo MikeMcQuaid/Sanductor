@@ -23,10 +23,47 @@ extension PullRequestsModelTests {
 
         let copied = await model.copyFailingLogs(
             summary(1, head: "feature", failingCheckLinks: ["https://github.com/o/r/actions/runs/123/job/1"]),
-            pasteboard: pasteboard,
+            to: ClipboardCopy(to: pasteboard, clearing: true),
         )
         #expect(copied == !fails)
         #expect(pasteboard.string(forType: .string) == (fails ? nil : "## Run 123\nfailure details"))
+    }
+
+    @Test
+    func `a copy during log fetching takes precedence`() async {
+        let pasteboard = NSPasteboard.withUniqueName()
+        defer { pasteboard.releaseGlobally() }
+        let model = makeModel()
+        model.fetchFailedRunLog = { _ in
+            pasteboard.clearContents()
+            pasteboard.setString("newer", forType: .string)
+            return "old log"
+        }
+        let copied = await model.copyFailingLogs(
+            summary(1, head: "feature", failingCheckLinks: ["https://github.com/o/r/actions/runs/123/job/1"]),
+            to: ClipboardCopy(to: pasteboard, clearing: true),
+        )
+        #expect(copied == false)
+        #expect(pasteboard.string(forType: .string) == "newer")
+    }
+
+    @Test(arguments: [false, true])
+    func `a copy during prompt preparation survives success or failure`(fails: Bool) async {
+        let pasteboard = NSPasteboard.withUniqueName()
+        defer { pasteboard.releaseGlobally() }
+        let replace: @MainActor @Sendable () -> Void = {
+            pasteboard.clearContents()
+            pasteboard.setString("newer", forType: .string)
+        }
+        let copied = await ClipboardCopy(to: pasteboard).writeText {
+            DispatchQueue.main.sync(execute: replace)
+            if fails {
+                throw CocoaError(.fileWriteNoPermission)
+            }
+            return "old log"
+        }
+        #expect(copied == false)
+        #expect(pasteboard.string(forType: .string) == "newer")
     }
 
     @Test
@@ -75,7 +112,7 @@ extension PullRequestsModelTests {
         model.fetchFailedRunLog = { _ in throw GitHubClient.RunLogsUnavailable(failedJobs: 2) }
 
         let selected = summary(1, head: "feature", failingCheckLinks: links)
-        #expect(await model.copyFailingLogs(selected, pasteboard: pasteboard) == false)
+        #expect(await model.copyFailingLogs(selected, to: ClipboardCopy(to: pasteboard, clearing: true)) == false)
         let message = ErrorLog.shared.entries.last?.message ?? ""
         #expect(message.contains("2 failed jobs"))
         // gh's own "still in progress" never reaches the pane.
@@ -95,7 +132,7 @@ extension PullRequestsModelTests {
         model.fetchFailedRunLog = { _ in throw refusal }
 
         let selected = summary(1, head: "feature", failingCheckLinks: links)
-        #expect(await model.copyFailingLogs(selected, pasteboard: pasteboard) == false)
+        #expect(await model.copyFailingLogs(selected, to: ClipboardCopy(to: pasteboard, clearing: true)) == false)
         let message = ErrorLog.shared.entries.last?.message ?? ""
         #expect(message.contains("no route to the network"))
         #expect(message.contains("yet") == false)

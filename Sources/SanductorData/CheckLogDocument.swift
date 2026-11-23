@@ -4,11 +4,11 @@ import Foundation
 public struct CheckLogDocument: Sendable {
     // MARK: Lifecycle
 
-    public init(_ log: String) {
+    public init(_ log: String, steps: [GitHubClient.RunStep] = [], failedStepsOnly: Bool = false) {
         var parsed = [Line]()
         var groups = [Int]()
-        for plain in CheckLog.lines(log) {
-            let body = CheckLog.stripped(plain)
+        for record in CheckLog.lines(log, steps: steps, failedStepsOnly: failedStepsOnly) {
+            let body = record.body
             if body == "##[endgroup]" {
                 if let start = groups.popLast() {
                     parsed[start].endIndex = parsed.count
@@ -19,9 +19,9 @@ public struct CheckLogDocument: Sendable {
             let command = ["##[command]", "[command]"].first { body.hasPrefix($0) }
             let level = Level.allCases.first { body.hasPrefix("##[" + $0.rawValue + "]") }
             parsed.append(Line(
-                timestamp: String(plain.dropLast(body.count)),
+                timestamp: String(record.timestamp),
                 text: (marker ?? command ?? level.map { "##[" + $0.rawValue + "]" })
-                    .map { String(body.dropFirst($0.count)) } ?? body,
+                    .map { String(body.dropFirst($0.count)) } ?? String(body),
                 depth: groups.count,
                 isCommand: command != nil,
                 level: level,

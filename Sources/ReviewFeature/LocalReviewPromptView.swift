@@ -22,12 +22,12 @@ struct LocalReviewPromptView: View {
                     .buttonStyle(.glass)
                     .keyboardShortcut(.cancelAction)
                 Spacer()
-                Button("Copy prompt") {
-                    if PromptClipboard.copy(model.prompt) {
+                BusyButton("Copy prompt", busy: "Copying", prominent: true) {
+                    let prompt = model.prompt
+                    if await ClipboardCopy().writePrompt({ prompt }), model.prompt == prompt {
                         dismiss()
                     }
                 }
-                .buttonStyle(.glassProminent)
                 .keyboardShortcut(.return, modifiers: .command)
                 .disabled(model.prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
             }

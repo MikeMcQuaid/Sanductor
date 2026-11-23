@@ -74,8 +74,8 @@ final class PullRequestsModel {
         fetchLabels = {
             await gate.labels(repositoryPath: repository.path)
         }
-        fetchCheckLog = { check in
-            try await github.checkLog(repositoryPath: repository.path, check: check)
+        fetchCheckLog = { check, failedStepsOnly in
+            try await github.checkLog(repositoryPath: repository.path, check: check, failedStepsOnly: failedStepsOnly)
         }
         fetchFailedRunLog = { runID in
             try await github.failedRunLog(repositoryPath: repository.path, runID: runID)
@@ -199,7 +199,7 @@ final class PullRequestsModel {
     /// Shares pull request reads and refresh timing across panes.
     let pullRequests: PullRequestStore
     let store: MetadataStore
-    var preparePrompt: (String) throws -> String
+    var preparePrompt: @Sendable (String) throws -> String
 
     /// The branch actually checked out in the worktree, refreshed on
     /// reload; agents sometimes switch branches inside a worktree.
@@ -288,8 +288,8 @@ final class PullRequestsModel {
     var fetchLabels: () async -> [String] = { [] }
 
     /// Check logs and reruns.
-    var fetchCheckLog: (PullRequestCheck) async throws -> String = { _ in "" }
-    var fetchFailedRunLog: (Int) async throws -> String = { _ in "" }
+    var fetchCheckLog: @MainActor (PullRequestCheck, Bool) async throws -> CheckLogDocument
+    var fetchFailedRunLog: @MainActor (Int) async throws -> String = { _ in "" }
     var performCheckRerun: (PullRequestCheck, Bool) async throws -> Void
 
     /// Adds and removes labels on a pull request.
