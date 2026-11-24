@@ -60,6 +60,8 @@ extension PullRequestsModelTests {
         let pasteboard = NSPasteboard.withUniqueName()
         defer { pasteboard.releaseGlobally() }
         let model = makeModel()
+        let branch = "rest-fallback"
+        model.currentBranch = branch
         let selected = resolutionSummary(head: "head")
         model.store.update { metadata in
             metadata.threadsCache[AppMetadata.threadsKey(repositoryPath: "/repo", number: 1)] = .init(threads: [
@@ -67,9 +69,8 @@ extension PullRequestsModelTests {
                 resolutionThread("valid"),
             ])
         }
-        let previous = ErrorLog.shared.entries.last?.id ?? 0
         await model.copyUnresolvedComments(selected, pasteboard: pasteboard, resolve: true)
-        let errors = ErrorLog.shared.entries.filter { $0.id > previous && $0.isError }
+        let errors = ErrorLog.shared.entries.filter { $0.isError && $0.message.contains(branch) }
         #expect(errors.count == 1)
         #expect(errors.first?.message.contains("resolution IDs") == true)
         #expect(errors.first?.message.contains("Refresh") == true)
@@ -99,9 +100,9 @@ extension PullRequestsModelTests {
         #expect(review.runID != replacement.runID)
         #expect(try JSONDecoder().decode(LocalReview.self, from: JSONEncoder().encode(review)) == review)
         model.store.update { $0.localReviews[path] = review }
-        model.preparePrompt = { text in
+        model.preparePrompt = { [store = model.store] text in
             if replaced {
-                model.store.update { $0.localReviews[path] = replacement }
+                store.update { $0.localReviews[path] = replacement }
             }
             return text
         }
@@ -275,10 +276,10 @@ extension PullRequestsModelTests {
             metadata.localReviews[path] = review
             metadata.threadsCache[AppMetadata.threadsKey(repositoryPath: "/repo", number: 1)] = .init(threads: [remote])
         }
-        model.preparePrompt = { text in
-            #expect(model.store.load().pullRequestAutomation.isEmpty)
-            #expect(model.store.load().localReviews[path]?.remaining == 1)
-            model.store.update { metadata in
+        model.preparePrompt = { [store = model.store] text in
+            #expect(store.load().pullRequestAutomation.isEmpty)
+            #expect(store.load().localReviews[path]?.remaining == 1)
+            store.update { metadata in
                 if replaced {
                     metadata.localReviews[path]?.runID = "replacement"
                 } else {
@@ -333,19 +334,20 @@ extension PullRequestsModelTests {
         let pasteboard = NSPasteboard.withUniqueName()
         defer { pasteboard.releaseGlobally() }
         let model = makeModel()
+        let branch = "shared-failure-" + state
+        model.currentBranch = branch
         let selected = resolutionSummary(head: state == "OPEN" ? nil : "head", state: state)
         model.store.update { metadata in
             metadata.threadsCache[AppMetadata.threadsKey(repositoryPath: "/repo", number: 1)] = .init(
                 threads: [resolutionThread("first"), resolutionThread("second")],
             )
         }
-        let previous = ErrorLog.shared.entries.last?.id ?? 0
         await model.copyUnresolvedComments(selected, pasteboard: pasteboard, resolve: true)
-        let errors = ErrorLog.shared.entries.filter { $0.id > previous && $0.isError }
+        let errors = ErrorLog.shared.entries.filter { $0.isError && $0.message.contains(branch) }
         #expect(errors.count == 1)
         #expect(errors.first?.message.contains(state == "OPEN" ? "loading" : "closed") == true)
         await model.copyUnresolvedComments(selected, pasteboard: pasteboard, resolve: true)
-        #expect(ErrorLog.shared.entries.count { $0.id > previous && $0.isError } == 2)
+        #expect(ErrorLog.shared.entries.count { $0.isError && $0.message.contains(branch) } == 2)
     }
 
     private func resolutionSummary(head: String?, state: String = "OPEN") -> PullRequestSummary {

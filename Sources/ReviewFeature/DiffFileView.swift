@@ -295,8 +295,10 @@ struct DiffFileView: View {
     /// code alone, so it pastes as code.
     private func copyHunkAction(_ hunk: DiffHunk) -> some View {
         Button("Copy hunk") {
-            NSPasteboard.general.clearContents()
-            NSPasteboard.general.setString(Self.copyText(of: hunk), forType: .string)
+            let clipboard = ClipboardCopy()
+            Task {
+                await clipboard.writeText { Self.copyText(of: hunk) }
+            }
         }
         .hoverHelp("Copy this hunk's lines without their numbers or change markers")
     }

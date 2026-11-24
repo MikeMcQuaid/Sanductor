@@ -55,7 +55,7 @@ struct ErrorsPane: View {
     private var controls: some View {
         HStack {
             Spacer()
-            Button("Copy all") { copyAll() }
+            BusyButton("Copy all", busy: "Copying") { await copyAll() }
                 .controlSize(.small)
                 .disabled(log.entries.isEmpty)
                 .hoverHelp("Copy every logged message to the clipboard")
@@ -67,12 +67,11 @@ struct ErrorsPane: View {
         .padding(Self.padding)
     }
 
-    private func copyAll() {
-        let text = log.entries
-            .lazy
-            .map { $0.date.formatted(.dateTime.hour().minute().second()) + " " + $0.message }
-            .joined(separator: "\n\n")
-        NSPasteboard.general.clearContents()
-        NSPasteboard.general.setString(text, forType: .string)
+    private func copyAll() async {
+        await ClipboardCopy().writeText { [entries = log.entries] in
+            entries.lazy
+                .map { $0.date.formatted(.dateTime.hour().minute().second()) + " " + $0.message }
+                .joined(separator: "\n\n")
+        }
     }
 }

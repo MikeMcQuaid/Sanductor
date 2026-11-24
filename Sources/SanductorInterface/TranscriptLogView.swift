@@ -9,7 +9,12 @@ public struct TranscriptLogView<Assistant: View>: View {
     // MARK: Lifecycle
 
     /// Creates a log view over parsed transcript entries.
-    public init(entries: [TranscriptEntry], @ViewBuilder assistant: @escaping (String) -> Assistant) {
+    public init(
+        entries: [TranscriptEntry],
+        omitsEarlierRecords: Bool = false,
+        @ViewBuilder assistant: @escaping (String) -> Assistant,
+    ) {
+        self.omitsEarlierRecords = omitsEarlierRecords
         self.assistant = assistant
         self.entries = entries
     }
@@ -20,10 +25,13 @@ public struct TranscriptLogView<Assistant: View>: View {
     public var body: some View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: spacing) {
+                if omitsEarlierRecords {
+                    Text("Earlier conversation omitted.").foregroundStyle(.secondary)
+                }
                 ForEach(entries) { entry in
                     row(entry)
                 }
-                if entries.isEmpty {
+                if entries.isEmpty, omitsEarlierRecords == false {
                     Text("Empty transcript.").foregroundStyle(.secondary)
                 }
             }
@@ -45,6 +53,7 @@ public struct TranscriptLogView<Assistant: View>: View {
     // MARK: Private
 
     private let assistant: (String) -> Assistant
+    private let omitsEarlierRecords: Bool
     private let entries: [TranscriptEntry]
 
     private let spacing: CGFloat = 8

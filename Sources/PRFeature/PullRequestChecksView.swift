@@ -71,7 +71,8 @@ struct PullRequestChecksView: View {
                 accessibilityLabel: "Copy log for " + check.displayName,
                 disabled: check.canReadLog == false || model.isRerunningChecks,
             ) {
-                if await model.copyCheckLog(check, for: summary, pasteboard: .general) == false {
+                let clipboard = ClipboardCopy(clearing: true)
+                if await model.copyCheckLog(check, for: summary, to: clipboard) == false, clipboard.isCurrent {
                     utilityTab = UtilityTabTarget.errors
                 }
             }

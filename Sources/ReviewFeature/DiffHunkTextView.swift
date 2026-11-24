@@ -1,5 +1,6 @@
 import AppKit
 import SwiftUI
+import TerminalUI
 
 // NSTextView ranges are UTF-16 offsets, so NSString is the correct
 // arithmetic here, not String.
@@ -12,7 +13,7 @@ import SwiftUI
 /// drag copy pastes character-exact.
 enum DiffHunkClipboard {
     /// The selected slice with every line's leading gutter removed.
-    static func stripped(_ text: String, selection: NSRange, gutterLength: Int) -> String {
+    nonisolated static func stripped(_ text: String, selection: NSRange, gutterLength: Int) -> String {
         let whole = text as NSString
         var pieces = ""
         var location = selection.location
@@ -187,9 +188,9 @@ final class HunkTextView: NSTextView {
             return
         }
 
-        let code = DiffHunkClipboard.stripped(string, selection: selected, gutterLength: gutterLength)
-        NSPasteboard.general.clearContents()
-        NSPasteboard.general.setString(code, forType: .string)
+        ClipboardCopy().writeSelection(string) { [gutterLength] text in
+            DiffHunkClipboard.stripped(text, selection: selected, gutterLength: gutterLength)
+        }
     }
 
     override func mouseDown(with event: NSEvent) {

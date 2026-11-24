@@ -19,31 +19,35 @@ extension PullRequestsModelTests {
         let pasteboard = NSPasteboard.withUniqueName()
         defer { pasteboard.releaseGlobally() }
         pasteboard.setString("stale", forType: .string)
-        model.fetchCheckLog = { requested in
+        model.fetchCheckLog = { requested, failedStepsOnly in
+            #expect(failedStepsOnly == false)
             #expect(requested == check)
             #expect(pasteboard.string(forType: .string) == nil)
-            return """
+            return CheckLogDocument("""
             2026-11-10T10:00:00Z ##[group]Build
             2026-11-10T10:00:01Z ##[command]make
             2026-11-10T10:00:02Z output
             2026-11-10T10:00:03Z ##[endgroup]
-            """
+            """)
         }
         var listed = summary(1, head: "remote", base: "lower")
         listed.stackStanding = StackStanding(position: 3, height: 4, base: "lower", number: 42)
         model.pullRequests.rememberListing(repositoryPath: "/repo", scope: .branch("remote"), summaries: [listed])
         model.preparePrompt = { text in
+            #expect(Thread.isMainThread == false)
             #expect(text == "Feedback for remote (stack #42, layer 3 of 4, base: lower)\n\nBuild\n  make\n  output")
             return "prepared log"
         }
-        #expect(await model.copyCheckLog(check, for: summary(1, head: "remote"), pasteboard: pasteboard))
+        #expect(await model.copyCheckLog(
+            check, for: summary(1, head: "remote"), to: ClipboardCopy(to: pasteboard, clearing: true),
+        ))
         #expect(pasteboard.string(forType: .string) == "prepared log")
     }
 
     @Test
     func `a failed row log copy leaves no stale clipboard contents`() async {
         let model = makeModel()
-        model.fetchCheckLog = { _ in throw URLError(.notConnectedToInternet) }
+        model.fetchCheckLog = { _, _ in throw URLError(.notConnectedToInternet) }
         let pasteboard = NSPasteboard.withUniqueName()
         defer { pasteboard.releaseGlobally() }
         pasteboard.setString("stale", forType: .string)
@@ -56,7 +60,7 @@ extension PullRequestsModelTests {
                 link: "https://github.com/o/r/actions/runs/1/job/2",
             ),
             for: summary(1, head: "feature"),
-            pasteboard: pasteboard,
+            to: ClipboardCopy(to: pasteboard, clearing: true),
         ) == false)
         #expect(pasteboard.string(forType: .string) == nil)
         #expect(ErrorLog.shared.entries.last?.message.contains("Could not copy build's log") == true)
@@ -98,20 +102,21 @@ extension PullRequestsModelTests {
         )
         let model = makeModel()
         model.fetchFailedRunLog = { _ in "UNRELATED OPTIONAL FAILURE" }
-        model.fetchCheckLog = { check in
+        model.fetchCheckLog = { check, failedStepsOnly in
+            #expect(failedStepsOnly)
             #expect(check == completed)
-            return "2026-11-10T13:40:24Z required failure"
+            return CheckLogDocument("2026-11-10T13:40:24Z required failure")
         }
         #expect(PullRequestsModel.copyableFailingChecks(in: summary) == [completed])
         #expect(try await model.failingLogs(for: summary) == "## build\nrequired failure")
         let pasteboard = NSPasteboard.withUniqueName()
         defer { pasteboard.releaseGlobally() }
         pasteboard.setString("stale", forType: .string)
-        model.fetchCheckLog = { _ in
+        model.fetchCheckLog = { _, _ in
             #expect(pasteboard.string(forType: .string) == nil)
-            return "required failure"
+            return CheckLogDocument("required failure")
         }
-        #expect(await model.copyFailingLogs(summary, pasteboard: pasteboard))
+        #expect(await model.copyFailingLogs(summary, to: ClipboardCopy(to: pasteboard, clearing: true)))
         #expect(pasteboard.string(forType: .string) == "## build\nrequired failure")
     }
 
@@ -123,7 +128,7 @@ extension PullRequestsModelTests {
         let selected = summary(2, head: "feature", failingCheckLinks: ["https://github.com/o/r/actions/runs/13"])
         model.fetchFailedRunLog = { _ in "required failure" }
         model.stacking.stack = BranchStack(base: "main", branches: ["feature", "upper"], checkedOut: "upper")
-        #expect(await model.copyFailingLogs(selected, pasteboard: pasteboard))
+        #expect(await model.copyFailingLogs(selected, to: ClipboardCopy(to: pasteboard, clearing: true)))
         #expect(pasteboard.string(forType: .string) == """
         Feedback for feature (stack: main → feature → upper)
 
@@ -155,9 +160,9 @@ extension PullRequestsModelTests {
             checkDetails: checks,
         )
         let model = makeModel()
-        model.fetchCheckLog = { _ in
+        model.fetchCheckLog = { _, _ in
             Issue.record("An unfinished job has no downloadable log")
-            return ""
+            return CheckLogDocument("")
         }
         #expect(PullRequestsModel.copyableFailingChecks(in: summary).isEmpty)
         let error = try #require(await #expect(throws: GitHubClient.RunLogsUnavailable.self) {
@@ -168,7 +173,7 @@ extension PullRequestsModelTests {
         let pasteboard = NSPasteboard.withUniqueName()
         defer { pasteboard.releaseGlobally() }
         pasteboard.setString("stale", forType: .string)
-        #expect(await model.copyFailingLogs(summary, pasteboard: pasteboard) == false)
+        #expect(await model.copyFailingLogs(summary, to: ClipboardCopy(to: pasteboard, clearing: true)) == false)
         #expect(pasteboard.string(forType: .string) == nil)
         let message = ErrorLog.shared.entries.last?.message ?? ""
         #expect(message.contains("only once the job has finished"))
@@ -208,11 +213,12 @@ extension PullRequestsModelTests {
         defer { try? FileManager.default.removeItem(atPath: root) }
         let metadata = root + "/state.json"
         let model = makeModel(metadataFile: metadata)
-        model.fetchCheckLog = { check in
+        model.fetchCheckLog = { check, failedStepsOnly in
+            #expect(failedStepsOnly)
             if check == cancelled {
                 throw GitHubClient.JobLogUnavailable()
             }
-            return "optional failure"
+            return CheckLogDocument("optional failure")
         }
         #expect(try await model.failingLogs(for: summary) == "Cancelled or skipped checks produced no logs.")
         model.setIncludesOptionalLogs(true, for: summary)
@@ -221,7 +227,7 @@ extension PullRequestsModelTests {
         #expect(try await model.failingLogs(for: summary) == "## optional\noptional failure")
         #expect(makeModel(metadataFile: metadata).includesOptionalLogs(for: summary))
         model.setIncludesOptionalLogs(false, for: summary)
-        model.fetchCheckLog = { _ in throw URLError(.notConnectedToInternet) }
+        model.fetchCheckLog = { _, _ in throw URLError(.notConnectedToInternet) }
         await #expect(throws: URLError.self) { try await model.failingLogs(for: summary) }
     }
 }

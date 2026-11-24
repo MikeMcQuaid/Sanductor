@@ -35,6 +35,27 @@ struct PromptPayloadTests {
         #expect(files.keys.allSatisfy { FileManager.default.fileExists(atPath: $0) == false })
     }
 
+    @Test(arguments: [false, true])
+    func `dropping a symlink stages an independent copy of its target`(directory: Bool) async throws {
+        let world = try await World.make()
+        defer { world.tearDown() }
+        let target = world.root + "/original"
+        if directory {
+            try FileManager.default.createDirectory(atPath: target, withIntermediateDirectories: false)
+        }
+        let suffix = directory ? "/nested.txt" : ""
+        try "contents".write(toFile: target + suffix, atomically: true, encoding: .utf8)
+        let link = world.root + "/shortcut"
+        try FileManager.default.createSymbolicLink(atPath: link, withDestinationPath: target)
+        let path = try world.service.stageDroppedFile(.file(URL(fileURLWithPath: link)))
+        try FileManager.default.removeItem(atPath: target)
+        #expect(path.hasSuffix("-shortcut"))
+        #expect(try String(contentsOfFile: path + suffix, encoding: .utf8) == "contents")
+        #expect(throws: (any Error).self) {
+            try world.service.stageDroppedFile(.file(URL(fileURLWithPath: link)))
+        }
+    }
+
     @Test
     func `setup adopts old owned files without touching unrelated files`() async throws {
         let world = try await World.make()
@@ -59,7 +80,7 @@ struct PromptPayloadTests {
         let source = world.root + "/screenshot.png"
         try "image".write(toFile: source, atomically: true, encoding: .utf8)
         try FileManager.default.setAttributes([.modificationDate: Date.distantPast], ofItemAtPath: source)
-        let dropped = try world.service.stageDroppedFile(at: URL(fileURLWithPath: source))
+        let dropped = try world.service.stageDroppedFile(.file(URL(fileURLWithPath: source)))
         let created = try #require(store.load().temporaryPromptFiles[dropped]?.createdAt)
         PromptPayload.clean(
             paths: world.paths,
@@ -117,7 +138,7 @@ struct PromptPayloadTests {
         let store = MetadataStore(file: world.paths.metadataFile)
         let source = world.root + "/attachment.txt"
         try "content".write(toFile: source, atomically: true, encoding: .utf8)
-        let dropped = try world.service.stageDroppedFile(at: URL(fileURLWithPath: source))
+        let dropped = try world.service.stageDroppedFile(.file(URL(fileURLWithPath: source)))
         let directory = world.paths.sharedWorkspace + "/tmp"
         let moved = world.root + "/preserved"
         try FileManager.default.moveItem(atPath: directory, toPath: moved)

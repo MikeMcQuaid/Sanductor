@@ -44,8 +44,7 @@ struct CheckLogView: View {
     private static let padding: CGFloat = 8
     private static let controlSpacing: CGFloat = 4
 
-    @State private var log = ""
-    @State private var document: CheckLogDocument = .init("")
+    @State private var document: CheckLogDocument?
     @State private var text: NSAttributedString = .init()
     @State private var collapsedGroups: Set<Int> = []
     @State private var showTimestamps = false
@@ -72,7 +71,7 @@ struct CheckLogView: View {
                 "clock",
                 help: showTimestamps ? "Hide log timestamps" : "Show log timestamps",
                 isOn: showTimestamps,
-                disabled: log.isEmpty || isLoading,
+                disabled: document == nil || isLoading,
             ) {
                 showTimestamps.toggle()
                 updateText()
@@ -83,16 +82,18 @@ struct CheckLogView: View {
                     help: "Open this check in the Browser tab; Cmd-click for the browser set in Settings",
                 ) { LinkOpener.open(check.link) }
             }
-            PaneIconButton(
-                "doc.on.doc",
-                help: "Copy this check's log, including collapsed groups",
-                disabled: log.isEmpty || isLoading,
+            BusyButton(
+                "",
+                busy: "",
+                systemImage: "doc.on.doc",
+                accessibilityLabel: "Copy this check’s log",
+                disabled: document == nil || isLoading,
             ) {
-                PromptClipboard.copy(
-                    model.feedbackPrefix(for: summary) + document.plainText(showTimestamps: showTimestamps),
-                    prepare: model.preparePrompt,
-                )
+                if let document {
+                    await model.copy(document, showTimestamps: showTimestamps, for: summary, to: ClipboardCopy())
+                }
             }
+            .hoverHelp("Copy this check’s log, including collapsed groups")
         }
         .padding(Self.controlSpacing)
         .background(.thinMaterial, in: Capsule())
@@ -101,7 +102,7 @@ struct CheckLogView: View {
     @ViewBuilder private var content: some View {
         if isLoading {
             LaunchProgressView(spinner: "Loading the check log…")
-        } else if log.isEmpty == false {
+        } else if document != nil {
             SelectableTextView(text: text, onOpenLink: toggleGroup)
                 .background(Color(nsColor: .textBackgroundColor))
         } else {
@@ -120,7 +121,7 @@ struct CheckLogView: View {
     }
 
     private func load() async {
-        log = ""
+        document = nil
         error = nil
         isLoading = true
         defer { isLoading = false }
@@ -129,14 +130,13 @@ struct CheckLogView: View {
         }
 
         do {
-            let fetched = try await model.fetchCheckLog(check)
+            let fetched = try await model.fetchCheckLog(check, false)
             guard Task.isCancelled == false else {
                 return
             }
 
-            log = fetched
-            document = CheckLogDocument(fetched)
-            collapsedGroups = Set(document.lines.indices.filter { document.lines[$0].endIndex != nil })
+            document = fetched
+            collapsedGroups = Set(fetched.lines.indices.filter { fetched.lines[$0].endIndex != nil })
             updateText()
         } catch {
             guard Task.isCancelled == false else {
@@ -152,6 +152,10 @@ struct CheckLogView: View {
     }
 
     private func updateText() {
+        guard let document else {
+            return
+        }
+
         text = CheckLogText.attributed(
             document, showTimestamps: showTimestamps, collapsedGroups: collapsedGroups, font: codeStyle.appKitFont,
         )
@@ -159,7 +163,7 @@ struct CheckLogView: View {
 
     private func toggleGroup(_ url: URL) -> Bool {
         guard url.scheme == "sanductor-log-group", let host = url.host, let index = Int(host),
-              document.lines.indices.contains(index), document.lines[index].endIndex != nil
+              let document, document.lines.indices.contains(index), document.lines[index].endIndex != nil
         else {
             return false
         }

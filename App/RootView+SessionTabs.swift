@@ -179,26 +179,6 @@ extension RootView {
         }
     }
 
-    /// Stages dropped files where the sandbox can read them and
-    /// types the staged paths into the session, ready to send.
-    func dropFiles(_ urls: [URL], into sessionName: String) -> Bool {
-        guard urls.isEmpty == false else {
-            return false
-        }
-
-        Task {
-            do {
-                for url in urls {
-                    let staged = try dependencies.service.stageDroppedFile(at: url)
-                    try await dependencies.service.typeText(staged + " ", sessionName: sessionName)
-                }
-            } catch {
-                dependencies.dashboard.report(error.localizedDescription)
-            }
-        }
-        return true
-    }
-
     /// The live session's status row at the top of the primary pane:
     /// its state and agent beside the close button. Past
     /// conversations live in the conversation list instead, so this

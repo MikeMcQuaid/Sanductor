@@ -1,4 +1,3 @@
-import AppKit
 import SanductorData
 import SanductorDomain
 import SwiftUI
@@ -228,13 +227,15 @@ public struct FeedbackView: View {
     }
 
     private func copy() async {
-        NSPasteboard.general.clearContents()
+        let clipboard = ClipboardCopy(clearing: true)
         isCopying = true
         defer { isCopying = false }
         do {
-            let text = try await feedbackStackPrefix + service.copyFeedback(state)
-            guard PromptClipboard.copy(text, prepare: service.promptForPasting) else {
-                message = "Could not copy feedback"
+            let text = try await service.copyFeedback(state)
+            guard await clipboard.writeText({ [feedbackStackPrefix, service] in
+                try service.promptForPasting(feedbackStackPrefix + text)
+            }) else {
+                message = clipboard.isCurrent ? "Could not copy feedback" : "Kept the newer clipboard contents"
                 return
             }
 

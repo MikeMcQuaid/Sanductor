@@ -273,22 +273,6 @@ public extension SessionService {
         }
     }
 
-    /// Copies a dropped file into the shared workspace, where the
-    /// sandboxed agent can read it, returning the staged path.
-    func stageDroppedFile(at url: URL) throws -> String {
-        let directory = paths.sharedWorkspace + "/tmp"
-        try FileManager.default.createDirectory(atPath: directory, withIntermediateDirectories: true)
-        let destination = directory + "/drop-" + UUID().uuidString + "-" + url.lastPathComponent
-        try FileManager.default.copyItem(at: url, to: URL(fileURLWithPath: destination))
-        do {
-            try PromptPayload.track(destination, store: store, attempt: nil)
-        } catch {
-            try? FileManager.default.removeItem(atPath: destination)
-            throw error
-        }
-        return destination
-    }
-
     /// How much of a session's output a whole-output copy takes:
     /// herdr's recent scrollback, which is what a person scrolled
     /// through to want it.
@@ -298,11 +282,6 @@ public extension SessionService {
     /// width removed; nil when herdr cannot answer.
     func readOutput(sessionName: String) async -> String? {
         await herdr.readOutput(sessionName: sessionName, lines: Self.copiedOutputLines)
-    }
-
-    /// Types text into a session's terminal, as pasted input.
-    func typeText(_ text: String, sessionName: String) async throws {
-        try await herdr.typeText(text, sessionName: sessionName)
     }
 
     /// Waits until a session's agent changes state or the wait

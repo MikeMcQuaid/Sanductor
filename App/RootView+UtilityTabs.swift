@@ -1,4 +1,3 @@
-import Foundation
 import PRFeature
 import ReviewFeature
 import SanductorDomain
@@ -11,10 +10,6 @@ extension RootView {
     /// The agent terminal: copies are prose, so multi-line copies
     /// reflow for pasting into chat and pull request bodies.
     func agentTerminal(for session: AgentSession, in worktreePath: String, isActive: Bool) -> some View {
-        // A pasted file or screenshot reaches the agent the way a
-        // dropped one does. Bound first: as the call's last argument
-        // the formatter would make it trailing, which fights SwiftLint.
-        let pasteFiles: ([URL]) -> Bool = { urls in dropFiles(urls, into: session.name) }
         // The whole recent output from herdr: the local buffer holds
         // only the screen, so a selection can never reach what was
         // scrolled past.
@@ -23,7 +18,7 @@ extension RootView {
             command: session.paneID.map(dependencies.service.attachCommand(paneID:)) ?? [],
             reflowsCopies: true,
             isActive: isActive,
-            onPasteFiles: pasteFiles,
+            stageAttachment: dependencies.service.stageDroppedFile,
             onCopyReply: { await dependencies.service.lastReply(agent: session.agent, in: worktreePath) },
             onCopyAllOutput: readAll,
             reattachRequest: dependencies.dashboard.reattachRequests[session.name] ?? 0,
@@ -47,8 +42,9 @@ extension RootView {
     /// The strip's Copy Last Reply, for a session showing its
     /// reader, whose terminal and its menu are out of reach.
     func copyLastReply(of session: AgentSession, in worktreePath: String) {
+        let clipboard = ClipboardCopy()
         Task {
-            await MarkdownClipboard.copy {
+            await MarkdownClipboard.copy(to: clipboard) {
                 await dependencies.service.lastReply(agent: session.agent, in: worktreePath)
             }
         }

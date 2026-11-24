@@ -22,7 +22,7 @@ No Sanductor account, subscription or hosted relay exists or is planned.
 - Opt-in autofix feeds reviews, CI failures and merge conflicts back to agents, resumes after relaunch and never signs or pushes.
 - Signs and pushes from any published stack layer, with rebasing, labels, merge queues, automerge and branch and temporary file cleanup.
 - Keeps agents running and reachable over SSH after quitting, with private backups and 30-day retention that preserves ongoing work.
-- Saves reusable prompts and schedules recurring repository tasks.
+- Saves prompts, attaches files and schedules recurring tasks per repo.
 - Groups work by repository or latest event, with unpushed commits, CI, reviews, dated blockers, bulk actions and alerts.
 - Edits code with syntax highlighting, fuzzy file search and shell tabs.
 - Starts tasks and checks blockers through Shortcuts and Siri, with an [iPhone companion](#-iphone-companion-app) and agent shortcut keys.

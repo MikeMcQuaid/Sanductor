@@ -6,7 +6,7 @@ import Testing
 extension SessionNavigationTests {
     @Test(arguments: ["", "CI failures\nKeep é, 🧑🏽‍💻 and `code`\n"], [false, true])
     func `saved prompts precede live text and focus the editor`(existing: String, marked: Bool) async throws {
-        let input = AgentSessionForm.PromptEditorHost(rootView: AnyView(EmptyView()))
+        let input = AgentSessionForm.PromptTextView()
         var bound = "stale binding"
         let host = NSHostingView(rootView: AgentSessionForm.PromptEditor(
             text: Binding(get: { bound }, set: { bound = $0 }), view: input,

@@ -807,14 +807,14 @@ and their transcripts and backups can retain it.
    panes disable their controls as well as hit testing: an invisible
    Start Agent button could intercept Cmd-Return and submit an older
    copy of the shared draft, dropping its latest edits. Submission
-   keeps the system TextEditor in its own native host and captures
-   its full text before ending active composition. Native hit testing
+   captures the native prompt editor’s full text before ending active
+   composition. Native hit testing
    confirms that this input is visible, even beside another editor.
    This is independent of SwiftUI focus and draft updates: marked text is
    visible before the binding receives it, and ending composition can
    restore that older value. A missing editor leaves the form and draft
-   intact and reports an error after retrying layout. A launch that
-   finishes opens its pane only while its own row is still selected and
+   intact and reports an error. A launch that finishes opens its pane
+   only while its own row is still selected and
    no page covers the pane: anything chosen since, another launch's
    placeholder included, keeps the sidebar where it is.
    A failed launch stays on the row it was for
@@ -2312,13 +2312,16 @@ steps.
   finished failing Actions checks, counting the jobs it will copy,
   independently of unfinished jobs in the same run. Each job uses the
   same log reader as the checks view; cached summaries without check
-  details fall back to `gh run view --log-failed`. Bulk copies retain
-  every line, using the shared prompt-file fallback above the paste
-  budget. Cmd opens the check in the browser and Shift in the Browser
-  tab. Copying clears the clipboard
-  before fetching logs and fills it when they arrive; a failed fetch
-  leaves it empty. In the fallback, a run still in progress has
-  no whole-run log, so its already-failed jobs answer with their own
+  details fall back to `gh run view --log-failed`. The Checks button
+  omits output confidently attributed to successful steps when a step
+  failed. It keeps ambiguous boundary lines and diagnostic context.
+  Individual jobs and Copy unfiltered feedback keep the full diagnostic
+  log. Parsing and preparing large clipboard files run off the UI
+  thread. Cmd opens the check in the browser and Shift in the Browser
+  tab. Copying clears the clipboard before fetching logs. A newer
+  copy takes precedence throughout fetching and preparation. In the
+  fallback, a run still in progress has no whole-run log, so its
+  already-failed jobs answer with their own
   (`--json jobs`, then `--job <id> --log-failed` each) rather than
   failing while the rest of the run decides; gh gates even a
   finished job's view behind the run, so a refused job falls back to
@@ -2392,6 +2395,10 @@ steps.
   the session strip's reader button swaps in the rendered log the
   conversations page uses, read from the transcript the agent is
   writing (its newest in the worktree, the one the list leaves out).
+  Both Mac views open the newest 8 MiB of transcript and display up to
+  4,000 recent entries within an 8 MiB text budget. The log marks
+  where earlier history was omitted. A saved selection loads once off
+  the UI thread. For live sessions,
   `TranscriptTail` decodes only what was appended, woken by the file's
   own change events while the pane is on screen in a visible window,
   and a change in the agent's state looks for a newer transcript. A
@@ -3727,8 +3734,8 @@ Individual and bulk copies include this context before the clipboard
 size limit is applied.
 Review and check copy actions take a pasteboard from the caller. The
 Mac UI uses the general pasteboard and tests use private pasteboards.
-The Checks pane retains its display rollup; its bulk copy includes complete
-selected logs without a shared truncation budget.
+The Checks pane retains its display rollup. The paste budget applies
+to the combined selection after step filtering.
 
 Outstanding Copilot, CodeRabbit or human review requests do not block
 feedback already available from other jobs or reviewers.
@@ -3766,6 +3773,14 @@ in a unique file and the paste references it. Files retain the complete
 payload, so concurrent prompts cannot overwrite or truncate one another.
 A durable ledger keeps autofix inputs and results while their attempt or
 agent is active, then removes them once idle, with a minute's grace.
+The new-session prompt and context fields accept dropped files and
+images at the insertion point. Prompt and terminal drops copy files
+and directories off the UI thread into shared storage. Dropping a
+symlink stages its target under the dropped name. The prompt holds its
+selection until the attachments are ready. The terminal stages and pastes
+each path on its input queue so that a subsequent Return follows it.
+Both surfaces keep the paths staged before the first error, report it
+and skip the rest of that drop.
 Clipboard files and attachments staged as `tmp/drop-<UUID>-<name>`
 expire after 24 hours. Dashboard refreshes check tracked files at most
 once a minute while the app is open, after fresh checks for live sessions
@@ -3853,9 +3868,8 @@ Not scheduled, recorded so the pieces already built line up with them:
   deleted worktrees, and open the existing transcript viewer at the
   matching message. Start with ripgrep over rebuildable decoded text,
   without a database; measure before adding a full-text index.
-- An Answer Agent intent, once herdr's key sending has a wrapper beside
-  `typeText`, so a blocked question can be answered from a notification
-  or a phone.
+- An Answer Agent intent so a blocked question can be answered from a
+  notification or a phone.
 - A login-item helper if delayed notifications prove annoying.
 - Seeding the local buffer from `pane read --format ansi` on attach so
   scrollback reflows on resize, keeping the wheel local off the

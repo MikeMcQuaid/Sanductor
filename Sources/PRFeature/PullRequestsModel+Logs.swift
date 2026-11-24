@@ -1,4 +1,4 @@
-import AppKit
+import Foundation
 import SanductorData
 import SanductorDomain
 import TerminalUI
@@ -6,18 +6,27 @@ import TerminalUI
 /// Copies complete job diagnostics through the shared paste-size limit.
 extension PullRequestsModel {
     func copyCheckLog(
-        _ check: PullRequestCheck, for summary: PullRequestSummary, pasteboard: NSPasteboard,
+        _ check: PullRequestCheck, for summary: PullRequestSummary, to clipboard: ClipboardCopy,
     ) async -> Bool {
-        let prefix = feedbackPrefix(for: summary)
-        pasteboard.clearContents()
         do {
-            let log = try await fetchCheckLog(check)
-            return PromptClipboard.copy(
-                prefix + CheckLogDocument(log).plainText(showTimestamps: false), to: pasteboard, prepare: preparePrompt,
-            )
+            let document = try await fetchCheckLog(check, false)
+            return await copy(document, showTimestamps: false, for: summary, to: clipboard)
         } catch {
             report("Could not copy " + check.displayName + "'s log: " + error.localizedDescription)
             return false
+        }
+    }
+
+    @discardableResult
+    func copy(
+        _ document: CheckLogDocument,
+        showTimestamps: Bool,
+        for summary: PullRequestSummary,
+        to clipboard: ClipboardCopy,
+    ) async -> Bool {
+        let prefix = feedbackPrefix(for: summary)
+        return await clipboard.writeText { [preparePrompt] in
+            try preparePrompt(prefix + document.plainText(showTimestamps: showTimestamps))
         }
     }
 
@@ -39,7 +48,7 @@ extension PullRequestsModel {
 
     /// The Actions run ids among a pull request's failing checks,
     /// each once, in order; checks from elsewhere have no log here.
-    static func runIDs(in links: [String]) -> [Int] {
+    nonisolated static func runIDs(in links: [String]) -> [Int] {
         var seen = Set<Int>()
         return links.compactMap { link in
             guard let range = link.firstRange(of: "/actions/runs/") else {
@@ -52,7 +61,7 @@ extension PullRequestsModel {
         .filter { seen.insert($0).inserted }
     }
 
-    static func copyableFailingChecks(
+    nonisolated static func copyableFailingChecks(
         in summary: PullRequestSummary, includeOptional: Bool = false,
     ) -> [PullRequestCheck] {
         (summary.checkDetails ?? []).filter { check in
@@ -64,14 +73,16 @@ extension PullRequestsModel {
     }
 
     /// Every selected failing job's diagnostics under its heading.
-    func failingLogs(for summary: PullRequestSummary) async throws -> String {
+    @concurrent
+    func failingLogs(for summary: PullRequestSummary, failedStepsOnly: Bool = true) async throws -> String {
         if summary.checkDetails != nil {
             var logs = [String]()
             var unreadable: any Error?
-            for check in Self.copyableFailingChecks(in: summary, includeOptional: includesOptionalLogs(for: summary)) {
+            let includeOptional = await includesOptionalLogs(for: summary)
+            for check in Self.copyableFailingChecks(in: summary, includeOptional: includeOptional) {
                 do {
-                    try await logs.append("## " + check.name + "\n"
-                        + CheckLogDocument(fetchCheckLog(check)).plainText(showTimestamps: false))
+                    let document = try await fetchCheckLog(check, failedStepsOnly)
+                    logs.append("## " + check.name + "\n" + document.plainText(showTimestamps: false))
                 } catch {
                     if check.conclusion != "CANCELLED" || error is GitHubClient.JobLogUnavailable == false {
                         unreadable = unreadable ?? error
@@ -79,7 +90,7 @@ extension PullRequestsModel {
                 }
             }
             let selected = (summary.checkDetails ?? []).filter { check in
-                includesOptionalLogs(for: summary) || summary.failingCheckLinks.contains(check.link)
+                includeOptional || summary.failingCheckLinks.contains(check.link)
             }
             if logs.isEmpty, unreadable == nil, selected.isEmpty == false,
                selected.allSatisfy({ check in
@@ -98,6 +109,12 @@ extension PullRequestsModel {
 
             return logs.joined(separator: "\n\n")
         }
+        return try await failingRunLogs(for: summary)
+    }
+
+    /// Older cached summaries only identify runs, so ask gh for their failed steps.
+    @concurrent
+    private func failingRunLogs(for summary: PullRequestSummary) async throws -> String {
         var runs = [String]()
         var unreadable: any Error?
         for runID in Self.runIDs(in: summary.failingCheckLinks) {
@@ -124,8 +141,9 @@ extension PullRequestsModel {
     /// Copies the failing logs to the clipboard; false opens the
     /// errors surface, and a pull request whose failing checks are
     /// not Actions runs has nothing to copy.
-    func copyFailingLogs(_ summary: PullRequestSummary, pasteboard: NSPasteboard) async -> Bool {
-        pasteboard.clearContents()
+    func copyFailingLogs(_ summary: PullRequestSummary, to clipboard: ClipboardCopy, failedStepsOnly: Bool = true)
+        async -> Bool
+    {
         let links = includesOptionalLogs(for: summary)
             ? (summary.checkDetails ?? []).map(\.link) : summary.failingCheckLinks
         let runs = Self.runIDs(in: links)
@@ -135,8 +153,11 @@ extension PullRequestsModel {
         }
 
         do {
-            let text = try await feedbackPrefix(for: summary) + failingLogs(for: summary)
-            guard PromptClipboard.copy(text, to: pasteboard, prepare: preparePrompt) else {
+            let text = try await failingLogs(for: summary, failedStepsOnly: failedStepsOnly)
+            let prefix = feedbackPrefix(for: summary)
+            guard await clipboard.writeText({ [preparePrompt] in
+                try preparePrompt(prefix + text)
+            }) else {
                 return false
             }
 

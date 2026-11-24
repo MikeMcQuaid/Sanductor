@@ -18,10 +18,40 @@ struct TranscriptTailTests {
         try Data((prompt + reply.prefix(20)).utf8).write(to: transcript)
         let tail = TranscriptTail(transcript: transcript)
         #expect(await tail.entries().map(\.text) == ["hi"])
+        #expect(await tail.omitsEarlierRecords == false)
 
         try Self.append(String(reply.dropFirst(20)), to: transcript)
         #expect(await tail.entries().map(\.text) == ["hi", "hello"])
         #expect(await tail.entries().map(\.id) == [0, 1])
+    }
+
+    @Test
+    func `the Mac opens recent records and bounds a growing conversation`() async throws {
+        let directory = try TestSupport.temporaryDirectory("tail-window")
+        defer { try? FileManager.default.removeItem(atPath: directory) }
+        let transcript = URL(fileURLWithPath: directory + "/live.jsonl")
+        let prompt = #"{"type":"user","message":{"content":"hello"}}"# + "\n"
+        try Data((prompt + String(repeating: "x", count: 8_388_608) + "\n" + prompt).utf8).write(to: transcript)
+        let tail = TranscriptTail(transcript: transcript)
+        #expect(await tail.entries().count == 1)
+        #expect(await tail.omitsEarlierRecords)
+        try Self.append(String(repeating: prompt, count: 4_100), to: transcript)
+        let entries = await tail.entries()
+        #expect(entries.count == 4_000)
+        #expect(entries.first?.id == 101)
+        #expect(entries.last?.id == 4_100)
+    }
+
+    @Test
+    func `a saved transcript keeps the last record without a newline at the exact window boundary`() async throws {
+        let directory = try TestSupport.temporaryDirectory("saved-tail")
+        defer { try? FileManager.default.removeItem(atPath: directory) }
+        let transcript = URL(fileURLWithPath: directory + "/saved.jsonl")
+        let prompt = #"{"type":"user","message":{"content":"café"}}"#
+        let padding = String(repeating: "x", count: 8_388_608 - 2 * prompt.utf8.count - 2)
+        try Data(("older\n" + prompt + "\n" + padding + "\n" + prompt).utf8).write(to: transcript)
+        let tail = TranscriptTail(transcript: transcript)
+        #expect(await tail.entries(includingFinalLine: true).map(\.text) == ["café", "café"])
     }
 
     @Test(.timeLimit(.minutes(1)))

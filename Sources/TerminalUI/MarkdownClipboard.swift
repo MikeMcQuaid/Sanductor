@@ -7,22 +7,15 @@ import Markdown
 public enum MarkdownClipboard {
     // MARK: Public
 
-    /// Replaces the pasteboard's contents with the reply.
-    public static func copy(_ markdown: String, to pasteboard: NSPasteboard = .general) {
-        pasteboard.clearContents()
-        var legible = Legible()
-        let document = legible.visit(Document(parsing: markdown)) ?? Document()
-        // Named as UTF-8, or a receiver may read the fragment as Latin-1.
-        pasteboard.setString("<meta charset=\"utf-8\">" + HTMLFormatter.format(document), forType: .html)
-        pasteboard.setString(markdown, forType: .string)
-    }
+    /// Copies a reply as Markdown and HTML if the clipboard is still current.
+    public static func copy(to clipboard: ClipboardCopy, reading reply: () async -> String?) async {
+        guard let markdown = await reply(), clipboard.isCurrent else {
+            return
+        }
 
-    /// Copies a reply that takes a moment to read, unless something
-    /// else was copied meanwhile: the newer copy is the one meant.
-    public static func copy(to pasteboard: NSPasteboard = .general, reading reply: () async -> String?) async {
-        let changes = pasteboard.changeCount
-        if let markdown = await reply(), pasteboard.changeCount == changes {
-            copy(markdown, to: pasteboard)
+        let html = await html(for: markdown)
+        clipboard.write { board in
+            board.setString(html, forType: .html) && board.setString(markdown, forType: .string)
         }
     }
 
@@ -87,5 +80,13 @@ public enum MarkdownClipboard {
                 .replacing(">", with: "&gt;")
                 .replacing("\"", with: "&quot;")
         }
+    }
+
+    @concurrent
+    private static func html(for markdown: String) async -> String {
+        var legible = Legible()
+        let document = legible.visit(Document(parsing: markdown)) ?? Document()
+        // Named as UTF-8, or a receiver may read the fragment as Latin-1.
+        return "<meta charset=\"utf-8\">" + HTMLFormatter.format(document)
     }
 }

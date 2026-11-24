@@ -5,7 +5,7 @@ import Testing
 @MainActor
 struct MarkdownClipboardTests {
     @Test
-    func `code keeps its own face and nothing written reads as markup`() {
+    func `code keeps its own face and nothing written reads as markup`() async {
         let pasteboard = NSPasteboard.withUniqueName()
         defer { pasteboard.releaseGlobally() }
         let reply = """
@@ -15,7 +15,7 @@ struct MarkdownClipboardTests {
         let names: Set<String> = []
         ```
         """
-        MarkdownClipboard.copy(reply, to: pasteboard)
+        await MarkdownClipboard.copy(to: ClipboardCopy(to: pasteboard)) { reply }
         let html = pasteboard.string(forType: .html) ?? ""
         #expect(html.contains("monospace\">Sources/App.swift</code>"))
         #expect(html.contains("sandvault-&lt;you&gt;"))
@@ -25,12 +25,12 @@ struct MarkdownClipboardTests {
     }
 
     @Test
-    func `link and image attributes cannot close their quotes`() {
+    func `link and image attributes cannot close their quotes`() async {
         let pasteboard = NSPasteboard.withUniqueName()
         defer { pasteboard.releaseGlobally() }
-        MarkdownClipboard.copy(
-            #"![plot](plot.png '"><b>extra</b>') and [docs](https://example.com/?a=1&b="2")"#, to: pasteboard,
-        )
+        await MarkdownClipboard.copy(to: ClipboardCopy(to: pasteboard)) {
+            #"![plot](plot.png '"><b>extra</b>') and [docs](https://example.com/?a=1&b="2")"#
+        }
         let html = pasteboard.string(forType: .html) ?? ""
         #expect(html.contains("<b>") == false)
         #expect(html.contains(#"title="&quot;&gt;&lt;b&gt;extra&lt;/b&gt;""#))

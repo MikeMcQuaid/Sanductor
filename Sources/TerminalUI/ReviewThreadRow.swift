@@ -213,9 +213,13 @@ public struct ReviewThreadRow: View {
     }
 
     private var copyButton: some View {
-        PaneIconButton("doc.on.doc", help: "Copy this conversation, with its file and line, to the clipboard") {
-            PromptClipboard.copy(feedbackStackPrefix + ReviewCopy.text(thread))
+        BusyButton("", busy: "", systemImage: "doc.on.doc", accessibilityLabel: "Copy conversation") {
+            await ClipboardCopy().writePrompt { [feedbackStackPrefix, thread] in
+                feedbackStackPrefix + ReviewCopy.text(thread)
+            }
         }
+        .controlSize(.small)
+        .hoverHelp("Copy this conversation, with its file and line, to the clipboard")
     }
 
     private var collapseToggle: some View {

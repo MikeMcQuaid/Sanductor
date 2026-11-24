@@ -37,9 +37,8 @@ final class PaneTerminalView: TerminalView {
     /// its history or forwards mouse input to the agent.
     var onScroll: ((_ upwards: Bool, _ lines: Int, _ column: Int, _ row: Int) -> Void)?
 
-    /// Takes the files a paste carries, staged and typed the way a
-    /// drop is; nil leaves every paste to the terminal.
-    var onPasteFiles: (([URL]) -> Bool)?
+    /// Stages files and images pasted or dropped into the agent pane.
+    var onAttach: (([PromptAttachment]) -> Bool)?
 
     /// herdr frames omit the agent's input modes, so pastes need
     /// brackets and modified keys must bypass the shell mapping.
@@ -159,8 +158,7 @@ final class PaneTerminalView: TerminalView {
     /// A paste of files or an image goes to the agent as a drop
     /// would; anything else pastes as text.
     override func paste(_ sender: Any?) {
-        let files = Self.pastedFiles()
-        if let onPasteFiles, files.isEmpty == false, onPasteFiles(files) {
+        if attach(from: .general) {
             return
         }
 
@@ -169,6 +167,20 @@ final class PaneTerminalView: TerminalView {
             return
         }
         super.paste(sender as Any)
+    }
+
+    override func draggingEntered(_ sender: any NSDraggingInfo) -> NSDragOperation {
+        guard onAttach != nil, sender.draggingSourceOperationMask.contains(.copy),
+              sender.draggingPasteboard.availableType(from: AttachmentPasteboard.types) != nil
+        else {
+            return []
+        }
+
+        return .copy
+    }
+
+    override func performDragOperation(_ sender: any NSDraggingInfo) -> Bool {
+        attach(from: sender.draggingPasteboard)
     }
 
     override func validateUserInterfaceItem(_ item: NSValidatedUserInterfaceItem) -> Bool {
@@ -190,12 +202,17 @@ final class PaneTerminalView: TerminalView {
 
     /// A block stays rectangular; native selection reflows in prose panes.
     override func copy(_: Any) {
-        var text = getSelection() ?? selectedBlockText ?? ""
-        if reflowsCopies || isHerdrBacked {
-            text = selectionActive && reflowsCopies ? PasteableText.reflow(text) : PasteableText.cleanTerminalCopy(text)
+        let text = getSelection() ?? selectedBlockText ?? ""
+        let reflow = selectionActive && reflowsCopies
+        ClipboardCopy(to: copyPasteboard).writeSelection(text) { [reflowsCopies, isHerdrBacked] text in
+            if reflow {
+                PasteableText.reflow(text)
+            } else if reflowsCopies || isHerdrBacked {
+                PasteableText.cleanTerminalCopy(text)
+            } else {
+                text
+            }
         }
-        copyPasteboard.clearContents()
-        copyPasteboard.setString(text, forType: .string)
     }
 
     /// One character cell, the size the terminal itself draws it.
@@ -219,38 +236,6 @@ final class PaneTerminalView: TerminalView {
         let scroller = view.subviews.compactMap { $0 as? NSScroller }.first { $0.isHidden == false }
         let gridWidth = optimal.width - (scroller?.frame.width ?? 0)
         return CGSize(width: gridWidth / CGFloat(columns), height: optimal.height / CGFloat(rows))
-    }
-
-    /// The whole recent output from herdr, reflowed like a selection
-    /// copy when this pane reflows, onto the clipboard.
-    @objc
-    func copyAllOutput(_: Any?) {
-        guard let onCopyAllOutput else {
-            return
-        }
-
-        Task { @MainActor in
-            guard let text = await onCopyAllOutput() else {
-                return
-            }
-
-            copyPasteboard.clearContents()
-            copyPasteboard.setString(
-                reflowsCopies ? PasteableText.reflow(text) : PasteableText.cleanTerminalCopy(text), forType: .string,
-            )
-        }
-    }
-
-    /// The newest reply onto the clipboard, formatted and as Markdown.
-    @objc
-    func copyReply(_: Any?) {
-        guard let onCopyReply else {
-            return
-        }
-
-        Task { @MainActor in
-            await MarkdownClipboard.copy(to: copyPasteboard, reading: onCopyReply)
-        }
     }
 
     /// Routes one wheel event to herdr when this pane owns the

@@ -4,6 +4,8 @@ import SanductorInterface
 import SwiftUI
 import TerminalUI
 
+// MARK: - RepositorySessionsView
+
 /// The one conversations UI: every conversation of a repository, or
 /// of a single worktree when scoped, whether or not its worktree
 /// still exists. Selecting one shows its log; any of them can
@@ -211,7 +213,7 @@ public struct RepositorySessionsView: View {
 
     @ViewBuilder private var log: some View {
         if let selected = model.selected {
-            TranscriptLogView(entries: model.service.transcriptEntries(for: selected)) { MarkdownText($0) }
+            SavedConversationLog(session: selected).id(selected)
         } else {
             ContentUnavailableView(
                 "No conversation selected",
@@ -220,4 +222,30 @@ public struct RepositorySessionsView: View {
             )
         }
     }
+}
+
+// MARK: - SavedConversationLog
+
+private struct SavedConversationLog: View {
+    // MARK: Internal
+
+    let session: TranscriptSession
+
+    var body: some View {
+        Group {
+            if let log {
+                TranscriptLogView(entries: log.entries, omitsEarlierRecords: log.omitted) { MarkdownText($0) }
+            } else {
+                LaunchProgressView("Reading the conversation…", waitingOn: "the agent's transcript")
+            }
+        }
+        .task {
+            let tail = TranscriptTail(transcript: URL(fileURLWithPath: session.path))
+            log = await (tail.entries(includingFinalLine: true), tail.omitsEarlierRecords)
+        }
+    }
+
+    // MARK: Private
+
+    @State private var log: (entries: [TranscriptEntry], omitted: Bool)?
 }
