@@ -278,6 +278,7 @@ struct AgentSessionForm: View {
         pullRequestNumbers = retry.draft.source == .pullRequest ? picks : []
         ghsaID = retry.draft.ghsaID
         discussionURL = retry.draft.discussionURL
+        promptEditor.replace(with: retry.draft.text)
         prompt = retry.draft.text
         agentKindName = retry.draft.agent.rawValue
         let choices = model.launchChoices(for: retry.draft.agent)
@@ -309,6 +310,7 @@ struct AgentSessionForm: View {
             ),
             discussionURL: discussionURL,
         )
+        promptEditor.replace(with: "")
         prompt = ""
         Task {
             await onSubmit(submission)

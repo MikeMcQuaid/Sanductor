@@ -33,7 +33,9 @@ extension AgentSessionForm {
             view.service = service
             view.font = style.appKitFont(.body)
             view.isEditable = context.environment.isEnabled && view.isStaging == false
-            if view.string != text, view.hasMarkedText() == false {
+            // The draft can arrive older than the typing it mirrors;
+            // the editor being typed in owns its text.
+            if view.string != text, view.hasMarkedText() == false, unsafe view.window?.firstResponder !== view {
                 view.string = text
             }
         }
@@ -104,6 +106,14 @@ extension AgentSessionForm {
                 replacementRange: NSRange(location: 0, length: string.utf16.count),
             )
             return string
+        }
+
+        /// Replaces the text and the draft together, even while the
+        /// editor has focus, which the draft alone never overrides.
+        func replace(with text: String) {
+            unmarkText()
+            string = text
+            draft?.wrappedValue = text
         }
 
         func capture() -> String? {

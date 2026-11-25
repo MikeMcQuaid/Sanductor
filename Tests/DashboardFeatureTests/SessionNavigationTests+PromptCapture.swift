@@ -34,6 +34,33 @@ extension SessionNavigationTests {
         #expect(other.string == "Another editor")
     }
 
+    @Test
+    func `a stale draft leaves the focused prompt alone and still reaches an unfocused one`() async throws {
+        let input = AgentSessionForm.PromptTextView()
+        func editors(_ draft: String) -> some View {
+            HStack {
+                AgentSessionForm.PromptEditor(text: .constant(draft), view: input)
+                TextEditor(text: .constant("Another editor"))
+            }
+        }
+        let host = NSHostingView(rootView: editors("I've fou"))
+        let window = Fixture.window(hosting: host)
+        defer { window.close() }
+        try await Task.sleep(for: .milliseconds(100))
+        let other = try #require(textViews(in: host).first { $0.string == "Another editor" })
+        window.makeFirstResponder(input)
+        input.string = "I've found it"
+        host.rootView = editors("I've founbd")
+        host.layoutSubtreeIfNeeded()
+        try await Task.sleep(for: .milliseconds(100))
+        #expect(input.capture() == "I've found it")
+        window.makeFirstResponder(other)
+        host.rootView = editors("Mirrored draft")
+        host.layoutSubtreeIfNeeded()
+        try await Task.sleep(for: .milliseconds(100))
+        #expect(input.string == "Mirrored draft")
+    }
+
     @Test(arguments: [false, true])
     func `an unreadable prompt is neither submitted nor cleared`(coveredByEditor: Bool) async throws {
         let fixture = Fixture()
