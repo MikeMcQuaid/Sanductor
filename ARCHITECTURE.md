@@ -812,7 +812,11 @@ and their transcripts and backups can retain it.
    confirms that this input is visible, even beside another editor.
    This is independent of SwiftUI focus and draft updates: marked text is
    visible before the binding receives it, and ending composition can
-   restore that older value. A missing editor leaves the form and draft
+   restore that older value. The shared draft never replaces the text
+   of the editor that has focus: it can lag the typing it mirrors, and
+   one such stale copy replaced the visible prompt as it was submitted.
+   Clearing on submission and applying a retry replace the editor's
+   text directly. A missing editor leaves the form and draft
    intact and reports an error. A launch that finishes opens its pane
    only while its own row is still selected and
    no page covers the pane: anything chosen since, another launch's

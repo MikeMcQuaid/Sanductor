@@ -37,12 +37,12 @@ public enum MarkdownClipboard {
         }
 
         func visitInlineCode(_ inlineCode: InlineCode) -> (any Markup)? {
-            InlineHTML("<code style=\"" + Self.codeStyle + "\">" + Self.escaped(inlineCode.code) + "</code>")
+            InlineHTML("<code style=\"" + codeStyle + "\">" + Self.escaped(inlineCode.code) + "</code>")
         }
 
         func visitCodeBlock(_ codeBlock: CodeBlock) -> (any Markup)? {
             HTMLBlock(
-                "<pre style=\"" + Self.codeStyle + "\"><code>" + Self.escaped(codeBlock.code) + "</code></pre>\n",
+                "<pre style=\"" + codeStyle + "\"><code>" + Self.escaped(codeBlock.code) + "</code></pre>\n",
             )
         }
 
@@ -72,7 +72,10 @@ public enum MarkdownClipboard {
 
         // MARK: Private
 
-        private static let codeStyle = "font-family: Menlo, Monaco, 'Courier New', monospace"
+        /// Stored, not static: a rewriter with no storage has no address
+        /// of its own, so ThreadSanitizer took two concurrent copies'
+        /// mutating visits for one variable and reported a race.
+        private let codeStyle = "font-family: Menlo, Monaco, 'Courier New', monospace"
 
         private static func escaped(_ text: String) -> String {
             text.replacing("&", with: "&amp;")
