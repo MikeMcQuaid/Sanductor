@@ -582,9 +582,13 @@ fi
 
 plutil -convert json -o - Sanductor.xcodeproj/project.xcproj | python3 -c '
 import json
+import plistlib
 import sys
+from pathlib import Path
 
 targets = {target["name"]: target for target in json.load(sys.stdin)["targets"]}
+mac_plist = Path(targets["SanductorApp"]["build-settings"]["INFOPLIST_FILE"])
+assert plistlib.loads(mac_plist.read_bytes())["NSAutoFillRequiresTextContentTypeForOneTimeCodeOnMac"] is True
 modules = [
     targets[name]["build-settings"].get("PRODUCT_MODULE_NAME", targets[name]["build-settings"]["PRODUCT_NAME"])
     for name in ["SanductorApp", "Sanductor-iOS"]

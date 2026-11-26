@@ -124,16 +124,9 @@ public struct GitHubClient: Sendable {
         try await gh(["repo", "clone", fullName, name], in: directory)
     }
 
-    /// The repository's `owner/name`, nil when unknown. No caching:
-    /// `--cache` belongs to `gh api` alone, and passing it here made
-    /// every lookup die on an unknown flag, which read downstream as
-    /// a missing origin.
+    /// The repository's cached GitHub name, when its origin can be read.
     public func fullName(repositoryPath: String) async -> String? {
-        // The remote's URL names the repository, and reading it is a
-        // local git call; asking GitHub the same was one network
-        // round trip per repository per poll.
-        let name = URL(fileURLWithPath: repositoryPath).lastPathComponent
-        return await GitClient(runner: runner).fullName(of: Repository(name: name, path: repositoryPath))
+        try? await GitClient(runner: runner).readFullName(at: repositoryPath)
     }
 
     /// Opens a pull request from the worktree's branch; returns its

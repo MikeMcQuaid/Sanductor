@@ -57,14 +57,12 @@ public extension GitHubClient {
         branch: String,
         etag: String?,
     ) async throws -> ConditionalAnswer {
-        guard let fullName = await fullName(repositoryPath: repositoryPath) else {
-            throw CommandError(
-                command: "pulls for " + branch,
-                result: ProcessResult(status: 1, standardOutput: "", standardError: "No GitHub remote"),
-            )
+        let git = GitClient(runner: runner)
+        guard let fullName = try await git.readFullName(at: repositoryPath) else {
+            throw SessionServiceError("No GitHub remote configured for this repository.")
         }
 
-        let owner = await GitClient(runner: runner).headOwner(repositoryPath: repositoryPath, branch: branch)
+        let owner = await git.headOwner(repositoryPath: repositoryPath, branch: branch)
         // Encoded as a query value: a branch name may hold `#`, `&`
         // or a space, any of which cuts the query short or splits it.
         let head = ((owner ?? fullName.split(separator: "/").first.map(String.init) ?? "") + ":" + branch)

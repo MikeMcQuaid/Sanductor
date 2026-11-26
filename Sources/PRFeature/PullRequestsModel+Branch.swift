@@ -151,15 +151,16 @@ extension PullRequestsModel {
     /// What the branch was rebased on.
     private func rebaseUntilSigned(_ worktree: Worktree) async throws -> String {
         var target = try await performRebase(worktree)
-        await reload(keepingSelection: true)
+        tipSignature = await checkTipSigned(worktree) ? .signed : .unsigned
         if tipSignature != .signed {
             try? await Task.sleep(for: .milliseconds(Self.signatureSettleMilliseconds))
-            await reload(keepingSelection: true)
+            tipSignature = await checkTipSigned(worktree) ? .signed : .unsigned
         }
         if tipSignature != .signed {
             target = try await performRebase(worktree)
-            await reload(keepingSelection: true)
+            tipSignature = await checkTipSigned(worktree) ? .signed : .unsigned
         }
+        rebaseNeed = await fetchRebaseNeed(worktree)
         return target
     }
 

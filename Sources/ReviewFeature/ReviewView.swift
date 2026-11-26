@@ -56,8 +56,9 @@ public struct ReviewView: View {
                     return
                 }
 
+                let followedCheckout = selectedBranch == stack.checkedOut && fresh.checkedOut != stack.checkedOut
                 stack = fresh
-                if stack.branches.contains(selectedBranch) == false {
+                if followedCheckout || stack.branches.contains(selectedBranch) == false {
                     if selectedBranch.isEmpty == false {
                         model.commitTarget = nil
                     }
@@ -86,6 +87,9 @@ public struct ReviewView: View {
                 }
             }
             .onChange(of: automationGeneration) {
+                model.reapplyCachedResolutions(
+                    pullRequests: service.pullRequestReads, repositoryPath: worktree.repositoryPath,
+                )
                 if localReview.isBusy == false {
                     localReview.refreshAutomation()
                 }
@@ -95,7 +99,7 @@ public struct ReviewView: View {
             }
             .onChange(of: model.files) { localReview.update(files: model.files) }
             .onChange(of: resolutionGeneration) {
-                model.reapplyOutsideDiffResolutions(
+                model.reapplyCachedResolutions(
                     pullRequests: service.pullRequestReads, repositoryPath: worktree.repositoryPath,
                 )
             }

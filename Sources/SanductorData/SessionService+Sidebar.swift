@@ -55,17 +55,17 @@ public extension SessionService {
                 // A repository not due keeps its last group, with only
                 // the live session state, which is a pane listing
                 // already in hand, brought up to date.
-                if scope.includes(repository.path) == false, let previous = keptByPath[repository.path] {
-                    tasks.addTask { (index, refreshingSessions(of: previous, reading: reading)) }
-                    continue
-                }
                 tasks.addTask {
-                    await (index, group(
-                        of: repository,
-                        panes: panes,
-                        activity: activity,
-                        metadata: metadata,
-                    ))
+                    var unchanged = [Worktree: WorktreeItem]()
+                    if scope.includes(repository.path) == false, let previous = keptByPath[repository.path] {
+                        let current = refreshingSessions(of: previous, reading: reading)
+                        let idle = current.items.filter { scope.includes($0.worktree.path) == false }
+                        if idle.count == current.items.count {
+                            return (index, current)
+                        }
+                        unchanged = Dictionary(idle.map { ($0.worktree, $0) }) { first, _ in first }
+                    }
+                    return await (index, group(of: repository, reading: reading, unchanged: unchanged))
                 }
             }
             var collected = [(Int, RepositoryGroup)]()
@@ -179,9 +179,34 @@ public extension SessionService {
             repositoryName: repository.name,
             repositoryPath: repository.path,
             branch: git.currentBranch(worktreePath: repository.path)
+                ?? GitClient.headFileBranch(worktreePath: repository.path)
                 ?? baseRef.map(Self.branchName(fromBaseRef:)) ?? "main",
             path: repository.path,
         )
+    }
+
+    private func listedWorktrees(of repository: Repository, metadata: AppMetadata) async -> [Worktree] {
+        do {
+            return try await git.worktrees(of: repository)
+        } catch is GitClient.ConfigurationError {
+            let saved = metadata.cachedSidebar.first { $0.path == repository.path }
+            return (saved?.worktrees ?? []).compactMap { row in
+                guard row.isHostDirectory == false, row.path != repository.path,
+                      FileManager.default.fileExists(atPath: row.path + "/.git")
+                else {
+                    return nil
+                }
+
+                return Worktree(
+                    repositoryName: repository.name,
+                    repositoryPath: repository.path,
+                    branch: row.branch,
+                    path: row.path,
+                )
+            }
+        } catch {
+            return []
+        }
     }
 
     /// A kept group with each row's session re-read from the pane
@@ -199,13 +224,12 @@ public extension SessionService {
     /// each read beside the others.
     func group(
         of repository: Repository,
-        panes: [HerdrPane],
-        activity: [String: Date],
-        metadata: AppMetadata,
+        reading: SidebarReading,
+        unchanged: [Worktree: WorktreeItem] = [:],
     ) async -> RepositoryGroup {
         async let fullName = git.fullName(of: repository)
         async let localBranches = git.branches(worktreePath: repository.path, newestFirst: true)
-        async let worktrees = (try? git.worktrees(of: repository)) ?? []
+        async let worktrees = listedWorktrees(of: repository, metadata: reading.metadata)
         let baseRef = await git.defaultBaseRef(of: repository)
         // One read for every branch's counts and dates, rather than
         // three processes per worktree.
@@ -224,11 +248,16 @@ public extension SessionService {
         let items = await withTaskGroup(of: (Int, WorktreeItem).self) { tasks in
             for (index, worktree) in candidates.enumerated() {
                 tasks.addTask {
-                    await (index, item(
+                    if let kept = unchanged[worktree], let revision = facts[worktree.branch]?.revision,
+                       kept.revision?.hasPrefix(revision + "\n") == true
+                    {
+                        return (index, kept)
+                    }
+                    return await (index, item(
                         worktree: worktree,
                         baseRef: baseRef,
                         facts: facts[worktree.branch],
-                        reading: SidebarReading(panes: panes, activity: activity, metadata: metadata),
+                        reading: reading,
                     ))
                 }
             }
@@ -249,7 +278,7 @@ public extension SessionService {
 
             return first.lastActivityAt > second.lastActivityAt
         }
-        sorted += await hostItems(of: repository, metadata: metadata)
+        sorted += await hostItems(of: repository, metadata: reading.metadata)
         return await RepositoryGroup(
             repository: Repository(name: repository.name, path: repository.path, fullName: fullName),
             items: sorted,
@@ -309,6 +338,7 @@ public extension SessionService {
             lastActivityAt: lastActivity,
             revision: (known?.revision ?? "") + "\n" + (local.revision ?? ""),
             onlyPublishedChanges: git.onlyPublishedChanges(in: worktree, facts: known, base: baseRef),
+            configurationError: local.configurationError,
         )
     }
 
@@ -328,8 +358,7 @@ public extension SessionService {
             var transcriptPath: String?
             if let agent {
                 let resumeID = reading.metadata.resumeIDs[pane.sessionName]
-                let transcripts = sessionsInDirectories(of: worktree.path, liveSession: nil)
-                    .filter { $0.agent == agent }
+                let transcripts = sessionsInDirectories(of: worktree.path, liveSession: nil, agent: agent)
                 transcriptPath = transcripts.first?.path
                 if let newest = transcripts.first(where: { resumeID == nil || $0.resumeID == resumeID }) {
                     lastActivity = max(

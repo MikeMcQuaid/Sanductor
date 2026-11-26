@@ -50,12 +50,12 @@ public actor TranscriptTail {
     /// Reads a bounded tail, keeping an unfinished record for the next live read.
     public func entries(includingFinalLine: Bool = false) -> [TranscriptEntry] {
         guard let handle = try? FileHandle(forReadingFrom: transcript) else {
-            return log
+            return displayEntries
         }
 
         defer { try? handle.close() }
         guard let size = try? handle.seekToEnd() else {
-            return log
+            return displayEntries
         }
 
         if size < offset {
@@ -63,53 +63,93 @@ public actor TranscriptTail {
             omitsEarlierRecords = false
             log.removeAll()
         }
-        let window = UInt64(Self.maximumBytes)
-        let start = max(offset, size > window ? size - window : 0)
+        let unread = size - offset
+        guard unread > 0 else {
+            return displayEntries
+        }
 
+        for limit in [Self.openingBytes, Self.lookbackBytes] {
+            let start = size - min(unread, limit)
+            let skipping = start > offset
+            let batch = read(handle, from: start, to: size, includingFinalLine: includingFinalLine)
+            var latest = log
+            if let batch {
+                TranscriptParser.append(batch.text, to: &latest)
+            }
+            if skipping, latest.count == log.count, limit == Self.openingBytes {
+                continue
+            }
+            if let batch {
+                offset = batch.end
+            }
+            if latest.count > log.count {
+                if skipping {
+                    latest.removeFirst(log.count)
+                }
+                log = latest
+                trimHistory()
+            }
+            omitsEarlierRecords = omitsEarlierRecords || skipping
+            break
+        }
+        return displayEntries
+    }
+
+    // MARK: Private
+
+    private static let openingBytes: UInt64 = 262_144
+    private static let lookbackBytes: UInt64 = 8_388_608
+    private static let maximumTextBytes = 16_384
+    private static let maximumEntries = 24
+    private static let newline: UInt8 = .init(ascii: "\n")
+
+    private var offset: UInt64 = 0
+    private var log: [TranscriptEntry] = []
+
+    /// Keep the full final entry for deduplicating the next live record.
+    private var displayEntries: [TranscriptEntry] {
+        guard let last = log.last, last.text.utf8.count > Self.maximumTextBytes else {
+            return log
+        }
+
+        let cut = last.text.utf8.index(last.text.endIndex, offsetBy: -Self.maximumTextBytes)
+        let start = cut.samePosition(in: last.text) ?? last.text.index(after: cut)
+        return [TranscriptEntry(id: last.id, role: last.role, text: String(last.text[start...]))]
+    }
+
+    private func read(
+        _ handle: FileHandle, from start: UInt64, to size: UInt64, includingFinalLine: Bool,
+    ) -> (text: String, end: UInt64)? {
         // The preceding byte distinguishes a complete first record from a fragment.
         let skipping = start > offset
         let readFrom = skipping ? start - 1 : start
-        guard start < size, (try? handle.seek(toOffset: readFrom)) != nil,
+        guard (try? handle.seek(toOffset: readFrom)) != nil,
               let data = try? handle.read(upToCount: Int(size - readFrom))
         else {
-            return log
+            return nil
         }
 
         var records = data[...]
         if skipping {
-            omitsEarlierRecords = true
-            log.removeAll()
             guard let first = records.firstIndex(of: Self.newline) else {
-                return log
+                return nil
             }
 
             records = records[(first + 1)...]
         }
         if includingFinalLine == false {
             guard let last = records.lastIndex(of: Self.newline) else {
-                return log
+                return nil
             }
 
             records = records[...last]
         }
-        offset = readFrom + UInt64(records.endIndex)
         guard let text = String(bytes: records, encoding: .utf8) else {
-            return log
+            return nil
         }
 
-        TranscriptParser.append(text, to: &log)
-        trimHistory()
-        return log
+        return (text, readFrom + UInt64(records.endIndex))
     }
-
-    // MARK: Private
-
-    private static let maximumBytes = 8_388_608
-    private static let maximumEntries = 4_000
-    private static let newline: UInt8 = .init(ascii: "\n")
-
-    private var offset: UInt64 = 0
-    private var log: [TranscriptEntry] = []
 
     private func trimHistory() {
         var bytes = 0
@@ -117,12 +157,12 @@ public actor TranscriptTail {
             .reversed()
             .prefix { entry in
                 bytes += entry.text.utf8.count
-                return bytes <= Self.maximumBytes
+                return bytes <= Self.maximumTextBytes
             }
             .count
         if log.count > keep {
             omitsEarlierRecords = true
-            log.removeFirst(log.count - keep)
+            log.removeFirst(log.count - max(1, keep))
         }
     }
 }

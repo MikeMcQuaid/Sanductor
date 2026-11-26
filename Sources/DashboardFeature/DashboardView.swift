@@ -305,13 +305,16 @@ public struct DashboardView: View {
         let loss = losses.isEmpty
             ? "The worktree and its branch are removed."
             : "This permanently discards " + losses.joined(separator: " and ") + "."
-        return loss + " Conversations stay readable on the repository page."
+        let remaining = model.unfinishedMergeBranches(for: item)
+        let stack = remaining.isEmpty ? "" : " Unfinished stack branches: " + remaining.joined(separator: ", ") + "."
+        return loss + stack + " Conversations stay readable on the repository page."
     }
 
-    /// Cleans up merge-safely and, when refused, offers the confirmed
-    /// force delete instead of silently doing nothing.
+    /// Offers explicit deletion only for a dirty or unmerged worktree outside an unfinished stack.
     private func cleanUpOrOffer(_ item: WorktreeItem) async {
-        if let refusal = await model.cleanUp(item: item) {
+        if let refusal = await model.cleanUp(item: item), refusal == .dirty || refusal == .unmerged,
+           model.unfinishedMergeBranches(for: item).isEmpty
+        {
             pendingForceDelete = (item.worktree.path, refusal)
         }
     }

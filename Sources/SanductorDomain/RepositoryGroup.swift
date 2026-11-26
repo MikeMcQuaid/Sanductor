@@ -19,6 +19,7 @@ public struct WorktreeItem: Identifiable, Hashable, Sendable {
         lastActivityAt: Int = 0,
         revision: String? = nil,
         onlyPublishedChanges: Bool = false,
+        configurationError: String? = nil,
     ) {
         self.worktree = worktree
         self.session = session
@@ -30,6 +31,7 @@ public struct WorktreeItem: Identifiable, Hashable, Sendable {
         self.behindUpstream = behindUpstream
         self.lastActivityAt = lastActivityAt
         self.revision = revision
+        self.configurationError = configurationError
         self.onlyPublishedChanges = onlyPublishedChanges
     }
 
@@ -47,6 +49,9 @@ public struct WorktreeItem: Identifiable, Hashable, Sendable {
 
     /// Whether the worktree has uncommitted changes.
     public let isDirty: Bool
+
+    /// Why Git could not safely read the working tree.
+    public let configurationError: String?
 
     /// Commits not yet pushed to the upstream, nil without one.
     public let aheadOfUpstream: Int?

@@ -82,6 +82,10 @@ public final class ServiceStatus {
         }
         guard GitHubOutage.isLikely(error) else {
             let description = error.localizedDescription
+            guard reported[what] != description else {
+                _ = release(what)
+                return
+            }
             guard let earlier = release(what) else {
                 held[what] = description
                 PerformanceLog.recordMessage(
@@ -96,11 +100,13 @@ public final class ServiceStatus {
                         return
                     }
 
+                    self?.reported[what] = unconfirmed
                     ErrorLog.shared.report(what + ": " + unconfirmed + " (not read again since)")
                 }
                 return
             }
 
+            reported[what] = description
             ErrorLog.shared.report(what + ": " + earlier + "; then again: " + description)
             return
         }
@@ -147,6 +153,7 @@ public final class ServiceStatus {
     /// done not news, and ends an outage, saying so once.
     public func recordSuccess(doing what: String) {
         _ = release(what)
+        reported[what] = nil
         guard isUnavailable else {
             return
         }
@@ -165,6 +172,7 @@ public final class ServiceStatus {
     /// Failures held while the next read has its go, by what was
     /// being done, and the deadline each is reported at regardless.
     private var held: [String: String] = [:]
+    private var reported: [String: String] = [:]
     private var authenticationFailure: UUID?
     private var deadlines: [String: Task<Void, Never>] = [:]
 

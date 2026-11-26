@@ -70,7 +70,8 @@ extension ReviewModelTests {
         try await git.commitAll(worktreePath: path, message: "Newer message")
         let head = await git.commitHash(of: "HEAD", worktreePath: path)
         try await runGit(["config", "commit.gpgsign", "true"], in: path)
-        try await runGit(["config", "gpg.program", "/usr/bin/false"], in: path)
+        try await runGit(["config", "gpg.format", "ssh"], in: path)
+        try await runGit(["config", "user.signingkey", path + "/missing-key"], in: path)
 
         await model.amendLastCommit()
 

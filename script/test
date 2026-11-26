@@ -9,6 +9,12 @@ cd "$(dirname "$0")/.."
 
 bash Tests/ScriptTests.sh
 
+# Fixture keys use OpenSSH regardless of the host's configured signing agent.
+signer_config_index="${GIT_CONFIG_COUNT:-0}"
+export "GIT_CONFIG_KEY_${signer_config_index}=gpg.ssh.program"
+export "GIT_CONFIG_VALUE_${signer_config_index}=/usr/bin/ssh-keygen"
+export GIT_CONFIG_COUNT=$((signer_config_index + 1))
+
 # SwiftPM otherwise signs resource-only bundles as executables and
 # warns about a missing build-graph node in Debug builds.
 swift_args=(--force-resolved-versions --disable-get-task-allow-entitlement

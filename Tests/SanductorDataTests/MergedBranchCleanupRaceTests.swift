@@ -74,8 +74,10 @@ struct MergedBranchCleanupRaceTests {
         let service = world.service(herdr: world.herdr, git: git)
         let item = WorktreeItem(worktree: worktree, session: nil, isDirty: false, aheadOfUpstream: 0)
 
-        #expect(try await service.cleanUpMergedWorktree(item: item, baseRef: "main") == nil)
-        #expect(FileManager.default.fileExists(atPath: worktree.path) == false)
+        let refusal = try await service.cleanUpMergedWorktree(item: item, baseRef: "main")
+        // Before removal starts, the worktree can be kept as well as the branch.
+        #expect(refusal == (trigger == "merge-base" ? .unverified : nil))
+        #expect(FileManager.default.fileExists(atPath: worktree.path) == (trigger == "merge-base"))
         #expect(await git.tip(of: "refs/heads/topic", worktreePath: path) == tip)
     }
 

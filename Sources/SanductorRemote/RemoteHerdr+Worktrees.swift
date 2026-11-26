@@ -16,7 +16,7 @@ extension RemoteHerdr {
     }
 
     static func worktreeStatusCommand(paths: [String]) -> [String] {
-        let command = (["git", "--no-optional-locks", "-c", "core.fsmonitor=false"]
+        let command = (["git", "--no-optional-locks", "-c", "core.fsmonitor=false", "-c", "core.hooksPath=/dev/null"]
             + GitWorktreeStatus.arguments.filter { $0 != "-z" } + ["--branch"])
             .map(SSHConfiguration.quote)
             .joined(separator: " ")

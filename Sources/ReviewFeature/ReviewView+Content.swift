@@ -80,6 +80,16 @@ extension ReviewView {
             // A local `git diff` lands in well under half a second;
             // a wait that short shows nothing rather than a flash.
             Color.clear
+        } else if let error = model.configurationError {
+            ContentUnavailableView {
+                Label("Git configuration blocked", systemImage: "exclamationmark.shield")
+            } description: {
+                Text(error.localizedDescription).textSelection(.enabled)
+            } actions: {
+                if let file = error.file {
+                    Button("Show in Finder") { NSWorkspace.shared.activateFileViewerSelecting([file]) }
+                }
+            }
         } else if model.isRepositoryAvailable == false {
             ContentUnavailableView(
                 "Git repository unavailable",

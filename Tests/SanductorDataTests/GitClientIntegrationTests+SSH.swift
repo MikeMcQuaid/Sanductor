@@ -31,9 +31,14 @@ extension GitClientIntegrationTests {
         }
 
         #expect(FileManager.default.fileExists(atPath: ran) == false)
-        // What a blanked value failed with, before reaching ssh.
         let message = try #require(failure?.localizedDescription)
-        #expect(message.contains("cannot run :") == false)
-        #expect(message.contains("Could not resolve hostname"))
+        #expect(message.contains("core.sshcommand"))
+        #expect(message.contains("~/.gitconfig"))
+        try await TestSupport.runGit(["config", "--unset", "core.sshCommand"], in: repoPath)
+        let lookup = await #expect(throws: Error.self) {
+            try await GitClient(runner: FoundationProcessRunner()) { true }
+                .fetch(repositoryPath: repoPath)
+        }
+        #expect(lookup?.localizedDescription.contains("Could not resolve hostname") == true)
     }
 }

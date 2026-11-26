@@ -94,9 +94,7 @@ final class PullRequestsModel {
                 body: body,
             )
         }
-        performLinkStack = { worktree in
-            try await service.linkStack(worktree: worktree)
-        }
+        performLinkStack = { try await service.linkStack(worktree: $0) }
         performMergeStack = { worktree, number in
             try await service.mergeStack(worktree: worktree, number: number)
         }
@@ -156,9 +154,8 @@ final class PullRequestsModel {
         nameFork = { worktree in
             await service.forkRemote(worktreePath: worktree.path, branch: worktree.branch)?.remote
         }
-        performPush = { worktree in
-            try await service.push(worktree: worktree)
-        }
+        performPush = { try await service.push(worktree: $0) }
+        resolveMarkedReviews = Self.reviewResolver(service: service, repositoryPath: repository.path)
         performRebase = { worktree in
             try await service.rebaseSigned(worktree: worktree)
         }
@@ -228,9 +225,6 @@ final class PullRequestsModel {
     /// Which pull requests the tab lists.
     var scope: PullRequestScope = .worktree
 
-    /// The selected conversation; the view writes nil to go back.
-    var selected: PullRequestSummary?
-
     var summaries: [PullRequestSummary] = []
     var isLoading = false
     /// Bumped per reload: a page fetch a reload overtook leaves the
@@ -271,8 +265,8 @@ final class PullRequestsModel {
     /// one the form shows no template field at all.
     var hasTemplate = false
 
-    /// Test seams: the live client and service by default, fakes in
-    /// tests.
+    /// The live client and service supply these operations; tests can substitute them.
+    var resolveMarkedReviews: (Set<String>, Int?) async -> Void
     var fetchList: (GitHubClient.ListScope, Int) async throws -> [PullRequestSummary]
     var fetchSummary: (Int) async throws -> PullRequestSummary?
     var fetchHasMergeQueue: () async -> Bool
@@ -364,6 +358,11 @@ final class PullRequestsModel {
 
     /// The selected pull request's labels, as GitHub last said.
     var selectedLabels: [String] = []
+
+    /// The selected conversation; the view writes nil to go back.
+    var selected: PullRequestSummary? {
+        didSet { advancePastMerge(previous: oldValue) }
+    }
 
     /// The pull request creation form's fields; the template loads
     /// from the repository on reload when the form shows.

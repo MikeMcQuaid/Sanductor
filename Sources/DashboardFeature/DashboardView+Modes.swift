@@ -49,6 +49,7 @@ extension DashboardView {
             status: model.sidebarStatus(for: item),
             pullRequest: model.pullRequest(for: item),
             standing: model.stackStanding(for: item),
+            unfinishedBranches: model.unfinishedMergeBranches(for: item),
             load: model.paneLoads[item.worktree.path],
             feedbackStatus: model.feedbackStatus(for: item),
             failure: model.launchFailure(for: item),

@@ -1,4 +1,5 @@
 @testable import PRFeature
+import SanductorData
 import Synchronization
 import Testing
 
@@ -6,6 +7,24 @@ import Testing
 /// moment, then rebased once more, before anyone is asked to press
 /// anything.
 extension PullRequestsModelTests {
+    @Test
+    func `sign and push does not reload the PR between signing and pushing`() async {
+        let model = makeModel(items: [item(branch: "feature", ahead: 1)])
+        var signed = false
+        var pushed = false
+        model.checkTipSigned = { _ in signed }
+        model.fetchRebaseNeed = { _ in signed ? .nothing : .sign }
+        model.performRebase = { _ in signed = true; return "origin/main" }
+        model.performPush = { _ in pushed = true; return .origin }
+        model.fetchList = { _, _ in
+            #expect(signed == false || pushed)
+            return []
+        }
+        await model.reload()
+        #expect(await model.publish())
+        #expect(pushed)
+    }
+
     @Test
     func `a tip read too early is read again, not rebased again`() async {
         let model = makeModel(items: [item(branch: "feature", ahead: 1)])

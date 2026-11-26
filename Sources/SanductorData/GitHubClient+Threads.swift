@@ -45,7 +45,7 @@ public extension GitHubClient {
     func reviewThreads(repositoryPath: String, number: Int) async throws -> [ReviewThread] {
         // Loud guards: an early silent return here used to read as
         // an empty conversation and hide the real fault.
-        guard let fullName = await fullName(repositoryPath: repositoryPath) else {
+        guard let fullName = try await GitClient(runner: runner).readFullName(at: repositoryPath) else {
             throw ThreadDecodeError(message: "the repository's GitHub name is unknown; is origin set?")
         }
 

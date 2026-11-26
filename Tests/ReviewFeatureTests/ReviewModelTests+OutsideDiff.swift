@@ -29,13 +29,13 @@ extension ReviewModelTests {
         await model.toggleResolved(finding)
         #expect(requests.cachedConversation(repositoryPath: root, number: 7).reviewThreads.first?.isResolved == true)
         #expect(requests.cachedConversation(repositoryPath: root, number: 8).reviewThreads.first?.isResolved == false)
-        model.reapplyOutsideDiffResolutions(pullRequests: requests, repositoryPath: root)
+        model.reapplyCachedResolutions(pullRequests: requests, repositoryPath: root)
         #expect(model.threads.first?.isResolved == true)
         await model.reloadThreads()
         #expect(model.threadPullRequestNumber == 8)
         #expect(model.threads.first?.isResolved == false)
         requests.rememberListing(repositoryPath: root, scope: .branch("main"), summaries: [first])
-        model.reapplyOutsideDiffResolutions(pullRequests: requests, repositoryPath: root)
+        model.reapplyCachedResolutions(pullRequests: requests, repositoryPath: root)
         #expect(model.threads.first?.isResolved == false)
     }
 

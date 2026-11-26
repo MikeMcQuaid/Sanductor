@@ -77,7 +77,7 @@ public extension DashboardModel {
 
     /// Puts a new branch name on a row in place, so the sidebar
     /// keeps up with what just happened.
-    private func rename(_ item: WorktreeItem, to branch: String?) {
+    func rename(_ item: WorktreeItem, to branch: String?) {
         guard let branch else {
             return
         }

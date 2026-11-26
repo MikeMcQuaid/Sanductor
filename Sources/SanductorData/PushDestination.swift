@@ -64,6 +64,8 @@ public struct MergeCleanupReport: Sendable {
 
     // MARK: Public
 
+    public var unfinishedBranches: [String] = []
+
     /// What the cleanup did, in order.
     public var notes: [String] = []
 

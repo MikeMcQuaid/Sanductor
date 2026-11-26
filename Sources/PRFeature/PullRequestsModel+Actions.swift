@@ -124,6 +124,11 @@ extension PullRequestsModel {
             let full = try? await fetchSummary(summary.number)
             if let full {
                 cacheEnriched(full)
+                let branch = pullRequests.branchSummary(repositoryPath: repository.path, branch: full.headBranch)
+                // The sidebar consumes the open-to-merged transition for the checkout.
+                if branch?.number == full.number, branch?.state == full.state {
+                    pullRequests.rememberBranchSummary(full, repositoryPath: repository.path, branch: full.headBranch)
+                }
                 if selected?.number == full.number {
                     selected = withCachedUnresolved(full)
                     selectedLabels = full.labels
@@ -379,6 +384,9 @@ extension PullRequestsModel {
         pullRequests.forgetRepositorySettings(repositoryPath: repository.path)
         if let number = selected?.number {
             pullRequests.invalidate(repositoryPath: repository.path, number: number)
+            await resolveMarkedReviews([], number)
+        } else if let listedBranch {
+            await resolveMarkedReviews([listedBranch], nil)
         }
         conversationRefreshes += 1
         await reload(keepingSelection: true)

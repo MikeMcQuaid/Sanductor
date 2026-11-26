@@ -69,7 +69,10 @@ enum TestSupport {
     @discardableResult
     static func runGit(_ arguments: [String], in directory: String) async throws -> ProcessResult {
         try await run(
-            ["git", "-c", "core.hooksPath=/dev/null", "-c", "commit.gpgsign=false", "-c", "maintenance.auto=false"]
+            [
+                "/usr/bin/env", "git", "-c", "core.hooksPath=/dev/null", "-c", "core.fsmonitor=false",
+                "-c", "commit.gpgsign=false", "-c", "maintenance.auto=false",
+            ]
                 + arguments,
             in: directory,
         )

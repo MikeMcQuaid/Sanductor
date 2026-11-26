@@ -6,6 +6,57 @@ import Testing
 
 extension GitHubClientTests {
     @Test
+    func `cleanup checks open PRs both on and targeting each stack branch`() async throws {
+        let runner = RecordingRunner()
+        runner.standardOutput = #"[{"state":"OPEN","headRefName":"retargeted"},{"state":"OPEN","headRefName":"upper"}]"#
+        let client = GitHubClient(runner: runner) { true }
+        let remaining = try await client.stackReviews(
+            repositoryPath: "/repo", branches: ["lower", "retargeted"], registered: nil,
+        )
+        #expect(remaining.map(\.headRefName) == ["retargeted", "upper"])
+        let call = try #require(runner.commands.first)
+        let query = try #require(call.first { $0.hasPrefix("query=") })
+        #expect(query.contains("headRefName: $branch1"))
+        #expect(query.contains("baseRefName: $branch0"))
+        #expect(runner.commands.count == 1)
+    }
+
+    @Test
+    func `cleanup follows registered PR numbers when GitHub retargets higher layers`() async throws {
+        let runner = StackAPIRunner(stacks: [12: Self.stackJSON])
+        let lower = PullRequestSummary(
+            number: 12,
+            title: "First",
+            url: "",
+            headBranch: "lower",
+            mergeable: "",
+            reviewDecision: "",
+            checks: "",
+            stackStanding: StackStanding(position: 1, height: 2, number: 42),
+        )
+        _ = try await GitHubClient(runner: runner) { true }.stackReviews(
+            repositoryPath: "/repo", branches: ["lower"], registered: lower,
+        )
+        let calls = runner.calls.withLock { $0 }
+        #expect(calls.count == 2)
+        #expect(calls.last?.contains { $0.hasPrefix("query=") && $0.contains("pullRequest(number: 7)") } == true)
+    }
+
+    @Test
+    func `open stack numbers share one ordered query with branch names as data`() async throws {
+        let runner = RecordingRunner()
+        runner.standardOutput = "[31,null,12]"
+        let branches = ["feature/lower", "missing", "upper$work"]
+        let client = GitHubClient(runner: runner) { true }
+        #expect(try await client.openStackNumbers(repositoryPath: "/repo", branches: branches) == [31, 12])
+        let call = try #require(runner.commands.first)
+        #expect(runner.commands.count == 1)
+        #expect(call.contains("graphql"))
+        #expect(call.contains("branch2=upper$work"))
+        #expect(call.first { $0.hasPrefix("query=") }?.contains("upper$work") == false)
+    }
+
+    @Test
     func `REST stack positions survive missing neighbouring pull requests`() throws {
         let json = """
         [{"number":7,"title":"Work","html_url":"https://github.com/o/r/pull/7",

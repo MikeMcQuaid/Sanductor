@@ -63,16 +63,16 @@ extension PullRequestsModel {
     private func restackUntilSigned(_ worktree: Worktree) async throws -> (moved: [String], pushed: [String]) {
         let shouldPush = unpushedBelow == nil
         var (moved, pushed) = try await restackAndPush(worktree, shouldPush: shouldPush)
-        await readStack()
+        await loadStack()
         if unsignedStackBranches.isEmpty == false {
             try? await Task.sleep(for: .milliseconds(Self.signatureSettleMilliseconds))
-            await readStack()
+            await loadStack()
         }
         if unsignedStackBranches.isEmpty == false {
             let again = try await restackAndPush(worktree, shouldPush: shouldPush)
             moved += again.moved.filter { moved.contains($0) == false }
             pushed += again.pushed.filter { pushed.contains($0) == false }
-            await readStack()
+            await loadStack()
         }
         return (moved, pushed)
     }
@@ -89,11 +89,6 @@ extension PullRequestsModel {
         let pushed = try await stacking.push(worktree)
         markChecksPending(for: pushed)
         return (moved, pushed)
-    }
-
-    private func readStack() async {
-        await loadStack()
-        await reload(keepingSelection: true)
     }
 
     /// Pushes through the listed branch, so each pull request's base is on

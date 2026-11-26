@@ -111,6 +111,11 @@ public extension GitClient {
         busyWorktrees: @Sendable () async -> Set<String> = { [] },
     ) async throws {
         try await withRemoteOperation(worktreePath: worktreePath) {
+            if expectedTip == nil, parent == nil, sourceCommit == nil,
+               try await pushKnownTip(branch: branch, remote: remote, worktreePath: worktreePath)
+            {
+                return
+            }
             let tip: String =
                 if let expectedTip {
                     expectedTip
@@ -123,23 +128,11 @@ public extension GitClient {
                         busyWorktrees: busyWorktrees,
                     )
                 }
-            if let parent, await commitHash(of: parent.branch, worktreePath: worktreePath) != parent.previousTip,
-               await isAncestor(parent.branch, of: branch, worktreePath: worktreePath) == false
-            {
-                try await rebaseForPush(
-                    worktreePath: worktreePath,
-                    branch: branch,
-                    onto: parent.branch,
-                    from: parent.previousTip,
-                    busyWorktrees: busyWorktrees,
-                )
-            }
-            try await git(
-                ["push", "--force-with-lease=refs/heads/" + branch + ":" + tip]
-                    + (sourceCommit == nil ? ["--set-upstream"] : [])
-                    + [remote, sourceCommit.map { $0 + ":refs/heads/" + branch } ?? branch],
-                in: worktreePath,
-                remote: remote,
+            try await integratePushParent(
+                parent, branch: branch, worktreePath: worktreePath, busyWorktrees: busyWorktrees,
+            )
+            try await sendBranch(
+                branch, sourceCommit: sourceCommit, remote: remote, lease: tip, worktreePath: worktreePath,
             )
         }
     }

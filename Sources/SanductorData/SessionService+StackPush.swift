@@ -8,43 +8,94 @@ extension SessionService {
         let (index, branches) = try stackPushSelection(
             worktree: worktree, stack: stack, queued: queued,
         )
-        var pushed = [String]()
-        var parent: (branch: String, previousTip: String)?
-        for branch in branches {
-            if parent == nil, let below = stack.parent(of: branch), queued.contains(below),
-               let tip = await git.tip(of: below, worktreePath: worktree.path)
-            {
-                parent = await (remoteBranchRef(worktreePath: worktree.path, branch: below), tip)
+        guard let first = branches.first else {
+            return []
+        }
+
+        let path = worktree.path
+        let remote = await forkRemote(worktreePath: path, branch: first)?.remote ?? "origin"
+        var fixedParent: (branch: String, previousTip: String)?
+        if let below = stack.parent(of: first), queued.contains(below),
+           let tip = await git.commitHash(of: below, worktreePath: path)
+        {
+            fixedParent = await (remoteBranchRef(worktreePath: path, branch: below), tip)
+        }
+
+        let pushed = try await git.withRemoteOperation(worktreePath: path) { [fixedParent] in
+            try await git.git(["fetch", "--prune", remote], in: path, remote: remote)
+            let refs = try await prepareStackPush(
+                branches: (branches, Set(stack.branches.dropFirst(index + 1))),
+                parent: fixedParent,
+                path: path,
+                remote: remote,
+                busyWorktrees: busyWorktrees,
+            )
+            let pushed = refs.map(\.branch)
+            if pushed.isEmpty == false {
+                let needsUpstream = try await git.branchesNeedingUpstream(pushed, remote: remote, in: path)
+                await progress("Pushing " + pushed.joined(separator: ", "))
+                try await git.git(
+                    ["push", "--atomic"] + refs.map { "--force-with-lease=refs/heads/" + $0.branch + ":" + $0.lease }
+                        + [remote] + refs.map { $0.tip + ":refs/heads/" + $0.branch },
+                    in: path,
+                    remote: remote,
+                )
+                for branch in needsUpstream {
+                    let upstream = "refs/remotes/" + remote + "/" + branch
+                    try await git.git(["branch", "--set-upstream-to=" + upstream, branch], in: path)
+                }
             }
-            let remote = await forkRemote(worktreePath: worktree.path, branch: branch)?.remote ?? "origin"
-            let previousTip = await git.tip(of: branch, worktreePath: worktree.path)
-            // An earlier push's fetch may have pruned a deleted higher branch.
-            if stack.branches[...index].contains(branch) == false,
-               await git.refExists(worktreePath: worktree.path, ref: "refs/remotes/" + remote + "/" + branch) == false
-            {
+            return pushed
+        }
+        pullRequests.markChecksPending(repositoryPath: worktree.repositoryPath, branches: pushed)
+        return pushed
+    }
+
+    private struct StackPushRef {
+        let branch: String
+        let lease: String
+        let tip: String
+    }
+
+    private func prepareStackPush(
+        branches: (selected: [String], publishedOnly: Set<String>),
+        parent: (branch: String, previousTip: String)?,
+        path: String,
+        remote: String,
+        busyWorktrees: @Sendable () async -> Set<String>,
+    ) async throws -> [StackPushRef] {
+        var refs = [StackPushRef]()
+        var parent = parent
+        for branch in branches.selected {
+            let lease = await git.commitHash(of: "refs/remotes/" + remote + "/" + branch, worktreePath: path)
+            if lease == nil, branches.publishedOnly.contains(branch) {
                 continue
             }
-            if AppSettings.requiresSignedCommits,
-               await git.isCommitSigned(worktreePath: worktree.path, ref: branch) == false
+            let previous = await git.commitHash(of: branch, worktreePath: path)
+            _ = try await git.preparePush(
+                worktreePath: path,
+                branch: branch,
+                remote: remote,
+                parent: parent?.branch,
+                fetchedTip: lease ?? "",
+                busyWorktrees: busyWorktrees,
+            )
+            try await git.integratePushParent(parent, branch: branch, worktreePath: path, busyWorktrees: busyWorktrees)
+            guard let tip = await git.commitHash(of: branch, worktreePath: path) else {
+                throw stackError("Cannot read the tip of " + branch, in: path)
+            }
+
+            if AppSettings.requiresSignedCommits, tip != lease,
+               await git.isCommitSigned(worktreePath: path, ref: tip) == false
             {
                 throw SessionServiceError(
                     branch + "'s tip commit is not GPG signed; Rebase signs the stack before pushing.",
                 )
             }
-
-            await progress("Pushing `" + branch + "`")
-            try await git.push(
-                worktreePath: worktree.path,
-                branch: branch,
-                remote: remote,
-                parent: parent,
-                busyWorktrees: busyWorktrees,
-            )
-            parent = previousTip.map { (branch, $0) }
-            pushed.append(branch)
-            pullRequests.markChecksPending(repositoryPath: worktree.repositoryPath, branches: [branch])
+            refs.append(StackPushRef(branch: branch, lease: lease ?? "", tip: tip))
+            parent = previous.map { (branch, $0) }
         }
-        return pushed
+        return refs
     }
 
     private func stackPushSelection(

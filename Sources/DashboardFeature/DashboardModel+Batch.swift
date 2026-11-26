@@ -63,7 +63,7 @@ extension DashboardModel {
                 await fetchAndReset(item: item)
 
             case .cleanUp:
-                if let refusal = await cleanUp(item: item) {
+                if let refusal = await cleanUp(item: item), refusal == .dirty || refusal == .unmerged {
                     ErrorLog.shared.note(
                         item.worktree.branch + " was left alone: "
                             + (refusal == .dirty ? "uncommitted changes." : "not confirmed merged."),

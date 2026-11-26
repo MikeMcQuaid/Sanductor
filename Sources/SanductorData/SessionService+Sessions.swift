@@ -16,7 +16,11 @@ public extension SessionService {
     /// in the worktree, the one `pastSessions` leaves out of the list.
     @concurrent
     func liveTranscript(agent: AgentKind?, in worktreePath: String) async -> TranscriptSession? {
-        sessionsInDirectories(of: worktreePath, liveSession: nil).first { $0.agent == agent }
+        guard let agent else {
+            return nil
+        }
+
+        return sessionsInDirectories(of: worktreePath, liveSession: nil, agent: agent).first
     }
 
     /// The Markdown of a live session's newest reply, nil before its
@@ -27,7 +31,15 @@ public extension SessionService {
             return nil
         }
 
-        return transcriptEntries(for: transcript).lastReply
+        let tail = TranscriptTail(transcript: URL(fileURLWithPath: transcript.path))
+        let recent = await tail.entries(includingFinalLine: true)
+        // A tool or prompt before the last reply proves its start is in the window.
+        if await tail.omitsEarlierRecords,
+           recent.drop(while: { $0.role == .assistant }).contains(where: { $0.role == .assistant }) == false
+        {
+            return transcriptEntries(for: transcript).lastReply
+        }
+        return recent.lastReply
     }
 
     /// Submit only to the agent pane this reader opened.
@@ -334,9 +346,10 @@ public extension SessionService {
     internal func sessionsInDirectories(
         of workingDirectory: String,
         liveSession: AgentSession?,
+        agent: AgentKind? = nil,
     ) -> [TranscriptSession] {
         let scoped = runners
-            .filter(\.scopesTranscriptsByWorkingDirectory)
+            .filter { $0.scopesTranscriptsByWorkingDirectory && (agent == nil || $0.kind == agent) }
             .flatMap { runner -> [TranscriptSession] in
                 guard let directory = runner.transcriptDirectory(
                     workingDirectory: workingDirectory,
@@ -352,6 +365,10 @@ public extension SessionService {
         // Codex keeps one flat date tree with the working directory
         // embedded per session, so its conversations come from the
         // index rather than a per-worktree directory.
+        guard agent == nil || agent == .codexCLI else {
+            return scoped
+        }
+
         let codex = codexIndex.sessions(
             inRoot: paths.sandboxHome + "/.codex/sessions",
             workingDirectory: workingDirectory,

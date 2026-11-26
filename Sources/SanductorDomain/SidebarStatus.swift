@@ -18,6 +18,7 @@ public enum SidebarStatus: String, CaseIterable, Codable, Sendable {
     case done = "Done"
     case draft = "Draft"
     case open = "Open"
+    case partiallyMerged = "Partially merged"
     case merged = "Merged"
     case closed = "Closed"
     case idleAgent = "Idle agents"

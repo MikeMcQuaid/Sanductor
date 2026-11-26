@@ -124,6 +124,7 @@ public extension SessionService {
                 isDirty: facts?.isDirty ?? false,
                 aheadOfUpstream: facts?.aheadOfUpstream,
                 revision: facts?.revision,
+                configurationError: facts?.configurationError,
             ))
         }
         return items
@@ -148,6 +149,7 @@ public extension SessionService {
             isDirty: local.isDirty,
             aheadOfUpstream: ahead,
             revision: LocalReviewInput.fingerprint((local.revision ?? "") + "\n" + refs),
+            configurationError: local.configurationError,
         )
         hostFacts.remember(facts, of: path)
         return facts

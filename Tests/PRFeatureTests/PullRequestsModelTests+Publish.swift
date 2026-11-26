@@ -5,6 +5,28 @@ import SanductorDomain
 import Testing
 
 extension PullRequestsModelTests {
+    @Test
+    func `publishing and refreshing check marked reviews without waiting for a dashboard refresh`() async {
+        let model = makeModel(items: [item(branch: "feature", ahead: 1)])
+        await model.reload()
+        let (requests, continuation) = AsyncStream<Set<String>>.makeStream()
+        defer { continuation.finish() }
+        var refreshed: Int?
+        model.resolveMarkedReviews = { branches, number in
+            if let number {
+                refreshed = number
+            } else {
+                continuation.yield(branches)
+            }
+        }
+        #expect(await model.publish())
+        var iterator = requests.makeAsyncIterator()
+        #expect(await iterator.next() == ["feature"])
+        model.selected = summary(42, head: "feature")
+        await model.refresh()
+        #expect(refreshed == 42)
+    }
+
     @Test(arguments: [SessionService.RebaseNeed.nothing, .sign, .rebase, .rebaseAndSign])
     func `one action prepares and pushes a standalone branch`(need: SessionService.RebaseNeed) async {
         let model = makeModel(items: [item(branch: "feature", ahead: 1)])

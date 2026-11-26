@@ -14,17 +14,23 @@ extension ReviewModel {
         hasLoaded = false
         status = nil
         if let commit {
-            let resolved = await git.commitHash(of: commit + "^{commit}", worktreePath: worktreePath)
-            guard generation == reloadGeneration, Task.isCancelled == false else {
-                return
-            }
-            guard let resolved else {
-                hasLoaded = true
-                setStatus("Commit " + commit + " is not available in this worktree.")
-                return
-            }
+            do {
+                let resolved = try await git.resolveCommit(commit + "^{commit}", worktreePath: worktreePath)
+                try checkReload(generation)
+                commitTarget = resolved
+            } catch {
+                guard generation == reloadGeneration, Task.isCancelled == false else {
+                    return
+                }
 
-            commitTarget = resolved
+                hasLoaded = true
+                if error is GitClient.ConfigurationError {
+                    await recordReload(error, generation: generation)
+                } else {
+                    setStatus("Commit " + commit + " is not available in this worktree.")
+                }
+                return
+            }
         } else {
             commitTarget = nil
         }
@@ -36,6 +42,9 @@ extension ReviewModel {
         let generation = reloadGeneration
         selections = [:]
         do {
+            // Some scopes have no diff command when the upstream or base is unavailable.
+            // Surface an unsafe configuration there before presenting an empty scope.
+            _ = try await git.isWorktree(worktreePath: worktreePath)
             if let commitTarget {
                 try await loadCommit(commitTarget, generation: generation)
             } else if let stackTarget {

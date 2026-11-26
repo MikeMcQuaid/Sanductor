@@ -2,14 +2,26 @@ import Darwin
 import SanductorDomain
 
 public extension GitClient {
+    /// A status reading, including a configuration refusal that prevents reading the index.
+    struct LocalState: Sendable {
+        public let isDirty: Bool
+        public let revision: String?
+        public let configurationError: String?
+    }
+
     /// Local state for views: HEAD and uncommitted content can change
     /// without changing the branch's commit counts or dirty flag.
     @concurrent
-    func localState(worktreePath: String) async -> (isDirty: Bool, revision: String?) {
-        guard let output = try? await git(
-            GitWorktreeStatus.arguments + ["--branch", "--untracked-files=all"], in: worktreePath,
-        ).standardOutput else {
-            return (false, nil)
+    func localState(worktreePath: String) async -> LocalState {
+        let output: String
+        do {
+            output = try await git(
+                GitWorktreeStatus.arguments + ["--branch", "--untracked-files=all"], in: worktreePath,
+            ).standardOutput
+        } catch let error as ConfigurationError {
+            return LocalState(isDirty: true, revision: nil, configurationError: error.localizedDescription)
+        } catch {
+            return LocalState(isDirty: false, revision: nil, configurationError: nil)
         }
 
         let status = GitWorktreeStatus(porcelain: output)
@@ -29,6 +41,8 @@ public extension GitClient {
                 await revision += "\n" + (commitHash(of: "HEAD", worktreePath: worktreePath + "/" + path) ?? "")
             }
         }
-        return (status.isDirty, LocalReviewInput.fingerprint(revision))
+        return LocalState(
+            isDirty: status.isDirty, revision: LocalReviewInput.fingerprint(revision), configurationError: nil,
+        )
     }
 }

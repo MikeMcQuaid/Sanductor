@@ -191,6 +191,7 @@
         "COMBINE_HIDPI_IMAGES": "YES",
         "ENABLE_HARDENED_RUNTIME": "YES",
         "GENERATE_INFOPLIST_FILE": "YES",
+        "INFOPLIST_FILE": "App/Info.plist",
         "INFOPLIST_KEY_LSApplicationCategoryType": "public.app-category.developer-tools",
         "INFOPLIST_KEY_NSDesktopFolderUsageDescription": "Sanductor reads a directory you listed yourself. Deny this and remove the directory from its repository's menu if you would rather it never looked.",
         "INFOPLIST_KEY_NSDocumentsFolderUsageDescription": "Sanductor reads a directory you listed yourself. Deny this and remove the directory from its repository's menu if you would rather it never looked.",

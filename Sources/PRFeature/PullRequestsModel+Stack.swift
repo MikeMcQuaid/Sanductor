@@ -48,6 +48,25 @@ extension PullRequestsModel {
             + String(standing.height) + (base.isEmpty ? "" : ", base: " + base) + ")\n\n"
     }
 
+    /// Follow a newly merged conversation to the next unfinished local layer.
+    func advancePastMerge(previous: PullRequestSummary?) {
+        guard let previous, previous.state == "OPEN", selected?.number == previous.number, selected?.state == "MERGED",
+              scope == .worktree, listedBranch == previous.headBranch,
+              let layer = stack.branches.firstIndex(of: previous.headBranch)
+        else {
+            return
+        }
+
+        let next = stack.branches.dropFirst(layer + 1).first { candidate in
+            let listing = pullRequests.cachedListing(repositoryPath: repository.path, scope: .branch(candidate)) ?? []
+            return stacking.unpushedBranches.contains(candidate) || listing.contains { $0.state == "OPEN" }
+                || listing.max { $0.number < $1.number }?.state != "MERGED"
+        }
+        if let next {
+            show(branch: next)
+        }
+    }
+
     /// Lists a branch of the stack, without checking anything out:
     /// reading up and down a stack is navigation, and moving the
     /// worktree to another branch is a deliberate act of its own.
@@ -112,15 +131,7 @@ extension PullRequestsModel {
 
     /// Worktrees whose running agent is not idle or done.
     var busyWorktrees: Set<String> {
-        Set(
-            items.compactMap { item in
-                guard let session = item.session, session.status == .running else {
-                    return nil
-                }
-
-                return session.activity == .idle || session.activity == .done ? nil : item.worktree.path
-            },
-        )
+        Set(items.filter { $0.session?.isBusy == true }.map(\.worktree.path))
     }
 
     /// The branches needed to publish the listed entry, bottom first.

@@ -1,7 +1,16 @@
 import SanductorData
+import TerminalUI
 
 /// The single preparation and push action shared by the footer and shortcuts.
 extension PullRequestsModel {
+    static func reviewResolver(service: SessionService, repositoryPath: String) -> (Set<String>, Int?) async -> Void {
+        { branches, number in
+            await service.resolveMarkedReviews(repositoryPath: repositoryPath, branches: branches, number: number) {
+                await UtilityTabTarget.pullRequestCacheChanged()
+            }
+        }
+    }
+
     /// Whether the entry in view is the repository's own default
     /// branch.
     var isDefaultBranch: Bool {

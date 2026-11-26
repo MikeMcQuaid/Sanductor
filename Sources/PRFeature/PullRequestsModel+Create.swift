@@ -22,6 +22,10 @@ extension PullRequestsModel {
     func markChecksPending(for branches: [String]) {
         pullRequests.markChecksPending(repositoryPath: repository.path, branches: branches)
         let pushed = Set(branches)
+        stacking.unpushedBranches.removeAll(where: pushed.contains)
+        Task {
+            await resolveMarkedReviews(pushed, nil)
+        }
         summaries = summaries.map { pushed.contains($0.headBranch) && $0.state == "OPEN" ? $0.awaitingChecks() : $0 }
         if let selected, pushed.contains(selected.headBranch), selected.state == "OPEN" {
             self.selected = selected.awaitingChecks()
@@ -43,12 +47,11 @@ extension PullRequestsModel {
             pullRequests.invalidateListings(repositoryPath: repository.path)
             markChecksPending(for: pushed)
             if let tip = await fetchTipCommit(worktree) {
-                pushedTip = PushedTip(branch: listedBranch ?? worktree.branch, commit: tip)
+                pushedTip = PushedTip(branch: worktree.branch, commit: tip)
             }
-            recordFinished(.pushed, branch: listedBranch ?? worktree.branch)
+            recordFinished(.pushed, branch: worktree.branch)
             note("Pushed " + Self.named(pushed) + ".")
             UtilityTabTarget.requestSidebarRefresh()
-            await reload(keepingSelection: true)
             refreshAfterPush()
             return true
         } catch {
@@ -96,16 +99,13 @@ extension PullRequestsModel {
         }
         do {
             let url = try await performCreate(worktree, title, body, labels, isDraft)
-            // A stack is built one pull request at a time: each one
-            // links what is open into the stack, and failing to link
-            // never takes the pull request that opened with it.
-            do {
-                try await performLinkStack(worktree)
-            } catch {
-                report("Stacking on GitHub failed: " + error.localizedDescription)
-            }
-            await finishOpening(url: url, title: title, worktree: worktree, isDraft: isDraft)
+            finishOpening(url: url, title: title, worktree: worktree, isDraft: isDraft)
             Task {
+                do {
+                    try await performLinkStack(worktree)
+                } catch {
+                    report("Stacking on GitHub failed: " + error.localizedDescription)
+                }
                 await assignClosingIssues(pullRequestURL: url)
             }
             return true
@@ -115,27 +115,21 @@ extension PullRequestsModel {
         }
     }
 
-    private func finishOpening(url: String, title: String, worktree: Worktree, isDraft: Bool) async {
+    private func finishOpening(url: String, title: String, worktree: Worktree, isDraft: Bool) {
         pullRequests.invalidateListings(repositoryPath: repository.path)
         UtilityTabTarget.requestSidebarRefresh()
-        await reload(keepingSelection: true)
-        // Straight into what was just opened: the listing has it
-        // by number, and its conversation is what the form was
-        // for. Only once it is showing does the form let go of
-        // the text, so nothing blank is ever on screen.
-        // The sidebar reads the same per-branch cache, so what
-        // was just opened is on its row now rather than at the
-        // next poll: GitHub's own answer when the listing has
-        // caught up, otherwise what the form knows.
         let created = Self.created(
             url: url,
             title: title,
             worktree: worktree,
-            base: defaultBranch,
+            base: stack.parent(of: worktree.branch) ?? defaultBranch,
             listed: summaries,
             isDraft: isDraft,
         )
         if let created {
+            if summaries.contains(where: { $0.number == created.number }) == false {
+                summaries.insert(created, at: 0)
+            }
             cacheCreated(created, branch: worktree.branch)
             select(created)
         }
@@ -206,14 +200,13 @@ extension PullRequestsModel {
 
             let destination = try await performPush(worktree)
             pullRequests.invalidateListings(repositoryPath: repository.path)
-            markChecksPending(for: [listedBranch ?? worktree.branch])
+            markChecksPending(for: [worktree.branch])
             if let tip = await fetchTipCommit(worktree) {
-                pushedTip = PushedTip(branch: listedBranch ?? worktree.branch, commit: tip)
+                pushedTip = PushedTip(branch: worktree.branch, commit: tip)
             }
-            recordFinished(.pushed, branch: listedBranch ?? worktree.branch)
+            recordFinished(.pushed, branch: worktree.branch)
             note(Self.describe(push: destination))
             UtilityTabTarget.requestSidebarRefresh()
-            await reload(keepingSelection: true)
             refreshAfterPush()
             return true
         } catch {
@@ -258,7 +251,6 @@ extension PullRequestsModel {
     /// asks the sidebar to repaint from it at once.
     func cacheCreated(_ summary: PullRequestSummary, branch: String) {
         pullRequests.rememberBranchSummary(summary, repositoryPath: repository.path, branch: branch)
-        cacheEnriched(summary)
         UtilityTabTarget.pullRequestCacheChanged()
     }
 }

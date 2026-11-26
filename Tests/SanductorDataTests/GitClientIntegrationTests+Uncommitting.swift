@@ -17,8 +17,8 @@ extension GitClientIntegrationTests {
         try await TestSupport.runGit(["add", "--", "added.txt"], in: path)
         let index = try await TestSupport.runGit(["write-tree"], in: path).standardOutput
         try await TestSupport.runGit(["config", "commit.gpgsign", "true"], in: path)
-        try await TestSupport.runGit(["config", "gpg.format", "openpgp"], in: path)
-        try await TestSupport.runGit(["config", "gpg.program", "/usr/bin/false"], in: path)
+        try await TestSupport.runGit(["config", "gpg.format", "ssh"], in: path)
+        try await TestSupport.runGit(["config", "user.signingkey", path + "/missing-key"], in: path)
 
         await #expect(throws: (any Error).self) {
             try await git.amend(worktreePath: path, excluding: ["README.md"], message: "Kept", expectedHead: head)
