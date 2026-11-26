@@ -129,6 +129,11 @@ public struct SessionService: Sendable {
         )
     }
 
+    /// The repository's worktree directory.
+    public func worktreeContainer(repository: Repository) -> String {
+        paths.worktreesDirectory + "/" + repository.name
+    }
+
     // MARK: Internal
 
     /// The most search hits returned to the UI.
@@ -262,11 +267,4 @@ public struct SessionService: Sendable {
         await awaitReady(sessionName: sessionName)
         return sessionName
     }
-
-    /// The repository's worktree directory.
-    func worktreeContainer(repository: Repository) -> String {
-        paths.worktreesDirectory + "/" + repository.name
-    }
-
-    // MARK: Private
 }

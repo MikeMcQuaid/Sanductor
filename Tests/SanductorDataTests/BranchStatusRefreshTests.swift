@@ -6,6 +6,25 @@ import Testing
 struct BranchStatusRefreshTests {
     // MARK: Internal
 
+    @Test
+    func `one worktree event reads only its status until a full refresh`() async throws {
+        let world = try await World.make()
+        defer { world.tearDown() }
+        let repo = world.repository.path
+        let linked = world.root + "/linked"
+        try await TestSupport.runGit(["worktree", "add", "-b", "linked", linked], in: repo)
+        world.service.lastPanes.remember([])
+        let first = await world.service.overview(readingPanes: false)
+        for path in [repo, linked] {
+            try "edit".write(toFile: path + "/new", atomically: true, encoding: .utf8)
+        }
+
+        let partial = await world.service.overview(scope: .only([linked]), kept: first.groups, readingPanes: false)
+        #expect(partial.groups.first?.items.filter(\.isDirty).map(\.id) == [linked])
+        let full = await world.service.overview(scope: .only([repo]), kept: partial.groups, readingPanes: false)
+        #expect(Set(full.groups.flatMap(\.items).filter(\.isDirty).map(\.id)) == [repo, linked])
+    }
+
     @Test(arguments: ["sha1", "sha256"])
     func `unborn revisions include untracked content and preserve staged work`(format: String) async throws {
         let path = try TestSupport.temporaryDirectory("unborn-revision")
@@ -137,7 +156,9 @@ struct BranchStatusRefreshTests {
     // MARK: Private
 
     private func item(in world: World, at path: String) async throws -> WorktreeItem {
-        let group = await world.service.group(of: world.repository, panes: [], activity: [:], metadata: AppMetadata())
+        let group = await world.service.group(
+            of: world.repository, reading: SidebarReading(panes: [], activity: [:], metadata: AppMetadata()),
+        )
         return try #require(group.items.first { $0.worktree.path == path })
     }
 }

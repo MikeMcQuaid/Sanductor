@@ -184,6 +184,9 @@ public extension SessionService {
         case dirty
         /// Commits not on the base branch would be lost.
         case unmerged
+        /// Other stack branches still have unmerged work.
+        case unfinishedStack([String])
+        case unverified
     }
 
     /// The merge-safe cleanup of a real worktree: refused outright
@@ -194,21 +197,16 @@ public extension SessionService {
     func cleanUpMergedWorktree(
         item: WorktreeItem,
         baseRef: String,
+        knownBranches: [String] = [],
         reportFailure: @Sendable (String) async -> Void = { PerformanceLog.recordMessage($0, isError: true) },
     ) async throws -> CleanupRefusal? {
         // A merged worktree is about to go; its conversation copy is
         // dropped only once the removal itself succeeds, below.
         let backup = ConversationBackup(paths: paths)
         let worktree = item.worktree
-        guard await git.isDirty(worktreePath: worktree.path) == false else {
-            return .dirty
+        if let refusal = try await mergeCleanupRefusal(for: worktree, baseRef: baseRef, knownBranches: knownBranches) {
+            return refusal
         }
-        guard let tip = await git.tip(of: "refs/heads/" + worktree.branch, worktreePath: worktree.path),
-              await git.isMerged(worktreePath: worktree.path, branch: tip, into: baseRef)
-        else {
-            return .unmerged
-        }
-
         let repository = Repository(name: worktree.repositoryName, path: worktree.repositoryPath)
         let sessionName = item.session?.name
             ?? SessionName.make(repository: worktree.repositoryName, branch: worktree.branch, agent: .claudeCode)

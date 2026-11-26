@@ -5,6 +5,59 @@ import SanductorDomain
 import Testing
 
 extension SessionNavigationTests {
+    @Test(arguments: ["clean", "dirty", "moved", "held", "busy", "unpushed"])
+    func `an observed merge advances a clean checkout in stack order`(scenario: String) async throws {
+        let fixture = Fixture(runner: FoundationProcessRunner())
+        defer { fixture.close() }
+        let path = fixture.repository.path
+        try FileManager.default.createDirectory(atPath: path, withIntermediateDirectories: true)
+        func git(_ arguments: [String]) async throws -> String {
+            let result = try await FoundationProcessRunner().run(
+                ["git", "-c", "user.name=Test", "-c", "user.email=test@example.com", "-c", "commit.gpgsign=false"]
+                    + arguments,
+                workingDirectory: path,
+                environment: [:],
+            )
+            try #require(result.succeeded, "Git failed: \(result.standardError)")
+            return result.standardOutput.trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+        let branches = ["lower", "z-middle", "a-top"]
+        _ = try await git(["init", "-b", "lower"])
+        _ = try await git(["commit", "--allow-empty", "-m", "Merged"])
+        _ = try await git(["update-ref", "refs/remotes/origin/main", "HEAD"])
+        _ = try await git(["switch", "-c", "z-middle"])
+        _ = try await git(["commit", "--allow-empty", "-m", "Next"])
+        _ = try await git(["branch", "a-top"])
+        _ = try await git(["switch", "lower"])
+        if scenario == "dirty" {
+            try "edit".write(toFile: path + "/untracked", atomically: true, encoding: .utf8)
+        } else if scenario == "moved" {
+            _ = try await git(["switch", "a-top"])
+        } else if scenario == "held" {
+            _ = try await git(["worktree", "add", path + "-sibling", "z-middle"])
+        }
+        if scenario == "unpushed" {
+            _ = try await git(["commit", "--allow-empty", "-m", "Local work"])
+        }
+        let model = fixture.model
+        let busy = AgentSession(name: "test", agent: .codexCLI, status: .running, activity: .working)
+        let item = try #require(model.groups.first?.items.first)
+            .renamed(branch: "lower")
+            .with(session: scenario == "busy" ? busy : nil)
+        model.groups = [RepositoryGroup(repository: fixture.repository, items: [item], defaultBranch: "main")]
+        model.selection = item
+        model.derivedStacks[path] = BranchStack(base: "main", branches: branches, checkedOut: "lower")
+        model.pullRequests.rememberBranchSummary(lowerPullRequest("OPEN"), repositoryPath: path, branch: "lower")
+        model.pullRequests.rememberListing(
+            repositoryPath: path, scope: .branch("lower"), summaries: [lowerPullRequest("MERGED")],
+        )
+        model.store.update { $0.fetchedAt["queue#" + path] = Date() }
+        await model.refreshStalePullRequests(forcing: [])
+        let expected = scenario == "clean" ? "z-middle" : (scenario == "moved" ? "a-top" : "lower")
+        #expect(try await git(["branch", "--show-current"]) == expected)
+        #expect(model.selection?.worktree.path == path)
+    }
+
     @Test(arguments: ["idle", "requested", "queued", "expired"])
     func `the usual poll speeds up for requested and queued merges`(state: String) async {
         let fixture = Fixture(runner: MergePollRunner(queued: state == "queued"))
@@ -45,6 +98,20 @@ extension SessionNavigationTests {
         let faster = state == "requested" || state == "queued"
         #expect((model.store.load().fetchedAt[listing] != before) == faster)
         #expect((model.store.load().fetchedAt[queue] != before) == faster)
+    }
+
+    private func lowerPullRequest(_ state: String) -> PullRequestSummary {
+        PullRequestSummary(
+            number: 1,
+            title: "Lower",
+            url: "",
+            headBranch: "lower",
+            mergeable: "",
+            reviewDecision: "",
+            checks: "",
+            state: state,
+            closedAt: state == "MERGED" ? Date() : nil,
+        )
     }
 }
 

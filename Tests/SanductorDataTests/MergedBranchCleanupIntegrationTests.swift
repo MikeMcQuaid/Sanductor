@@ -5,6 +5,97 @@ import Testing
 
 struct MergedBranchCleanupIntegrationTests {
     @Test(arguments: [false, true])
+    func `cleanup keeps the worktree until the last stack branch merges`(published: Bool) async throws {
+        let world = try await World.make()
+        defer { world.tearDown() }
+        let repository = world.repository.path
+        let path = world.root + "/lower"
+        try await TestSupport.runGit(["worktree", "add", "-b", "lower", path, "main"], in: repository)
+        try await TestSupport.runGit(["commit", "--allow-empty", "-m", "Lower"], in: path)
+        try await TestSupport.runGit(["checkout", "-b", "upper"], in: path)
+        try await TestSupport.runGit(["commit", "--allow-empty", "-m", "Upper"], in: path)
+        try await TestSupport.runGit(["checkout", "lower"], in: path)
+        try await TestSupport.runGit(["merge", "--ff-only", "lower"], in: repository)
+        if published {
+            try await TestSupport.runGit(["update-ref", "refs/remotes/origin/upper", "upper"], in: repository)
+        }
+        let worktree = Worktree(repositoryName: "repo", repositoryPath: repository, branch: "lower", path: path)
+        let item = WorktreeItem(worktree: worktree, session: nil, isDirty: false, aheadOfUpstream: 0)
+        let refusal = try await world.service.cleanUpMergedWorktree(item: item, baseRef: "main")
+        try #require(refusal == .unfinishedStack(["upper"]))
+        #expect(FileManager.default.fileExists(atPath: path))
+        try await TestSupport.runGit(["merge", "--ff-only", "upper"], in: repository)
+        try await TestSupport.runGit(["checkout", "-b", "unrelated", "main"], in: repository)
+        try await TestSupport.runGit(["commit", "--allow-empty", "-m", "Independent work"], in: repository)
+        #expect(try await world.service.cleanUpMergedWorktree(item: item, baseRef: "main") == nil)
+    }
+
+    @Test
+    func `squash merged stack layers are finished until their local tip changes`() async throws {
+        let world = try await World.make()
+        defer { world.tearDown() }
+        let path = world.repository.path
+        try await TestSupport.runGit(["checkout", "-b", "lower", "main"], in: path)
+        try await TestSupport.runGit(["checkout", "-b", "upper"], in: path)
+        try await TestSupport.runGit(["commit", "--allow-empty", "-m", "Published"], in: path)
+        let head = try #require(await world.service.git.tip(of: "upper", worktreePath: path))
+        let merged = PullRequestSummary(
+            number: 2,
+            title: "Upper",
+            url: "",
+            headBranch: "upper",
+            mergeable: "",
+            reviewDecision: "",
+            checks: "",
+            baseBranch: "lower",
+            state: "MERGED",
+            headCommit: head,
+        )
+        world.service.pullRequestReads.rememberBranchSummary(merged, repositoryPath: path, branch: "upper")
+        let lower = Worktree(repositoryName: "repo", repositoryPath: path, branch: "lower", path: path)
+        #expect(try await world.service.unfinishedStackBranches(for: lower, into: "main").isEmpty)
+        try await TestSupport.runGit(["commit", "--allow-empty", "-m", "Unpushed fix"], in: path)
+        #expect(try await world.service.unfinishedStackBranches(for: lower, into: "main") == ["upper"])
+    }
+
+    @Test
+    func `an open PR targeting the merged branch keeps the main checkout on that branch`() async throws {
+        let world = try await World.make()
+        defer { world.tearDown() }
+        let path = world.repository.path
+        let origin = world.root + "/origin.git"
+        try await TestSupport.runGit(["clone", "--bare", path, origin], in: world.root)
+        try await TestSupport.runGit(["remote", "add", "origin", origin], in: path)
+        try await TestSupport.runGit(["fetch", "origin"], in: path)
+        try await TestSupport.runGit(["remote", "set-head", "origin", "--auto"], in: path)
+        try await TestSupport.runGit(["checkout", "-b", "lower", "main"], in: path)
+        let worktree = Worktree(repositoryName: "repo", repositoryPath: path, branch: "lower", path: path)
+        func upper(state: String) -> PullRequestSummary {
+            PullRequestSummary(
+                number: 2,
+                title: "Second",
+                url: "",
+                headBranch: "upper",
+                mergeable: "",
+                reviewDecision: "",
+                checks: "",
+                baseBranch: "lower",
+                state: state,
+            )
+        }
+        let requests = world.service.pullRequestReads
+        requests.rememberBranchSummary(upper(state: "OPEN"), repositoryPath: path, branch: "upper")
+        let kept = await world.service.cleanUpAfterMerge(worktree: worktree, mergedBranch: "lower")
+        #expect(kept.unfinishedBranches == ["upper"])
+        #expect(await world.service.git.currentBranch(worktreePath: path) == "lower")
+        requests.rememberBranchSummary(upper(state: "MERGED"), repositoryPath: path, branch: "upper")
+        let finished = await world.service.cleanUpAfterMerge(worktree: worktree, mergedBranch: "lower")
+        #expect(finished.failures.isEmpty)
+        #expect(finished.unfinishedBranches.isEmpty)
+        #expect(await world.service.git.currentBranch(worktreePath: path) == "main")
+    }
+
+    @Test(arguments: [false, true])
     func `merge cleanup sweeps unused branches despite stale upstreams`(linked: Bool) async throws {
         let world = try await World.make()
         defer { world.tearDown() }

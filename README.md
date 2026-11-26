@@ -18,9 +18,9 @@ No Sanductor account, subscription or hosted relay exists or is planned.
 
 - Runs [Codex CLI] or [Claude Code] in parallel [worktrees](https://git-scm.com/docs/git-worktree) as a sandboxed non-admin macOS user, without containers or virtual machines.
 - Reviews changes with fresh agent sessions, [CodeRabbit](https://www.coderabbit.ai) or [Copilot](https://docs.github.com/copilot/code-review), including findings outside the diff.
-- Copies feedback with its stack, bulk-resolves reviews and reruns CI.
+- Copies stack feedback, resolves marked reviews on push and reruns CI.
 - Opt-in autofix feeds reviews, CI failures and merge conflicts back to agents, resumes after relaunch and never signs or pushes.
-- Signs and pushes from any published stack layer, with rebasing, labels, merge queues, automerge and branch and temporary file cleanup.
+- Rebases, signs and pushes stacks, advances after merges and supports labels, queues, automerge and branch and temporary file cleanup.
 - Keeps agents running and reachable over SSH after quitting, with private backups and 30-day retention that preserves ongoing work.
 - Saves prompts, attaches files and schedules recurring tasks per repo.
 - Groups work by repository or latest event, with unpushed commits, CI, reviews, dated blockers, bulk actions and alerts.
@@ -53,8 +53,9 @@ Run [`gh auth login`][gh] as yourself, then [`sv codex`][sv] or [`sv claude`][sv
 
 Add a repository in the sidebar, then start from a prompt, issue, open discussion, branch, existing PR or unpublished security advisory.
 Choose repository paths inside the workspace in Settings → Advanced.
+Sanductor skips Git hooks, using `~/.gitconfig` for filters and signers.
 Symlinks can point here but cannot grant access outside the workspace.
-Install shared dependencies yourself in Shell from the main checkout; agents cannot run `brew install`.
+Run `brew install` for your agents in the main checkout’s Shell.
 Agents survive quitting via [`herdr`][herdr]; Shell tabs close.
 Agents can change shared files and upload readable code; [review their work](https://mikemcquaid.com/why-open-source-maintainers-thrive-in-the-llm-era/) before trusting it.
 Keep your main keychain; see [`sandvault` recovery](https://github.com/webcoyote/sandvault#fix-the-security-popup) for permission prompts.

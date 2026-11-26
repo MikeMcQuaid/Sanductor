@@ -106,13 +106,15 @@ struct WorktreeActions: View {
         // the poll has not noticed yet or made outside GitHub; on the
         // main checkout it only makes sense off the default branch.
         if item.worktree.path != item.worktree.repositoryPath || model.isOffDefaultBranch(item) {
-            Button("Clean up after merge") {
+            let remaining = model.unfinishedMergeBranches(for: item)
+            Button(remaining.isEmpty ? "Clean up after merge" : "Check unfinished stack before cleanup") {
                 Task {
                     await onCleanUp()
                 }
             }
             .hoverHelp(
-                item.worktree.path == item.worktree.repositoryPath
+                remaining.isEmpty == false ? "Unfinished branches: " + remaining.joined(separator: ", ")
+                    : item.worktree.path == item.worktree.repositoryPath
                     ? "Return to the default branch and delete all unused merged branches; "
                     + "dirty checkouts are left alone"
                     : "Remove this clean, merged worktree and all unused merged branches; "

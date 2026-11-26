@@ -332,6 +332,7 @@ public final class DashboardModel {
     /// When each repository's git was last read in full; the git
     /// reads extension keeps it.
     var gitReadAt: [String: Date] = [:]
+    var lastGitReadAt: Date = .distantPast
 
     /// The file-system events that say which repository is worth
     /// asking git about; the git reads extension consumes it.

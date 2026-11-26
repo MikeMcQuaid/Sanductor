@@ -88,33 +88,31 @@ extension DashboardModel {
                 .map(String.init),
         )
         for group in groups {
+            let path = group.repository.path
             // An outage answers every branch identically, so one
             // branch probes for a recovery and the rest wait; the
             // repository a refresh was asked for keeps asking.
             let ridesOutOutage = ServiceStatus.shared.isUnavailable
-                && repositoryPaths.contains(group.repository.path) == false
+                && repositoryPaths.contains(path) == false
             // The repository's own checkout is asked about too when
             // it is off its default branch: work done there has a
             // pull request like any other, and skipping the row left
             // it blank however often the poll came round.
-            let rows = group.items.filter { $0.worktree.path != group.repository.path || isOffDefaultBranch($0) }
+            let rows = group.items.filter { $0.worktree.path != path || isOffDefaultBranch($0) }
             for item in rows {
                 if ridesOutOutage, item.id != selection?.id {
                     continue
                 }
 
-                let previous = pullRequests.branchSummary(
-                    repositoryPath: group.repository.path,
-                    branch: item.worktree.branch,
-                )
+                let previous = pullRequests.branchSummary(repositoryPath: path, branch: item.worktree.branch)
                 do {
-                    // Nil means the store asked recently enough; the
-                    // row keeps what it is already showing.
+                    // Another pane can be the first to fetch the merged listing.
                     guard let summaries = try await pullRequests.listingIfDue(
-                        repositoryPath: group.repository.path,
+                        repositoryPath: path,
                         scope: .branch(item.worktree.branch),
                         interval: interval(for: item, collapsed: collapsed),
                     ) else {
+                        await handleCachedMerge(for: item, previous: previous)
                         continue
                     }
 
@@ -125,7 +123,7 @@ extension DashboardModel {
                     var summary = Self.displayed(summaries)
                     if let open = summary, open.state == "OPEN" {
                         let enriched = try? await pullRequests.summary(
-                            repositoryPath: group.repository.path,
+                            repositoryPath: path,
                             number: open.number,
                             interval: interval(for: item, collapsed: collapsed),
                         )
@@ -140,6 +138,9 @@ extension DashboardModel {
                         failure: error,
                         doing: "Pull requests for " + group.repository.name,
                     )
+                    if error is GitClient.ConfigurationError {
+                        break
+                    }
                 }
             }
         }
@@ -264,12 +265,22 @@ extension DashboardModel {
     /// for a branch of the same name: thirty days.
     private static let collisionAge: TimeInterval = 2_592_000
 
-    /// A merge is tidied on the poll that first sees it: the branch's
-    /// pull request that was open at the
-    /// last poll now reports merged. Only that observed transition
-    /// counts, never a merely missing pull request (a stale cache or
-    /// a branch that never had one), and dirty worktrees are left
-    /// alone by the cleanup itself.
+    private func handleCachedMerge(for item: WorktreeItem, previous: PullRequestSummary?) async {
+        let worktree = item.worktree
+        guard previous?.state == "OPEN",
+              let cached = pullRequests.cachedListing(
+                  repositoryPath: worktree.repositoryPath, scope: .branch(worktree.branch),
+              ),
+              Self.observedMerge(previous: previous, fresh: cached)
+        else {
+            return
+        }
+
+        persist(Self.displayed(cached), previous: previous, worktree: worktree)
+        await cleanUpIfMerged(item, previous: previous, fresh: cached)
+    }
+
+    /// Only an observed open-to-merged transition can advance or clean up a worktree.
     private func cleanUpIfMerged(
         _ item: WorktreeItem,
         previous: PullRequestSummary?,
@@ -277,6 +288,8 @@ extension DashboardModel {
     ) async {
         guard Self.observedMerge(previous: previous, fresh: fresh),
               deletingPaths.contains(item.worktree.path) == false,
+              let merged = fresh.first(where: { $0.number == previous?.number }),
+              await advanceMergedStack(item, merged: merged) == false,
               // Never pull the ground from under the worktree being
               // looked at: it would vanish mid-action and read as a
               // crash. Its context menu still offers the cleanup.
@@ -303,7 +316,9 @@ extension DashboardModel {
                 branch: item.worktree.branch,
             )
 
-        case nil:
+        case nil,
+             .unfinishedStack,
+             .unverified:
             break
         }
     }
@@ -334,7 +349,7 @@ extension DashboardModel {
     /// open to merged: the same number, open before, merged now. Pure
     /// so the rule tests without GitHub.
     static func observedMerge(previous: PullRequestSummary?, fresh: [PullRequestSummary]) -> Bool {
-        guard let previous, previous.state == "OPEN" else {
+        guard let previous, previous.state == "OPEN", fresh.contains(where: { $0.state == "OPEN" }) == false else {
             return false
         }
 
@@ -350,6 +365,9 @@ extension DashboardModel {
     /// the row rather than on its own next fetch.
     private func persist(_ summary: PullRequestSummary?, previous: PullRequestSummary?, worktree: Worktree) {
         pullRequests.rememberBranchSummary(summary, repositoryPath: worktree.repositoryPath, branch: worktree.branch)
+        if previous?.state != summary?.state {
+            nextStackDerivation[worktree.path] = nil
+        }
         if previous != summary {
             UtilityTabTarget.pullRequestCacheChanged()
         }

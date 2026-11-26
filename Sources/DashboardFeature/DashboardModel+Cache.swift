@@ -133,6 +133,7 @@ extension DashboardModel {
                     lastActivityAt: worktree.lastActivityAt,
                     revision: worktree.revision,
                     onlyPublishedChanges: worktree.onlyPublishedChanges ?? false,
+                    configurationError: worktree.configurationError,
                 )
             }
             return RepositoryGroup(
@@ -186,6 +187,7 @@ extension DashboardModel {
                 worktree.path = item.worktree.path
                 worktree.isHostDirectory = item.worktree.isHostDirectory
                 worktree.isDirty = item.isDirty
+                worktree.configurationError = item.configurationError
                 worktree.aheadOfUpstream = item.aheadOfUpstream
                 worktree.aheadOfDefault = item.aheadOfDefault
                 worktree.behindDefault = item.behindDefault

@@ -52,4 +52,5 @@ struct AutofixContext {
     let key: String
     let store: MetadataStore
     let driver: AutofixDriver
+    var resolutionChanged: (@Sendable () async -> Void)?
 }

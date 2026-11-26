@@ -241,7 +241,7 @@ struct ReviewModelTests {
     // swiftformat:disable:next testSuiteAccessControl
     func runGit(_ arguments: [String], in directory: String) async throws {
         _ = try await FoundationProcessRunner().run(
-            ["git", "-c", "core.hooksPath=/dev/null", "-c", "commit.gpgsign=false"] + arguments,
+            ["/usr/bin/env", "git", "-c", "core.hooksPath=/dev/null", "-c", "commit.gpgsign=false"] + arguments,
             workingDirectory: directory,
             environment: [:],
         )

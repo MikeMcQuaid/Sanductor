@@ -2,16 +2,66 @@ import Foundation
 import SanductorDomain
 
 extension GitClient {
+    /// The server checks this lease even when the tracking ref came from an earlier fetch.
+    func pushKnownTip(branch: String, remote: String, worktreePath: String) async throws -> Bool {
+        let tip = await commitHash(of: "refs/remotes/" + remote + "/" + branch, worktreePath: worktreePath) ?? ""
+        if tip.isEmpty == false, await isAncestor(tip, of: branch, worktreePath: worktreePath) == false,
+           await refWasBranchTip(worktreePath: worktreePath, branch: branch, ref: tip) == false
+        {
+            return false
+        }
+        do {
+            try await sendBranch(branch, sourceCommit: nil, remote: remote, lease: tip, worktreePath: worktreePath)
+            return true
+        } catch let error as CommandError where error.result.standardOutput.contains("[rejected] (stale info)") {
+            return false
+        }
+    }
+
+    func sendBranch(
+        _ branch: String, sourceCommit: String?, remote: String, lease: String, worktreePath: String,
+    ) async throws {
+        var arguments = ["push", "--porcelain", "--force-with-lease=refs/heads/" + branch + ":" + lease]
+        if sourceCommit == nil,
+           try await branchesNeedingUpstream([branch], remote: remote, in: worktreePath).isEmpty == false
+        {
+            arguments.append("--set-upstream")
+        }
+        try await git(
+            arguments + [remote, sourceCommit.map { $0 + ":refs/heads/" + branch } ?? branch],
+            in: worktreePath,
+            remote: remote,
+        )
+    }
+
+    /// Rewriting existing tracking settings wakes every worktree that shares the config.
+    func branchesNeedingUpstream(_ branches: [String], remote: String, in path: String) async throws -> [String] {
+        let output = try await git(
+            ["for-each-ref", "--format=%(refname:strip=2)%09%(upstream:remotename)%09%(upstream:remoteref)"]
+                + branches.map { "refs/heads/" + $0 },
+            in: path,
+        )
+        let tracking = Set(output.standardOutput.split(separator: "\n"))
+        return branches.filter { tracking.contains($0 + "\t" + remote + "\trefs/heads/" + $0) == false }
+    }
+
     /// Captures the lease before rebasing, so later background fetches cannot change it.
     func preparePush(
         worktreePath: String,
         branch: String,
         remote: String,
         parent: String? = nil,
+        fetchedTip: String? = nil,
         busyWorktrees: @Sendable () async -> Set<String> = { [] },
     ) async throws -> String {
-        try await git(["fetch", "--prune", remote], in: worktreePath, remote: remote)
-        guard let tip = await commitHash(of: "refs/remotes/" + remote + "/" + branch, worktreePath: worktreePath) else {
+        let tip: String
+        if let fetchedTip {
+            tip = fetchedTip
+        } else {
+            try await git(["fetch", "--prune", remote], in: worktreePath, remote: remote)
+            tip = await commitHash(of: "refs/remotes/" + remote + "/" + branch, worktreePath: worktreePath) ?? ""
+        }
+        guard tip.isEmpty == false else {
             return ""
         }
         guard await isAncestor(tip, of: branch, worktreePath: worktreePath) == false,
@@ -36,6 +86,25 @@ extension GitClient {
             worktreePath: worktreePath, branch: branch, onto: tip, from: nil, busyWorktrees: busyWorktrees,
         )
         return tip
+    }
+
+    func integratePushParent(
+        _ parent: (branch: String, previousTip: String)?,
+        branch: String,
+        worktreePath: String,
+        busyWorktrees: @Sendable () async -> Set<String>,
+    ) async throws {
+        if let parent, await commitHash(of: parent.branch, worktreePath: worktreePath) != parent.previousTip,
+           await isAncestor(parent.branch, of: branch, worktreePath: worktreePath) == false
+        {
+            try await rebaseForPush(
+                worktreePath: worktreePath,
+                branch: branch,
+                onto: parent.branch,
+                from: parent.previousTip,
+                busyWorktrees: busyWorktrees,
+            )
+        }
     }
 
     /// Integrates in the branch's own worktree and restores whichever branch was selected.

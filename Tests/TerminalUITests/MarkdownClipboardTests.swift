@@ -25,6 +25,42 @@ struct MarkdownClipboardTests {
     }
 
     @Test
+    func `a rich text paste keeps bold and both kinds of code`() async throws {
+        let board = NSPasteboard.withUniqueName()
+        defer { board.releaseGlobally() }
+        await MarkdownClipboard.copy(to: ClipboardCopy(to: board)) {
+            "**bold** and `inline`\n\n```\n    indented\nsecond line\n```"
+        }
+        let data = try #require(board.data(forType: .rtf))
+        let copied = unsafe try #require(NSAttributedString(rtf: data, documentAttributes: nil))
+        let traits: [String: NSFontDescriptor.SymbolicTraits] = [
+            "bold": .bold, "inline": .monoSpace, "indented": .monoSpace,
+        ]
+        for (word, trait) in traits {
+            let range = try #require(copied.string.range(of: word))
+            let offset = NSRange(range, in: copied.string).location
+            let font = unsafe try #require(copied.attribute(.font, at: offset, effectiveRange: nil) as? NSFont)
+            #expect(font.fontDescriptor.symbolicTraits.contains(trait))
+        }
+        #expect(copied.string.contains("    indented\nsecond line"))
+    }
+
+    @Test(arguments: [
+        "| Key | Value |\n| --- | --- |\n| one | **two** |",
+        "<table><tr><th>Key</th><th>Value</th></tr><tr><td>one</td><td><b>two</b></td></tr></table>",
+    ])
+    func `a copied reply offers a table with formatted cells`(source: String) async throws {
+        let board = NSPasteboard.withUniqueName()
+        defer { board.releaseGlobally() }
+        await MarkdownClipboard.copy(to: ClipboardCopy(to: board)) { source }
+        let html = try #require(board.string(forType: .html))
+        #expect(html.contains("<table>"))
+        #expect(html.contains("<th>Key</th>"))
+        #expect(html.contains("<td><strong>two</strong></td>"))
+        #expect(board.string(forType: .string) == source)
+    }
+
+    @Test
     func `link and image attributes cannot close their quotes`() async {
         let pasteboard = NSPasteboard.withUniqueName()
         defer { pasteboard.releaseGlobally() }

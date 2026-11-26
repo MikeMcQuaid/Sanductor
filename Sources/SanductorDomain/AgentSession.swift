@@ -114,6 +114,11 @@ public struct AgentSession: Identifiable, Hashable, Sendable {
     /// The sandbox transcript currently associated with this pane.
     public let transcriptPath: String?
 
+    /// Whether changing the checkout could interrupt the running agent.
+    public var isBusy: Bool {
+        status == .running && activity != .idle && activity != .done
+    }
+
     /// The stable identity, the session name.
     public var id: String {
         name

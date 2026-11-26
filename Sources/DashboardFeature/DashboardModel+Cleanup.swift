@@ -77,12 +77,16 @@ public extension DashboardModel {
             let report = await service.cleanUpAfterMerge(
                 worktree: item.worktree,
                 mergedBranch: item.worktree.branch,
+                knownBranches: knownStackBranches(for: item),
             )
             for note in report.notes {
                 ErrorLog.shared.note(note)
             }
             for failure in report.failures {
                 ErrorLog.shared.report(failure)
+            }
+            if report.unfinishedBranches.isEmpty == false {
+                return keepUnfinishedStack(report.unfinishedBranches, for: item)
             }
             await refresh()
             return nil
@@ -92,14 +96,19 @@ public extension DashboardModel {
             ErrorLog.shared.report(
                 "Cannot tell whether \(item.worktree.branch) is merged: the repository has no default branch",
             )
-            return .unmerged
+            return .unverified
         }
 
         deletingPaths.insert(item.worktree.path)
         defer { deletingPaths.remove(item.worktree.path) }
         do {
-            let refusal = try await service.cleanUpMergedWorktree(item: item, baseRef: baseRef) { message in
+            let refusal = try await service.cleanUpMergedWorktree(
+                item: item, baseRef: baseRef, knownBranches: knownStackBranches(for: item),
+            ) { message in
                 await ErrorLog.shared.report(message)
+            }
+            if case let .unfinishedStack(branches) = refusal {
+                return keepUnfinishedStack(branches, for: item)
             }
             if refusal == nil {
                 if selection?.id == item.id {
@@ -110,7 +119,7 @@ public extension DashboardModel {
             return refusal
         } catch {
             ErrorLog.shared.report(error.localizedDescription)
-            return .unmerged
+            return .unverified
         }
     }
 

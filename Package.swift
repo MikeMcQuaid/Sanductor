@@ -102,7 +102,13 @@ let package = Package(
                 "TerminalUI",
             ],
             path: "App",
-            exclude: ["Sanductor.entitlements", "Sanductor-iCloud.entitlements", "Assets.xcassets", "Credits.html"],
+            exclude: [
+                "Sanductor.entitlements",
+                "Sanductor-iCloud.entitlements",
+                "Assets.xcassets",
+                "Credits.html",
+                "Info.plist",
+            ],
             swiftSettings: mainActorByDefault,
         ),
         .target(

@@ -1,21 +1,19 @@
-/// Which repositories a sidebar reading asks git about: all of them,
-/// or only the ones due, the rest keeping their last rows. A
-/// repository nothing is happening in changes on no tick, and
-/// asking it anyway was most of everything the app did.
+/// Checkout paths due for a Git read. A repository path refreshes
+/// all its rows, while a linked worktree path refreshes its own.
 public enum GitReadScope: Sendable {
     case all
     case only(Set<String>)
 
     // MARK: Public
 
-    /// Whether a repository's git is read under this scope.
-    public func includes(_ repositoryPath: String) -> Bool {
+    /// Whether this checkout is explicitly due.
+    public func includes(_ path: String) -> Bool {
         switch self {
         case .all:
             true
 
         case let .only(paths):
-            paths.contains(repositoryPath)
+            paths.contains(path)
         }
     }
 }

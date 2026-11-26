@@ -5,7 +5,8 @@ import SwiftUI
 public struct ReaderReplyField: View {
     // MARK: Lifecycle
 
-    public init(send: @escaping (ReaderReply) async throws -> Void) {
+    public init(isActive: Bool = true, send: @escaping (ReaderReply) async throws -> Void) {
+        self.isActive = isActive
         self.send = send
     }
 
@@ -40,8 +41,13 @@ public struct ReaderReplyField: View {
         }
         .padding(.horizontal)
         .padding(.vertical, Self.fieldInset)
-        .disabled(sending)
-        .onAppear { focused = true }
+        .disabled(isActive == false || sending)
+        .task(id: isActive && sending == false) {
+            await Task.yield()
+            if Task.isCancelled == false {
+                focused = isActive && sending == false
+            }
+        }
     }
 
     // MARK: Private
@@ -53,6 +59,7 @@ public struct ReaderReplyField: View {
     @State private var sending = false
     @FocusState private var focused: Bool
 
+    private let isActive: Bool
     private let send: (ReaderReply) async throws -> Void
 
     private func submit() async {
@@ -61,7 +68,7 @@ public struct ReaderReplyField: View {
         }
 
         sending = true
-        defer { sending = false; focused = true }
+        defer { sending = false }
         do {
             try await send(reply)
             draft = ""

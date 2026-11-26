@@ -32,12 +32,12 @@ extension ReviewModel {
         (threadPullRequestNumber, threads) = loaded
     }
 
-    func reapplyOutsideDiffResolutions(pullRequests: PullRequestStore, repositoryPath: String) {
+    func reapplyCachedResolutions(pullRequests: PullRequestStore, repositoryPath: String) {
         guard let number = threadPullRequestNumber else {
             return
         }
 
-        threads = pullRequests.applyingOutsideDiffResolutions(
+        threads = pullRequests.applyingCachedResolutions(
             to: threads, repositoryPath: repositoryPath, number: number,
         )
     }

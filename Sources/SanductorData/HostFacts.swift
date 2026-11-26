@@ -15,6 +15,7 @@ struct HostFacts: Hashable {
     let isDirty: Bool
     let aheadOfUpstream: Int?
     var revision: String?
+    var configurationError: String?
 }
 
 // MARK: - HostFactsCache

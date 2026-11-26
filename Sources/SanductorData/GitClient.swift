@@ -168,11 +168,7 @@ public struct GitClient: Sendable {
     /// not looked for: the answer is whether anything changed, and
     /// pairing up what moved is work nobody here reads.
     public func isDirty(worktreePath: String) async -> Bool {
-        let output = try? await git(
-            GitWorktreeStatus.arguments,
-            in: worktreePath,
-        ).standardOutput
-        return output.map { GitWorktreeStatus(porcelain: $0).isDirty } ?? false
+        await (try? hasUncommittedChanges(worktreePath: worktreePath)) ?? true
     }
 
     /// How many commits the worktree's branch is ahead of its
@@ -314,6 +310,11 @@ public struct GitClient: Sendable {
 
     // MARK: Internal
 
+    func hasUncommittedChanges(worktreePath: String) async throws -> Bool {
+        let result = try await git(GitWorktreeStatus.arguments, in: worktreePath)
+        return GitWorktreeStatus(porcelain: result.standardOutput).isDirty
+    }
+
     /// Runs git with the hardening flags prepended; internal so the
     /// cross-file length-split extensions can reach it.
     @discardableResult
@@ -355,21 +356,6 @@ public struct GitClient: Sendable {
     }
 
     // MARK: Private
-
-    /// Config a compromised repository could abuse, forced off, plus
-    /// user diff prefix preferences that would break the a/b paths
-    /// the diff parser and patch builder expect. `core.sshCommand`
-    /// names ssh rather than being blanked: an empty value is the
-    /// empty command, which git forks, failing every SSH remote.
-    private static let hardening = [
-        "-c", "core.fsmonitor=",
-        "-c", "core.sshCommand=/usr/bin/ssh",
-        "-c", "core.hooksPath=/dev/null",
-        "-c", "core.pager=cat",
-        "-c", "protocol.ext.allow=never",
-        "-c", "diff.mnemonicPrefix=false",
-        "-c", "diff.noprefix=false",
-    ]
 
     /// The subcommands that talk to a remote, and so are the only
     /// ones a machine with no route is refused.

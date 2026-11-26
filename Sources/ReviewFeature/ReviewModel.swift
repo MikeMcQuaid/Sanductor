@@ -56,6 +56,7 @@ final class ReviewModel {
 
     /// Updated by the status extension when a failed read finds missing Git metadata.
     var isRepositoryAvailable = true
+    var configurationError: GitClient.ConfigurationError?
 
     /// Whether the diff shows uncommitted changes.
     var showsUncommitted = false

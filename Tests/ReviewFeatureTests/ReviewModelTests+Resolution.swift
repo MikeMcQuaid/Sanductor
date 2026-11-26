@@ -6,6 +6,28 @@ import TerminalUI
 import Testing
 
 extension ReviewModelTests {
+    @Test
+    func `the mounted diff shows a confirmed GitHub resolution before reloading`() {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString).path
+        defer { try? FileManager.default.removeItem(atPath: root) }
+        let runner = ResolutionRunner()
+        let store = MetadataStore(file: root + "/state.json")
+        let requests = PullRequestStore(github: GitHubClient(runner: runner) { true }, store: store)
+        let model = ReviewModel(worktreePath: "/worktree", repositoryName: "repo", git: GitClient(runner: runner))
+        let thread = ReviewThread(id: "thread", path: "file", line: 1, isResolved: false, comments: [])
+        model.threads = [thread]
+        model.threadPullRequestNumber = 7
+        var fixed = thread
+        fixed.isResolved = true
+        store.update { value in
+            value.threadsCache[AppMetadata.threadsKey(repositoryPath: "/repo", number: 7)] = CachedThreads(
+                threads: [fixed],
+            )
+        }
+        model.reapplyCachedResolutions(pullRequests: requests, repositoryPath: "/repo")
+        #expect(model.threads.first?.isResolved == true)
+    }
+
     @Test(arguments: [false, true], [false, true])
     func `reopened pull requests use the refreshed listing for resolution marks`(bulk: Bool, loaded: Bool) async {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString).path

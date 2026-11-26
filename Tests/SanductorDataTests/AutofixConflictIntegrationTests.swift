@@ -36,7 +36,9 @@ struct AutofixConflictIntegrationTests {
         try await TestSupport.runGit(
             ["config", "merge.untrusted.driver", "touch " + marker.shellQuoted + "; false"], in: path,
         )
-        #expect(try await world.service.autofixConflictBase(target: target, summary: Self.summary) != nil)
+        await #expect(throws: GitClient.ConfigurationError.self) {
+            try await world.service.autofixConflictBase(target: target, summary: Self.summary)
+        }
         #expect(FileManager.default.fileExists(atPath: marker) == false)
     }
 

@@ -31,7 +31,11 @@ extension PullRequestsModelTests {
                 throw CocoaError(.fileWriteNoPermission)
             }
         }
-        model.performLinkStack = { _ in actions.append("stack") }
+        model.performLinkStack = { _ in
+            #expect(model.selected?.number == 42)
+            #expect(model.isOpening == false)
+            actions.append("stack")
+        }
         model.prTitle = "A change"
         model.prBody = "Fixes #24324"
 
@@ -131,7 +135,7 @@ extension PullRequestsModelTests {
     }
 
     @Test
-    func `the listing's own answer beats the one the form assembled`() async {
+    func `the newly opened PR is enriched when GitHub answers`() async {
         let model = makeModel(items: [item(branch: "feature", ahead: 0)])
         model.performCreate = { _, _, _, _, _ in "https://github.com/o/r/pull/42" }
         // GitHub has it already: its answer carries the checks and
@@ -147,10 +151,17 @@ extension PullRequestsModelTests {
             baseBranch: "main",
             state: "OPEN",
         )
-        model.fetchList = { _, _ in [listed] }
+        let (answers, answered) = AsyncStream<Void>.makeStream()
+        defer { answered.finish() }
+        model.fetchSummary = { _ in
+            answered.yield()
+            return listed
+        }
         model.prTitle = "A change"
 
         #expect(await model.createPullRequest())
+        var iterator = answers.makeAsyncIterator()
+        _ = await iterator.next()
         let cached = model.pullRequests.branchSummary(repositoryPath: model.repository.path, branch: "feature")
         #expect(cached?.checks == "SUCCESS")
         #expect(cached?.mergeable == "MERGEABLE")

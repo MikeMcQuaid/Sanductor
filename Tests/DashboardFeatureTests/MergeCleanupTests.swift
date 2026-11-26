@@ -38,6 +38,8 @@ struct MergeCleanupTests {
         let open = summary(number: 12, state: "OPEN")
         let merged = summary(number: 12, state: "MERGED")
         #expect(DashboardModel.observedMerge(previous: open, fresh: [merged]))
+        let reopened = summary(number: 13, state: "OPEN")
+        #expect(DashboardModel.observedMerge(previous: open, fresh: [merged, reopened]) == false)
     }
 
     @Test

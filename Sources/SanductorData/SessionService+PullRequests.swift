@@ -70,12 +70,13 @@ public extension SessionService {
         // are named: `gh` left to work either out for itself takes
         // whatever is checked out as the head, which in a stack is
         // rarely the branch being opened.
+        async let destination = pushDestination(worktree: worktree)
         let stack = await stack(for: worktree)
         let branch = worktree.branch
         return try await github.createPullRequest(
             worktreePath: worktree.path,
             request: NewPullRequest(title: title, body: body, labels: labels, isDraft: isDraft),
-            head: pushDestination(worktree: worktree).head(branch: branch),
+            head: destination.head(branch: branch),
             base: base(for: branch, in: stack, of: worktree),
         )
     }
@@ -95,16 +96,9 @@ public extension SessionService {
         }
 
         try requireStackable(stack)
-        var numbers = [Int]()
-        for branch in stack.branches {
-            let listed = try? await github.pullRequests(
-                repositoryPath: worktree.repositoryPath,
-                scope: .branch(branch),
-            )
-            if let open = listed?.first(where: { $0.state == "OPEN" }) {
-                numbers.append(open.number)
-            }
-        }
+        let numbers = try await github.openStackNumbers(
+            repositoryPath: worktree.repositoryPath, branches: stack.branches,
+        )
         guard numbers.count >= Self.linkableCount else {
             return
         }
@@ -279,7 +273,9 @@ public extension SessionService {
     /// branch, reset it to origin when it carries nothing of its
     /// own, and sweep merged branches. Dirty checkouts and worktrees
     /// other than the main checkout are left untouched.
-    func cleanUpAfterMerge(worktree: Worktree, mergedBranch _: String) async -> MergeCleanupReport {
+    func cleanUpAfterMerge(
+        worktree: Worktree, mergedBranch: String, knownBranches: [String] = [],
+    ) async -> MergeCleanupReport {
         var report = MergeCleanupReport()
         guard worktree.path == worktree.repositoryPath else {
             return report
@@ -304,6 +300,13 @@ public extension SessionService {
 
         // defaultBaseRef answers `origin/main` or a bare local name.
         let branch = Self.branchName(fromBaseRef: base)
+        guard await canLeaveMergedBranch(
+            worktree, branch: mergedBranch, base: base, known: knownBranches, report: &report,
+        )
+        else {
+            return report
+        }
+
         if await git.currentBranch(worktreePath: worktree.path) != branch {
             do {
                 try await git.checkout(worktreePath: worktree.path, branch: branch)

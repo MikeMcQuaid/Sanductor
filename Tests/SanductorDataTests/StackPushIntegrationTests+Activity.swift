@@ -5,8 +5,8 @@ import Synchronization
 import Testing
 
 extension StackPushIntegrationTests {
-    @Test(arguments: ["push", "fetch"], [false, true])
-    func `push rechecks activity after remote operations before integrating a later branch`(
+    @Test(arguments: ["lower", "fetch"], [false, true])
+    func `stack preparation rechecks activity before integrating a later branch`(
         activityAfter: String, remoteChanged: Bool,
     ) async throws {
         let world = try await World.make()
@@ -23,6 +23,7 @@ extension StackPushIntegrationTests {
         let runner = PushActivityRunner(holder: holder, activityAfter: activityAfter)
         let service = world.service(herdr: world.herdr, git: GitClient(runner: runner))
         let before = await service.git.tip(of: "upper", worktreePath: path)
+        let remoteBefore = await service.git.tip(of: "lower", worktreePath: world.root + "/origin.git")
         let worktree = Worktree(repositoryName: "repo", repositoryPath: path, branch: "upper", path: holder)
         let busy: @Sendable () async -> Set<String> = { runner.state.withLock { $0.busy ? [holder] : [] } }
 
@@ -36,8 +37,8 @@ extension StackPushIntegrationTests {
         #expect(runner.state.withLock { $0.busy })
         #expect(runner.state.withLock { $0.touched } == false)
         #expect(await service.git.tip(of: "upper", worktreePath: path) == before)
-        #expect(await service.git.tip(of: "origin/lower", worktreePath: path)
-            == service.git.tip(of: "lower", worktreePath: path))
+        let expectedLower = remoteChanged ? remoteBefore : await service.git.tip(of: "lower", worktreePath: path)
+        #expect(await service.git.tip(of: "lower", worktreePath: world.root + "/origin.git") == expectedLower)
         #expect(try await TestSupport.runGit(["status", "--porcelain"], in: holder).standardOutput == "A  draft\n")
         #expect(try String(contentsOfFile: holder + "/draft", encoding: .utf8) == "agent draft")
     }
@@ -59,7 +60,7 @@ private final class PushActivityRunner: ProcessRunner {
 
     // MARK: Internal
 
-    let state: Mutex = .init((pushedLower: false, busy: false, touched: false))
+    let state: Mutex = .init((fetched: false, busy: false, touched: false))
 
     func run(
         _ arguments: [String], workingDirectory: String?, environment: [String: String], outputLimit: Int?,
@@ -71,10 +72,10 @@ private final class PushActivityRunner: ProcessRunner {
             arguments, workingDirectory: workingDirectory, environment: environment, outputLimit: outputLimit,
         )
         state.withLock { state in
-            if arguments.contains("push") {
-                state.pushedLower = true
+            if arguments.contains("fetch") {
+                state.fetched = true
             }
-            if state.pushedLower, arguments.contains(activityAfter) {
+            if state.fetched, arguments.contains(activityAfter) {
                 state.busy = true
             }
         }

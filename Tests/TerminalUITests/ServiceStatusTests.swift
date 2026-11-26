@@ -30,6 +30,20 @@ struct ServiceStatusTests {
     }
 
     @Test
+    func `persistent failures are reported once and can be reported again after recovery`() {
+        let status = ServiceStatus.shared
+        let operation = "Reading " + UUID().uuidString
+        let failure = Failure(errorDescription: "configuration blocked")
+        for expected in [1, 2] {
+            for _ in 0 ..< 6 {
+                status.record(failure: failure, doing: operation)
+            }
+            #expect(ErrorLog.shared.entries.count { $0.message.contains(operation) } == expected)
+            status.recordSuccess(doing: operation)
+        }
+    }
+
+    @Test
     func `a held failure nobody reads again is reported anyway`() async throws {
         let what = "Reading " + UUID().uuidString
         ServiceStatus.shared.record(

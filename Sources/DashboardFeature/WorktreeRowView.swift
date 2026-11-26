@@ -16,6 +16,7 @@ struct WorktreeRowView: View {
     /// Where this branch sits in its stack, how tall the stack is,
     /// and what it is built on.
     let standing: StackStanding
+    var unfinishedBranches: [String] = []
 
     /// What this pane's process tree is costing, when it has cost it
     /// long enough to be worth showing; nil is the quiet case.
@@ -135,7 +136,13 @@ struct WorktreeRowView: View {
     /// the pull request is doing: its state is the news, they are
     /// detail.
     @ViewBuilder private var detailLine: some View {
-        if item.worktree.isHostDirectory {
+        if let error = item.configurationError {
+            Text(error)
+                .interfaceFont(.caption)
+                .foregroundStyle(.red)
+                .lineLimit(1)
+                .hoverHelp(error)
+        } else if item.worktree.isHostDirectory {
             HStack(spacing: Self.spacing) {
                 Text(item.worktree.branch)
                     .font(nameStyle.small)
@@ -190,6 +197,10 @@ struct WorktreeRowView: View {
                 .hoverHelp("The agent did not start: " + failure.message)
         } else if let block {
             Octicon("hand.raised.fill", colour: .orange).hoverHelp("Blocked: " + block.dependency.label)
+        } else if status == .partiallyMerged {
+            Octicon("square.stack.3d.up", colour: .orange)
+                .accessibilityLabel("Partially merged stack")
+                .hoverHelp("Partially merged stack. Remaining branches: " + unfinishedBranches.joined(separator: ", "))
         } else if status == .needsPush {
             Octicon("arrow.up.circle", colour: .orange).hoverHelp("Unpushed commits")
         } else if status == .waitingForCI, pullRequest == nil {

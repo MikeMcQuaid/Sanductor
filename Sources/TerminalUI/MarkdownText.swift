@@ -56,6 +56,8 @@ public struct MarkdownText: View {
         .textual
         .textSelection(.enabled)
         .textual
+        .overflowMode(.wrap)
+        .textual
         .structuredTextStyle(.gitHub)
     }
 

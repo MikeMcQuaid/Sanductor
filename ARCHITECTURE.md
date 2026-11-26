@@ -402,15 +402,13 @@ Rules that follow from that shape:
   strip's read the newest reply from the live transcript instead (the
   last unbroken run of the agent's prose, since a reply's text blocks
   are separate entries, ended by a tool call as by a prompt, so what
-  the agent said on its way to an answer stays out) and put it on the
-  clipboard as HTML, through swift-markdown's formatter, beside the
-  Markdown itself (`MarkdownClipboard`): Word and Slack take the
-  formatting, plain-text fields the source. Anything copied while the
-  reply was being read is left alone. That formatter writes text, code
-  and attributes out as they stand, so the tree is rewritten first:
-  everything written is escaped, the agent's raw HTML included, where a
-  `<name>` in a path read as a tag and vanished, and code names a
-  monospaced font, for receivers that keep fonts rather than tags.
+  the agent said on its way to an answer stays out). Most copies need
+  only the display window. When it omits the start of the reply, the
+  full transcript supplies it. `MarkdownClipboard` offers HTML, RTF
+  and the original Markdown. The rich formats keep table cells and
+  name a monospaced font for code. Raw HTML outside recognised tables
+  is escaped, including angle brackets in paths. RTF conversion blocks
+  external resources. A newer copy keeps ownership of the clipboard.
 - **`--takeover`** replaces a controller leaked by an earlier app run,
   which would otherwise own the pane's input forever. Full herdr
   clients over SSH attach independently and are never dropped.
@@ -1064,9 +1062,10 @@ reads git before offering branches not held by other worktrees.
   other read failure
   (a branch's pull requests, a conversation, the review pane's diff)
   is held until the same read fails again on its next poll or reload,
-  then reported once naming both; a success in between makes the
-  first not news, and one nobody reads again within a minute and a
-  half is reported as it stands, saying so. Resuming a session is
+  then reported once naming both. An unchanged failure stays quiet
+  until that read succeeds. A success between attempts clears the
+  first failure. A read nobody repeats within a minute and a half
+  is reported as it stands, saying so. Resuming a session is
   tried twice the same way (`ErrorLog.attemptingTwice`), as is model
   discovery. A
   conversation that fell back to REST is a recovery that worked, and
@@ -1125,6 +1124,8 @@ reads git before offering branches not held by other worktrees.
   file; the full name comes from the remote URL, never `gh repo view`.
   Every read passes `--no-optional-locks` so nothing waits on an
   agent's index lock. Rows are kept between readings (`GitReadScope`).
+  An edit in a linked worktree refreshes its status. Shared Git
+  metadata changes, manual refreshes and safety reads cover all rows.
   The sidebar, PR pane and Review pane share each worktree's branch
   status. The batch includes commit identities, so moving the default
   branch or rewriting a tip refreshes the panes even if counts stay
@@ -1374,9 +1375,12 @@ show progress while that read runs, and a bulk action shares one read.
 Local title and body edits preserve the refresh requirement. An open
 conversation that disagrees with a closed cache also refreshes the head
 and state before accepting marks.
-The existing push-time checks still require a new
-remote head and unchanged comments before resolving anything. A separate
-local mark signal redraws both review panes without starting a refresh.
+A successful push and a manual PR refresh immediately check marked
+threads against the live GitHub head and latest comments. A push from
+the CLI qualifies on the same terms. Both review panes show confirmed
+resolutions from the shared cache while the conversation refreshes.
+A separate local mark signal redraws both review panes without starting
+a refresh.
 The feedback-loop icon is Review's single review toolbar entry point.
 Its Review action opens the selected diff's editable review prompt and
 findings in a sheet, independently of the local feedback checkbox. Both
@@ -2079,8 +2083,9 @@ steps.
   has been quiet for 350 ms. Pending text is saved before leaving the
   form or quitting, and retains its original branch and pull request
   key. Cancelling an edit discards its pending save too.
-  Creation selects the new pull request and unlocks the form before
-  assigning its closing issues in a background task.
+  As soon as GitHub returns the URL, the form unlocks and selects
+  the new pull request. Stack linking and closing-issue assignment
+  continue in the background.
   GitHub's closing issue references identify issues
   to assign to the authenticated user through `gh issue edit` with
   `--add-assignee @me`, preserving existing assignees. Issue URLs keep
@@ -2110,8 +2115,14 @@ steps.
   `cat-file blob` so a missing literal path cannot become a pattern
   that returns unrelated content.
 - **A stack rebases as one.** Rebasing any layer, the bottom included,
-  restacks the whole stack and then pushes through the selected entry
-  and any higher branches already on the remote, bottom first.
+  restacks the whole stack and then prepares the selected entry and
+  published branches bottom first. It fetches once and publishes the
+  refs together, with a separate force-with-lease for each branch.
+  A standalone push tries its known remote tip as the lease first. A
+  stale lease takes the normal fetch and integration path.
+  A push sets upstream tracking only for branches that need it.
+  Waiting for Git leaves the main actor, local reads and operations in
+  other repositories free. Conflicting writes in one repository queue.
   Queued pull requests are fixed: neither rebasing, signing nor
   pushing may change their branches. When a stack has queued members,
   those members and the branches beneath the last one stay untouched;
@@ -2344,7 +2355,15 @@ steps.
 - **Cleanup after merge** runs from the context menu and the poll
   (only on an observed open-to-merged transition, never a
   missing pull request) through one path: dirty worktrees and branches
-  with commits absent from the base are refused. The main checkout is
+  with commits absent from the base are refused. When a PR merges
+  before the rest of its stack, an orange stack icon marks the sidebar
+  row. Its tooltip names the unfinished branches. Cleanup keeps the
+  worktree and its session while another layer has outstanding commits
+  or an open PR. On an observed merge the PR pane follows the next
+  unfinished layer in stack order. The poll also switches the checkout
+  when it still holds the merged tip, is clean and its agent is idle.
+  Git refuses a switch to a branch already held by another worktree.
+  The main checkout is
   brought level with origin (reset when it carries nothing local,
   signed rebase when it does). Each cleanup also sweeps merged local
   branches, excluding `main`, `master`, `trunk`, the base and branches
@@ -2399,10 +2418,21 @@ steps.
   the session strip's reader button swaps in the rendered log the
   conversations page uses, read from the transcript the agent is
   writing (its newest in the worktree, the one the list leaves out).
-  Both Mac views open the newest 8 MiB of transcript and display up to
-  4,000 recent entries within an 8 MiB text budget. The log marks
-  where earlier history was omitted. A saved selection loads once off
-  the UI thread. For live sessions,
+  Lookup searches only that agent’s transcripts. The live Reader keeps
+  its rendered log and scroll position across terminal and worktree
+  switches, then catches up with writes made while it was hidden.
+  Both Mac views start with the newest 256 KiB of transcript. If that
+  contains only bookkeeping or a partial record, they look back up to
+  8 MiB for readable text. They lay out at most 24 recent entries
+  totalling 16 KiB. The Mac measures these rows together so it can
+  scroll directly to the end. The reply field keeps its place while
+  the Reader is hidden and takes focus when the pane becomes active.
+  The Mac app reserves one-time-code AutoFill for fields that request
+  it. Focusing an ordinary reply otherwise made AppKit synchronously
+  contact the AutoFill service before the conversation could paint.
+  A longer final entry shows its ending. The log marks omitted
+  history and Copy Last Reply retrieves the full answer.
+  A saved selection loads once off the UI thread. For live sessions,
   `TranscriptTail` decodes only what was appended, woken by the file's
   own change events while the pane is on screen in a visible window,
   and a change in the agent's state looks for a newer transcript. A
@@ -2416,9 +2446,9 @@ steps.
   its live sessions by the Mac's status and latest event. Reader on
   either device accepts short single-line replies for the selected
   agent. Drafts live only in the native field, which clears when herdr
-  confirms submission to that pane. On the Mac, selections copy as
-  formatted text. Replies appear whole once the agent has written them,
-  and its reasoning is not shown.
+  confirms submission to that pane. Mac selections span prose and
+  wrapped code blocks. Live readers wait for complete transcript
+  records before displaying a reply and omit agent reasoning.
 - Claude Code stores a typed prompt as plain text where every other
   message is a list of blocks; `TranscriptReader` reads both. Its
   command echoes, task notifications and compaction summaries are
@@ -2953,11 +2983,31 @@ after transient resizes).
 3. **App to GitHub**: `gh`'s own credentials, read by `gh` alone, never
    in any launch environment.
 4. **Host to guest-written data** (P7): every host git invocation goes
-   through `GitClient`, which prepends `-c core.fsmonitor=
+   through `GitClient`, which prepends `-c core.fsmonitor=false
    -c core.sshCommand=/usr/bin/ssh -c core.hooksPath=/dev/null
    -c core.pager=cat -c protocol.ext.allow=never`. Raw `git` outside it
    is banned. `core.sshCommand` names ssh rather than being blanked:
-   an empty value is the empty command, which git forks.
+   an empty value is the empty command, which git forks. Before each
+   operation the client checks the effective local and worktree
+   configuration, including included files. Program settings such as
+   filters, filesystem monitor hooks and signing helpers belong in
+   the host user's global Git configuration, including an SSH signer
+   such as 1Password. A repository may use a Git boolean for its
+   filesystem monitor. Host commands still disable it. Host Git and
+   the Git children of gh skip file hooks and disable configured hooks
+   by event in command scope. This also covers hooks added after the
+   configuration check. Automatic Git maintenance is disabled for these
+   commands so garbage collection cannot start a recent-objects hook.
+   Sanductor prefers Homebrew Git and uses the system Git when it can
+   safely suppress hooks. A refused origin
+   lookup preserves the original error and leaves the remote-name cache
+   untouched. The sidebar and Review pane identify the setting and the
+   file that defines it, including worktree and included files. Review
+   can reveal the file in Finder so the user can edit it and refresh.
+   The same check applies to `gh` in a worktree, which
+   passes these settings to its Git children. Git reads the shared
+   configuration again when the requested operation starts, so a
+   concurrent writer can still replace it in between.
 5. **Transcripts**: sandvault applies inheriting group-read ACLs; the
    app relies on read and never widens it.
 6. **iCloud**: the host writes private settings and alerts into the user's
@@ -3630,8 +3680,16 @@ and investigation disclosures, preserving the finding, suggested patch
 and follow-up instructions. The shared Markdown/HTML parser protects
 literal code and links. Human comments and stored source remain intact.
 The same cleaned feedback feeds manual copies and automated fix prompts.
-Headers, timeline entries, native disclosures, separate review threads
-and scrolling code or table regions remain selection boundaries.
+Within each Markdown region a selection includes wrapped code and tables.
+The pasteboard carries table rows and cells as HTML. Native disclosures,
+timeline entries and separate review threads keep their own selections.
+HTML tables map their rows and cells into the shared Markdown parser.
+The [Textual patch](patches/textual-rich-selection.patch) for 0.5.0
+preserves inline formatting in selections across paragraphs and cells.
+To test a fresh checkout before the upstream pin lands, resolve packages
+with `swift package resolve`, then run
+`git -C .build/checkouts/textual apply ../../../patches/textual-rich-selection.patch`
+and `script/build`.
 SwiftSoup maps common HTML formatting into Markdown and keeps nested
 details as native disclosures with eight-point gaps. Disclosure labels
 drop redundant bold markers because the label already supplies its

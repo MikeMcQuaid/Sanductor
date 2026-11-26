@@ -12,11 +12,14 @@ extension PullRequestsModel {
             repositoryPath: repository.path,
             scope: scope.listScope(branch: listedBranch),
         ) ?? summaries
+        let successor = successorOfMergedSelection(in: listed)
         summaries = Self.worthShowing(listed).map { row in
             withCachedUnresolved(pullRequests.cachedSummary(repositoryPath: repository.path, number: row.number) ?? row)
         }
         page = min(page, max(0, summaries.count - 1) / PullRequestListView.pageSize)
-        if let selected {
+        if let successor {
+            select(successor)
+        } else if let selected {
             guard let listedSelection = summaries.first(where: { $0.number == selected.number }) else {
                 self.selected = nil
                 return
@@ -29,6 +32,26 @@ extension PullRequestsModel {
                 self.selected = painted
             }
         }
+    }
+
+    /// Mine and Open may drop a merged PR and retarget its child in the same refresh.
+    private func successorOfMergedSelection(in fresh: [PullRequestSummary]) -> PullRequestSummary? {
+        guard scope != .worktree, let selected, canHaveStackChildren(selected) else {
+            return nil
+        }
+
+        let updated = fresh.first { $0.number == selected.number }
+            ?? pullRequests.cachedSummary(repositoryPath: repository.path, number: selected.number)
+        guard updated?.state == "MERGED" else {
+            return nil
+        }
+
+        let children = summaries.filter { $0.state == "OPEN" && $0.baseBranch == selected.headBranch }
+        guard children.count == 1, let child = children.first else {
+            return nil
+        }
+
+        return fresh.first { $0.number == child.number && $0.state == "OPEN" }
     }
 
     /// The branch the tab lists and compares against: the checked
@@ -124,7 +147,11 @@ extension PullRequestsModel {
             summaries: fetched,
             limit: limit,
         )
+        let successor = successorOfMergedSelection(in: kept)
         summaries = Self.worthShowing(kept)
+        if let successor {
+            select(successor)
+        }
         fetchedLimit = max(limit, kept.count)
         return true
     }

@@ -108,7 +108,8 @@ extension DashboardModel {
             item.session?.lastActivityAt ?? .distantPast,
             pullRequest?.lastEventAt ?? push ?? .distantPast,
         )
-        return SidebarState(status: status, date: date, needsPush: needsPush)
+        let partiallyMerged = status == .merged && unfinishedMergeBranches(for: item).isEmpty == false
+        return SidebarState(status: partiallyMerged ? .partiallyMerged : status, date: date, needsPush: needsPush)
     }
 
     private func readStatusDetails() async {

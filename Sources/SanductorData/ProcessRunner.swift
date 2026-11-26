@@ -84,6 +84,12 @@ extension String {
 
 /// The one environment every spawned process starts from.
 enum ProcessEnvironment {
+    static let searchPath = [
+        ProcessInfo.processInfo.environment["PATH"], "/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin",
+    ]
+    .compactMap(\.self)
+    .joined(separator: ":")
+
     /// The inherited environment with the tool prefixes on PATH and
     /// any surrounding herdr scrubbed: an inherited HERDR_SESSION or
     /// HERDR_SOCKET_PATH (a dev build or test running inside a herdr
@@ -93,8 +99,7 @@ enum ProcessEnvironment {
     /// Servers are only ever selected explicitly.
     static func scrubbed(merging extra: [String: String] = [:]) -> [String: String] {
         var environment = ProcessInfo.processInfo.environment
-        let toolPath = "/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
-        environment["PATH"] = [environment["PATH"], toolPath].compactMap(\.self).joined(separator: ":")
+        environment["PATH"] = searchPath
         for variable in [
             "HERDR_SESSION", "HERDR_SOCKET_PATH", "HERDR_ENV",
             "HERDR_PANE_ID", "HERDR_TAB_ID", "HERDR_WORKSPACE_ID",
@@ -171,7 +176,27 @@ public struct FoundationProcessRunner: ProcessRunner {
             Self.name(of: arguments),
             context: workingDirectory ?? "",
         ) {
-            try await Self.launch(arguments, workingDirectory, environment, outputLimit: outputLimit)
+            var environment = environment
+            var arguments = arguments
+            if let executable = arguments.first?.split(separator: "/").last, executable == "git" || executable == "gh" {
+                let directory = try await Self.gitDirectory.value
+                environment = GitClient.hardenedEnvironment(environment)
+                environment["PATH"] = directory + ":" + (environment["PATH"] ?? ProcessEnvironment.searchPath)
+                if executable == "git" {
+                    arguments[0] = directory + "/git"
+                }
+                if let workingDirectory {
+                    // gh also invokes Git to discover and check out repositories.
+                    let result = try await Self.launch(
+                        [directory + "/git"] + GitClient.configurationArguments,
+                        workingDirectory,
+                        environment,
+                        outputLimit: nil,
+                    )
+                    try GitClient.checkConfiguration(result, in: workingDirectory)
+                }
+            }
+            return try await Self.launch(arguments, workingDirectory, environment, outputLimit: outputLimit)
         }
     }
 
@@ -186,6 +211,28 @@ public struct FoundationProcessRunner: ProcessRunner {
     /// that make every line unique. Git's `-c key=value` hardening
     /// pairs are skipped, or every git call read the same.
     private static let namedWords = 3
+
+    /// Git 2.54 understands named hooks but cannot turn off an entire event.
+    /// Probe once outside any checkout. gh must find the same Git as the app.
+    private static let gitDirectory = Task {
+        for directory in ["/opt/homebrew/opt/git/bin", "/usr/bin"] {
+            let git = directory + "/git"
+            guard FileManager.default.isExecutableFile(atPath: git),
+                  let result = try? await launch([git, "help", "--config"], nil, [:], outputLimit: nil),
+                  result.succeeded
+            else {
+                continue
+            }
+
+            let keys = result.standardOutput.split(separator: "\n")
+            if keys.contains("core.hooksPath"),
+               keys.contains("hook.<event>.enabled") || keys.contains("hook.<friendly-name>.command") == false
+            {
+                return URL(filePath: directory).resolvingSymlinksInPath().path
+            }
+        }
+        throw GitClient.ConfigurationError("Install a current Git with `brew install git` and reopen Sanductor.")
+    }
 
     private static func name(of arguments: [String]) -> String {
         // A sandbox launch reads as `sudo --login --set-home` whatever

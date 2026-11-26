@@ -4,6 +4,48 @@ import Testing
 
 struct AutofixResolutionTests {
     @Test
+    func `a late conversation read preserves only newly confirmed resolutions`() {
+        let incoming = [AutofixFixture.thread("fixed"), AutofixFixture.thread("reopened")]
+        var reopened = incoming[1]
+        reopened.isResolved = true
+        let previous = CachedThreads(threads: [incoming[0], reopened])
+        var fixed = incoming[0]
+        fixed.isResolved = true
+        let current = CachedThreads(threads: [fixed, reopened], savedAt: previous.savedAt)
+        #expect(current.applyingResolutions(since: previous, to: incoming).map(\.isResolved) == [true, false])
+    }
+
+    @Test
+    func `a push or manual refresh resolves against the live head while the cached head is stale`() async throws {
+        let fixture = try AutofixFixture()
+        fixture.store.update { metadata in
+            for id in ["fixed", "changed", "unrelated", "already"] {
+                metadata.pullRequestAutomation[AutofixFixture.key]?.resolutions[id] = .init(
+                    head: "head", commentID: "comment", fixCommit: id == "unrelated" ? "other" : nil,
+                )
+            }
+        }
+        await fixture.update { state in
+            state.freshHead = "cli-push"
+            var resolved = AutofixFixture.thread("already")
+            resolved.isResolved = true
+            state.freshComments = [
+                AutofixFixture.thread("fixed"), AutofixFixture.thread("changed", comment: "new"),
+                AutofixFixture.thread("unrelated"), resolved,
+            ]
+        }
+        let state = try #require(fixture.store.load().pullRequestAutomation[AutofixFixture.key])
+        let context = await AutofixContext(key: AutofixFixture.key, store: fixture.store, driver: fixture.driver())
+        try await AutofixCoordinator().resolveAfterPush(state: state, context: context)
+        #expect(await fixture.state.resolutions == ["fixed"])
+        let cacheKey = AppMetadata.threadsKey(repositoryPath: state.repositoryPath, number: state.number)
+        let cached = fixture.store.load().threadsCache[cacheKey]?.threads ?? []
+        #expect(cached.filter(\.isResolved).map(\.resolveID).sorted() == ["already", "fixed"])
+        let pending = fixture.store.load().pullRequestAutomation[AutofixFixture.key]?.resolutions
+        #expect(pending?.keys.sorted() == ["unrelated"])
+    }
+
+    @Test
     func `an intervening push cannot resolve newly marked threads`() async throws {
         let fixture = try AutofixFixture()
         fixture.store.update { value in

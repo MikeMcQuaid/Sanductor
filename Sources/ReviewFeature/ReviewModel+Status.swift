@@ -46,6 +46,12 @@ extension ReviewModel {
             return
         }
 
+        configurationError = error as? GitClient.ConfigurationError
+        if configurationError != nil {
+            isRepositoryAvailable = false
+            files = []
+            return
+        }
         let what = "Review of " + repositoryName
         guard let error else {
             isRepositoryAvailable = true

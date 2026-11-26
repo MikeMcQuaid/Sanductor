@@ -1,0 +1,290 @@
+From e050cc166b4e1f228ee23284286c9610cac7c67f Mon Sep 17 00:00:00 2001
+From: Mike McQuaid <mike@mikemcquaid.com>
+Date: Wed, 25 Nov 2026 10:21:49 +0000
+Subject: [PATCH] Preserve inline formatting in copied selections
+
+Copying across Markdown blocks on macOS loses emphasis and code
+styling when pasted into a rich text editor. Preserve that formatting
+for whole or partial selections, including text inside table cells.
+
+See also #58 for related work on rich text copying.
+---
+ .../TextualDemo/TextualDemo/TableDemo.swift   |   4 +-
+ README.md                                     |   2 +
+ .../Internal/TextFragment/TextBuilder.swift   |  12 ++
+ .../AppKit/NSTextInteractionView.swift        |   5 +-
+ .../Shared/TextLayout/Layout+Internals.swift  |  28 +++--
+ .../TextInteraction/RichSelectionTests.swift  | 116 ++++++++++++++++++
+ 6 files changed, 157 insertions(+), 10 deletions(-)
+ create mode 100644 Tests/TextualTests/Internal/TextInteraction/RichSelectionTests.swift
+
+diff --git a/Examples/TextualDemo/TextualDemo/TableDemo.swift b/Examples/TextualDemo/TextualDemo/TableDemo.swift
+index b0430cd..9e5fb1c 100644
+--- a/Examples/TextualDemo/TextualDemo/TableDemo.swift
++++ b/Examples/TextualDemo/TextualDemo/TableDemo.swift
+@@ -13,8 +13,8 @@ struct TableDemo: View {
+
+     | Area            | Status        | Notes                              |
+     |-----------------|---------------|------------------------------------|
+-    | Build           | Passing       | Surprisingly stable                |
+-    | Tests           | Mostly green  | One flaky test, as usual           |
++    | Build           | **Passing**   | Surprisingly stable                |
++    | Tests           | Mostly green  | Run `swift test` for details       |
+     | Documentation   | In progress   | Started, enthusiasm pending        |
+     | Refactor Plan   | Vague         | “We’ll know it when we see it”     |
+
+diff --git a/README.md b/README.md
+index 8908363..a58671c 100644
+--- a/README.md
++++ b/README.md
+@@ -155,6 +155,8 @@ StructuredText(
+ .textual.textSelection(.enabled)
+ ```
+
++On macOS, copying a selection into a rich text editor preserves emphasis, code formatting and table cells.
++
+ Scrollable regions like code blocks handle their own selection contexts. When you select text in a scrollable area,
+ any document-level selection clears automatically, and vice versa.
+
+diff --git a/Sources/Textual/Internal/TextFragment/TextBuilder.swift b/Sources/Textual/Internal/TextFragment/TextBuilder.swift
+index 15aef01..89231b1 100644
+--- a/Sources/Textual/Internal/TextFragment/TextBuilder.swift
++++ b/Sources/Textual/Internal/TextFragment/TextBuilder.swift
+@@ -58,6 +58,12 @@ extension TextFragment {
+   }
+ }
+
++// SwiftUI consumes inline intents when it resolves the font. Keep the semantics
++// alongside the rendered run so a selection can export them with any inline style.
++struct InlinePresentationIntentAttribute: TextAttribute {
++  let intent: InlinePresentationIntent
++}
++
+ extension Text {
+   fileprivate init(
+     attributedString: some AttributedStringProtocol,
+@@ -88,6 +94,12 @@ extension Text {
+         text = Text(AttributedString(attributedString[run.range]))
+       }
+
++      #if TEXTUAL_ENABLE_TEXT_SELECTION
++        if let intent = run.inlinePresentationIntent, !intent.isEmpty {
++          text = text.customAttribute(InlinePresentationIntentAttribute(intent: intent))
++        }
++      #endif
++
+       // Add link attribute for TextLinkInteraction
+       if let link = run.link {
+         text = text.customAttribute(LinkAttribute(link))
+diff --git a/Sources/Textual/Internal/TextInteraction/AppKit/NSTextInteractionView.swift b/Sources/Textual/Internal/TextInteraction/AppKit/NSTextInteractionView.swift
+index f1b06f7..e1f4d1a 100644
+--- a/Sources/Textual/Internal/TextInteraction/AppKit/NSTextInteractionView.swift
++++ b/Sources/Textual/Internal/TextInteraction/AppKit/NSTextInteractionView.swift
+@@ -275,13 +275,16 @@
+     }
+
+     @objc private func copy(_ sender: Any?) {
++      copySelection(to: .general)
++    }
++
++    func copySelection(to pasteboard: NSPasteboard) {
+       guard let selectedRange = model.selectedRange else {
+         return
+       }
+
+       let attributedText = model.attributedText(in: selectedRange)
+
+-      let pasteboard = NSPasteboard.general
+       pasteboard.clearContents()
+
+       let formatter = Formatter(attributedText)
+diff --git a/Sources/Textual/Internal/TextInteraction/Shared/TextLayout/Layout+Internals.swift b/Sources/Textual/Internal/TextInteraction/Shared/TextLayout/Layout+Internals.swift
+index a23a05a..7f78484 100644
+--- a/Sources/Textual/Internal/TextInteraction/Shared/TextLayout/Layout+Internals.swift
++++ b/Sources/Textual/Internal/TextInteraction/Shared/TextLayout/Layout+Internals.swift
+@@ -16,15 +16,14 @@
+         .map(\.attributedString)
+         .removingIdenticalDuplicates()
+
+-      // Attachment attributes are replaced by placeholders in the rendering pipeline (see TextFragment)
+-      // We need to re-apply them to make them part of the contents during copy operations
++      // SwiftUI resolves inline formatting and replaces attachments during layout.
+       let attributedStrings = layoutAttributedStrings.map { input in
+         // Get all the lines in the layout that reference the input
+         let lines = zip(self, lineFragments)
+           .filter { $1.attributedString === input }
+           .map(\.0)
+
+-        return input.applyingAttachments(in: lines)
++        return input.applyingSemanticAttributes(in: lines)
+       }
+
+       return .init(
+@@ -111,8 +110,9 @@
+   }
+
+   extension NSAttributedString {
+-    fileprivate func applyingAttachments(in lines: [Text.Layout.Line]) -> NSAttributedString {
+-      guard lines.containsAttachments else {
++    fileprivate func applyingSemanticAttributes(in lines: [Text.Layout.Line]) -> NSAttributedString
++    {
++      guard lines.containsSemanticAttributes else {
+         return self
+       }
+
+@@ -120,6 +120,20 @@
+
+       for line in lines {
+         for run in line {
++          if let intent = run[InlinePresentationIntentAttribute.self]?.intent, let ctRun = run.ctRun
++          {
++            let stringRange = CTRunGetStringRange(ctRun)
++            if stringRange.location >= 0, stringRange.length > 0,
++              stringRange.location <= length - stringRange.length
++            {
++              result.addAttribute(
++                .inlinePresentationIntent,
++                value: NSNumber(value: intent.rawValue),
++                range: NSRange(location: stringRange.location, length: stringRange.length)
++              )
++            }
++          }
++
+           guard
+             let attachment = run.attachment,
+             let range = run.characterRanges.first
+@@ -139,10 +153,10 @@
+   }
+
+   extension Array where Element == Text.Layout.Line {
+-    fileprivate var containsAttachments: Bool {
++    fileprivate var containsSemanticAttributes: Bool {
+       self.contains { line in
+         line.contains { run in
+-          run.attachment != nil
++          run.attachment != nil || run[InlinePresentationIntentAttribute.self] != nil
+         }
+       }
+     }
+diff --git a/Tests/TextualTests/Internal/TextInteraction/RichSelectionTests.swift b/Tests/TextualTests/Internal/TextInteraction/RichSelectionTests.swift
+new file mode 100644
+index 0000000..eb2e935
+--- /dev/null
++++ b/Tests/TextualTests/Internal/TextInteraction/RichSelectionTests.swift
+@@ -0,0 +1,116 @@
++#if os(macOS)
++  import AppKit
++  import SwiftUI
++  import Testing
++
++  @testable import Textual
++
++  @MainActor
++  struct RichSelectionTests {
++    @Test func copyAcrossProseCodeAndTable() async throws {
++      let markdown = """
++        **bold** and `inline`
++
++        ```swift
++        let n = 42
++        ```
++
++        | Key | Value |
++        | --- | --- |
++        | one | *two* |
++        """
++      try await withSelection(markdown: markdown, containing: "two") { view, pasteboard in
++        view.copySelection(to: pasteboard)
++        let html = try #require(pasteboard.string(forType: .html))
++        #expect(html.contains("<strong>bold</strong>"))
++        #expect(html.contains("<code>inline</code>"))
++        #expect(html.contains("<pre><code"))
++        #expect(html.contains("let n = 42"))
++        #expect(html.contains("<table>"))
++        #expect(html.contains(">Key</th>"))
++        #expect(html.contains(">one</td>"))
++        #expect(html.contains("<em>two</em>"))
++
++        let receiver = NSTextView()
++        receiver.isRichText = true
++        try #require(receiver.readSelection(from: pasteboard))
++        let pasted = receiver.attributedString()
++        for (word, trait) in [
++          ("bold", NSFontDescriptor.SymbolicTraits.bold), ("inline", .monoSpace),
++          ("let n", .monoSpace), ("two", .italic),
++        ] {
++          let location = (pasted.string as NSString).range(of: word).location
++          try #require(location != NSNotFound)
++          let font = try #require(
++            pasted.attribute(.font, at: location, effectiveRange: nil) as? NSFont)
++          #expect(font.fontDescriptor.symbolicTraits.contains(trait))
++        }
++        let cell = (pasted.string as NSString).range(of: "one").location
++        try #require(cell != NSNotFound)
++        let style = try #require(
++          pasted.attribute(.paragraphStyle, at: cell, effectiveRange: nil) as? NSParagraphStyle)
++        #expect(style.textBlocks.contains { $0 is NSTextTableBlock })
++      }
++    }
++
++    @Test func copyPartOfBoldRun() async throws {
++      try await withSelection(markdown: "**bold**", containing: "bold") { view, pasteboard in
++        let start = try #require(view.model.position(from: view.model.startPosition, offset: 1))
++        let end = try #require(view.model.position(from: start, offset: 2))
++        view.model.selectedRange = TextRange(from: start, to: end)
++        view.copySelection(to: pasteboard)
++        #expect(pasteboard.string(forType: .html) == "<p><strong>ol</strong></p>")
++        #expect(pasteboard.string(forType: .string) == "ol")
++      }
++    }
++
++    @Test func copyWithoutSelectionPreservesPasteboard() async throws {
++      try await withSelection(markdown: "Text", containing: "Text") { view, pasteboard in
++        pasteboard.setString("Previous contents", forType: .string)
++        view.model.selectedRange = nil
++        view.copySelection(to: pasteboard)
++        #expect(pasteboard.string(forType: .string) == "Previous contents")
++      }
++    }
++  }
++
++  // MARK: - Selection fixture
++
++  extension RichSelectionTests {
++    private func withSelection(
++      markdown: String, containing lastText: String,
++      _ check: (NSTextInteractionView, NSPasteboard) throws -> Void
++    ) async throws {
++      let host = NSHostingView(
++        rootView: StructuredText(markdown: markdown)
++          .textual.overflowMode(.wrap)
++          .textual.textSelection(.enabled))
++      let window = NSWindow(
++        contentRect: NSRect(x: 0, y: 0, width: 500, height: 500),
++        styleMask: [], backing: .buffered, defer: false)
++      window.isReleasedWhenClosed = false
++      window.contentView = host
++      defer { window.close() }
++      let pasteboard = NSPasteboard.withUniqueName()
++      defer { pasteboard.releaseGlobally() }
++
++      func interactionView(in view: NSView) -> NSTextInteractionView? {
++        (view as? NSTextInteractionView)
++          ?? view.subviews.lazy.compactMap { interactionView(in: $0) }.first
++      }
++      let deadline = ContinuousClock.now + .seconds(5)
++      repeat {
++        host.layoutSubtreeIfNeeded()
++        if let view = interactionView(in: host), view.model.hasText {
++          view.selectAll(nil)
++          if let range = view.model.selectedRange, view.model.text(in: range).contains(lastText) {
++            try check(view, pasteboard)
++            return
++          }
++        }
++        try await Task.sleep(for: .milliseconds(10))
++      } while .now < deadline
++      Issue.record("The selection did not include '\(lastText)' before the layout deadline.")
++    }
++  }
++#endif

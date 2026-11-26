@@ -5,6 +5,35 @@ import Testing
 
 extension ReviewModelTests {
     @Test
+    func `unsafe repository configuration replaces the visible diff until it is removed`() async throws {
+        let path = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString).path
+        defer { try? FileManager.default.removeItem(atPath: path) }
+        try await makeRepository(at: path)
+        try "changed".write(toFile: path + "/README.md", atomically: true, encoding: .utf8)
+        let model = ReviewModel(
+            worktreePath: path, repositoryName: "repo", git: GitClient(runner: FoundationProcessRunner()),
+        )
+        model.scope = .uncommitted
+        await model.reload()
+        try #require(model.files.isEmpty == false)
+        let filter = "filter.preview"
+        try await runGit(["config", filter + ".clean", "/dev/null"], in: path)
+        await model.showCommit("HEAD")
+        #expect(model.files.isEmpty)
+        #expect(model.configurationError?.localizedDescription.contains(filter + ".clean") == true)
+        #expect(model.configurationError?.file?.path == path + "/.git/config")
+        #expect(model.configurationError?.localizedDescription.contains(#"[filter "preview"]"#) == true)
+        await model.reload()
+        #expect(model.files.isEmpty)
+        #expect(model.isRepositoryAvailable == false)
+        #expect(model.configurationError?.localizedDescription.contains(filter + ".clean") == true)
+        try await runGit(["config", "--remove-section", filter], in: path)
+        await model.reload()
+        #expect(model.configurationError == nil)
+        #expect(model.files.isEmpty == false)
+    }
+
+    @Test
     func `last commit starts ticked and amends with at least one file kept`() async throws {
         let path = FileManager.default
             .temporaryDirectory

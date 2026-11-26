@@ -107,14 +107,15 @@ extension RootView {
             ZStack {
                 agentTerminal(for: session, in: item.worktree.path, isActive: isOnScreen && showsReader == false)
                     .allowsHitTesting(showsReader == false)
-                if showsReader {
-                    SessionReaderView(
-                        session: session,
-                        worktreePath: item.worktree.path,
-                        service: dependencies.service,
-                        isActive: isOnScreen && dependencies.dashboard.isWindowVisible,
-                    )
-                }
+                SessionReaderView(
+                    session: session,
+                    worktreePath: item.worktree.path,
+                    service: dependencies.service,
+                    isActive: isOnScreen && dependencies.dashboard.isWindowVisible,
+                    isPresented: showsReader,
+                )
+                .id(session.agent)
+                .hidden(showsReader == false)
             }
             .id(session.name)
         } else if centreShowsEditor(for: item) {

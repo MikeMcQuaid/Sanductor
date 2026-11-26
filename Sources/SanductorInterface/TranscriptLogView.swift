@@ -1,6 +1,16 @@
 import SanductorDomain
 import SwiftUI
 
+// The Mac window is small enough to measure before scrolling to the end.
+// Lazy height estimates can leave the newest reply outside the viewport.
+#if os(macOS)
+    private typealias TranscriptStack = VStack
+#else
+    private typealias TranscriptStack = LazyVStack
+#endif
+
+// MARK: - TranscriptLogView
+
 /// A read-only conversation log for a past session, themed like the
 /// terminals: black on white in light mode, white on black in dark.
 /// Assistant prose renders as Markdown and fenced code blocks are
@@ -24,7 +34,7 @@ public struct TranscriptLogView<Assistant: View>: View {
     /// The scrolling log.
     public var body: some View {
         ScrollView {
-            LazyVStack(alignment: .leading, spacing: spacing) {
+            TranscriptStack(alignment: .leading, spacing: spacing) {
                 if omitsEarlierRecords {
                     Text("Earlier conversation omitted.").foregroundStyle(.secondary)
                 }

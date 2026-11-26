@@ -1,5 +1,7 @@
 import AppKit
 import Markdown
+import SanductorData
+import WebKit
 
 /// Copies a reply the way a browser copies a page: as formatted text
 /// for whatever takes it (Word, Slack, Mail), beside the Markdown
@@ -7,15 +9,22 @@ import Markdown
 public enum MarkdownClipboard {
     // MARK: Public
 
-    /// Copies a reply as Markdown and HTML if the clipboard is still current.
+    /// Copies a reply as Markdown, HTML and RTF if the clipboard is still current.
     public static func copy(to clipboard: ClipboardCopy, reading reply: () async -> String?) async {
         guard let markdown = await reply(), clipboard.isCurrent else {
             return
         }
 
         let html = await html(for: markdown)
+        let localOnly = #"<meta http-equiv="Content-Security-Policy" "#
+            + #"content="default-src 'none'; style-src 'unsafe-inline'">"#
+        let formatted = try? await NSAttributedString.fromHTML(localOnly + html, options: [:]).0
+        let rtf = formatted.flatMap { $0.rtf(from: NSRange(location: 0, length: $0.length), documentAttributes: [:]) }
         clipboard.write { board in
-            board.setString(html, forType: .html) && board.setString(markdown, forType: .string)
+            if let rtf {
+                board.setData(rtf, forType: .rtf)
+            }
+            return board.setString(html, forType: .html) && board.setString(markdown, forType: .string)
         }
     }
 
@@ -26,9 +35,8 @@ public enum MarkdownClipboard {
     /// in either read as a tag and vanished, and a bare `<code>` means
     /// nothing to a receiver that keeps fonts rather than tags, where
     /// file names landed in the body's face. So code names its own
-    /// font and everything written is escaped, the agent's raw HTML
-    /// included, which pastes as the text it is, and a link's or an
-    /// image's attributes, which could otherwise close their quotes.
+    /// font. Tables use the shared HTML parser. Other raw HTML and
+    /// link or image attributes are escaped before formatting.
     private nonisolated struct Legible: MarkupRewriter {
         // MARK: Internal
 
@@ -50,8 +58,16 @@ public enum MarkdownClipboard {
             Text(Self.escaped(inlineHTML.rawHTML))
         }
 
-        func visitHTMLBlock(_ html: HTMLBlock) -> (any Markup)? {
-            HTMLBlock("<p>" + Self.escaped(html.rawHTML) + "</p>\n")
+        mutating func visitHTMLBlock(_ html: HTMLBlock) -> (any Markup)? {
+            if html.rawHTML.localizedCaseInsensitiveContains("<table"),
+               let markdown = try? MarkdownHTML(html.rawHTML).markdown
+            {
+                let document = Document(parsing: markdown)
+                if document.children.contains(where: { $0 is Markdown.Table }), let safe = visit(document) {
+                    return HTMLBlock(HTMLFormatter.format(safe))
+                }
+            }
+            return HTMLBlock("<p>" + Self.escaped(html.rawHTML) + "</p>\n")
         }
 
         mutating func visitLink(_ link: Link) -> (any Markup)? {

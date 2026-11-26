@@ -88,6 +88,19 @@ public struct CachedThreads: Codable, Equatable, Sendable {
 
     /// When the threads were cached.
     public let savedAt: Date
+
+    // MARK: Internal
+
+    /// A conversation read can finish after GitHub has confirmed a resolution.
+    func applyingResolutions(since previous: Self?, to incoming: [ReviewThread]) -> [ReviewThread] {
+        let alreadyResolved = Set(previous?.threads.filter(\.isResolved).map(\.resolveID) ?? [])
+        let changed = Set(threads.filter(\.isResolved).map(\.resolveID)).subtracting(alreadyResolved)
+        var merged = incoming
+        for index in merged.indices where changed.contains(merged[index].resolveID) {
+            merged[index].isResolved = true
+        }
+        return merged
+    }
 }
 
 // MARK: - CachedPullRequestList

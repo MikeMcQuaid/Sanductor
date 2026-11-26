@@ -2,6 +2,43 @@
 import Testing
 
 extension BranchStackIntegrationTests {
+    @Test(arguments: [false, true])
+    func `a stack publishes all its refs in one remote transaction`(rejectTip: Bool) async throws {
+        let world = try await World.make()
+        defer { world.tearDown() }
+        let path = world.repository.path
+        let origin = world.root + "/origin.git"
+        try await Self.signable(path)
+        try await TestSupport.runGit(["clone", "--bare", path, origin], in: path)
+        try await TestSupport.runGit(["remote", "add", "origin", origin], in: path)
+        try await TestSupport.runGit(["fetch", "origin"], in: path)
+        try await TestSupport.runGit(["remote", "set-head", "origin", "main"], in: path)
+        let branches = ["lower", "middle", "upper"]
+        for branch in branches {
+            try await TestSupport.runGit(["checkout", "-b", branch], in: path)
+            try await Self.signedCommit(branch, in: path)
+        }
+        let worktree = StackedSessionIntegrationTests.worktree("upper", at: path, in: world.repository)
+        if rejectTip {
+            try await TestSupport.runGit(["push", "origin", "upper"], in: path)
+            let original = try await Self.tip(of: "upper", in: origin)
+            try await TestSupport.runGit(["commit", "--amend", "-S", "-m", "rewritten"], in: path)
+            try await TestSupport.runGit(["config", "receive.denyNonFastForwards", "true"], in: origin)
+            await #expect(throws: (any Error).self) {
+                try await world.service.pushStack(worktree: worktree)
+            }
+            #expect(try await Self.tip(of: "upper", in: origin) == original)
+            for branch in branches.dropLast() {
+                #expect(await world.service.git.refExists(worktreePath: origin, ref: "refs/heads/" + branch) == false)
+            }
+        } else {
+            #expect(try await world.service.pushStack(worktree: worktree) == branches)
+            for branch in branches {
+                #expect(try await Self.tip(of: branch, in: origin) == Self.tip(of: branch, in: path))
+            }
+        }
+    }
+
     @Test(arguments: [false, true], ["local", "published", "deleted"])
     func `pushing a stack includes published higher branches and leaves unpublished ones local`(
         unsignedTop: Bool, middleState: String,

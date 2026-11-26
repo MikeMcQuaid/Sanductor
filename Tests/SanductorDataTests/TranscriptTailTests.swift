@@ -35,11 +35,11 @@ struct TranscriptTailTests {
         let tail = TranscriptTail(transcript: transcript)
         #expect(await tail.entries().count == 1)
         #expect(await tail.omitsEarlierRecords)
-        try Self.append(String(repeating: prompt, count: 4_100), to: transcript)
+        try Self.append(String(repeating: prompt, count: 100), to: transcript)
         let entries = await tail.entries()
-        #expect(entries.count == 4_000)
-        #expect(entries.first?.id == 101)
-        #expect(entries.last?.id == 4_100)
+        #expect(entries.count == 24)
+        #expect(entries.first?.id == 77)
+        #expect(entries.last?.id == 100)
     }
 
     @Test
@@ -48,10 +48,51 @@ struct TranscriptTailTests {
         defer { try? FileManager.default.removeItem(atPath: directory) }
         let transcript = URL(fileURLWithPath: directory + "/saved.jsonl")
         let prompt = #"{"type":"user","message":{"content":"café"}}"#
-        let padding = String(repeating: "x", count: 8_388_608 - 2 * prompt.utf8.count - 2)
+        let padding = String(repeating: "x", count: 262_144 - 2 * prompt.utf8.count - 2)
         try Data(("older\n" + prompt + "\n" + padding + "\n" + prompt).utf8).write(to: transcript)
         let tail = TranscriptTail(transcript: transcript)
         #expect(await tail.entries(includingFinalLine: true).map(\.text) == ["café", "café"])
+    }
+
+    @Test
+    func `a short opening window skips old replies and looks past trailing bookkeeping when needed`() async throws {
+        let directory = try TestSupport.temporaryDirectory("reader-bookkeeping")
+        defer { try? FileManager.default.removeItem(atPath: directory) }
+        let transcript = URL(fileURLWithPath: directory + "/log.jsonl")
+        let reply = #"{"type":"assistant","message":{"content":"reply"}}"# + "\n"
+        let metadata = #"{"type":"system","data":""# + String(repeating: "x", count: 300_000) + #""}"# + "\n"
+        try Data((reply + metadata + reply).utf8).write(to: transcript)
+        let tail = TranscriptTail(transcript: transcript)
+        #expect(await tail.entries().map(\.text) == ["reply"])
+        #expect(await tail.omitsEarlierRecords)
+        try Self.append(metadata, to: transcript)
+        let reopened = TranscriptTail(transcript: transcript)
+        #expect(await reopened.entries().last?.text == "reply")
+        let before = try #require(await tail.entries().last)
+        #expect(before.text == "reply")
+        try Self.append(metadata + reply, to: transcript)
+        let after = try #require(await tail.entries().last)
+        #expect(after.id > before.id)
+    }
+
+    @Test
+    func `a large final reply keeps its ending and the next entry's identity`() async throws {
+        let directory = try TestSupport.temporaryDirectory("reader-text-budget")
+        defer { try? FileManager.default.removeItem(atPath: directory) }
+        let transcript = URL(fileURLWithPath: directory + "/log.jsonl")
+        let text = String(repeating: "👩🏽‍💻", count: 2_000) + " final words"
+        let reply = #"{"type":"assistant","message":{"content":"\#(text)"}}"# + "\n"
+        try Data(reply.utf8).write(to: transcript)
+        let tail = TranscriptTail(transcript: transcript)
+        let entry = try #require(await tail.entries().last)
+        #expect(entry.text.utf8.count <= 16_384)
+        #expect(entry.text.hasSuffix(" final words"))
+        #expect(text.hasSuffix(entry.text))
+        #expect(await tail.omitsEarlierRecords)
+        try Self.append(#"{"type":"user","message":{"content":"next"}}"# + "\n", to: transcript)
+        let next = await tail.entries()
+        #expect(next.map(\.text) == ["next"])
+        #expect(next.last?.id == entry.id + 1)
     }
 
     @Test(.timeLimit(.minutes(1)))

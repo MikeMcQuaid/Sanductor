@@ -136,13 +136,18 @@ public struct MarkdownHTML {
     }
 
     private func render(_ element: Element) -> String {
-        let body = render(element.getChildNodes())
+        var body: String {
+            render(element.getChildNodes())
+        }
         switch element.tagName() {
         case "iframe",
              "object",
              "script",
              "style":
             return ""
+
+        case "table":
+            return renderTable(element)
 
         case "pre":
             let code = element.getChildNodes().map { literalText($0) }.joined()
@@ -151,9 +156,6 @@ public struct MarkdownHTML {
                 count: max(Self.fenceLength, (code.matches(of: /`+/).map(\.output.count).max() ?? 0) + 1),
             )
             return "\n\n" + fence + "\n" + code + "\n" + fence + "\n\n"
-
-        case "br":
-            return "  \n"
 
         case "hr":
             return "\n\n---\n\n"
@@ -194,8 +196,43 @@ public struct MarkdownHTML {
         }
     }
 
+    private func renderTable(_ table: Element) -> String {
+        let rows = table.children()
+            .flatMap { child in
+                ["thead", "tbody", "tfoot"].contains(child.tagName()) ? child.children().array() : [child]
+            }
+            .filter { $0.tagName() == "tr" }
+            .map { $0.children().filter { ["th", "td"].contains($0.tagName()) } }
+        guard let first = rows.first, let width = rows.map(\.count).max(), width > 0 else {
+            return render(table.getChildNodes())
+        }
+
+        var lines = rows.map { row in
+            row.lazy
+                .map { cell in
+                    render(cell.getChildNodes())
+                        .trimmingCharacters(in: .whitespacesAndNewlines)
+                        .split(whereSeparator: \.isNewline)
+                        .joined(separator: " ")
+                        .replacing("|", with: "\\|")
+                }
+                .joined(separator: " | ")
+        }
+        if first.contains(where: { $0.tagName() == "th" }) {
+            lines[0] += String(repeating: " | ", count: width - first.count)
+        } else {
+            lines.insert(Array(repeating: "", count: width).joined(separator: " | "), at: 0)
+        }
+        lines.insert(Array(repeating: "---", count: width).joined(separator: " | "), at: 1)
+        let caption = table.children().first { $0.tagName() == "caption" }.map { render($0.getChildNodes()) } ?? ""
+        return "\n\n" + caption + "\n\n" + lines.lazy.map { "| " + $0 + " |" }.joined(separator: "\n") + "\n\n"
+    }
+
     private func renderInline(_ element: Element, body: String) -> String {
         switch element.tagName() {
+        case "br":
+            return "  \n"
+
         case "b",
              "strong":
             return wrapped(body, in: "**")

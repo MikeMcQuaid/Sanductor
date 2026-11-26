@@ -1,6 +1,47 @@
 import SanductorDomain
 
 extension SessionService {
+    /// Reconciles only marked conversations for the pushed branches or the PR being refreshed.
+    @preconcurrency
+    public func resolveMarkedReviews(
+        repositoryPath: String, branches: Set<String>, number: Int?, changed: @escaping @Sendable () async -> Void,
+    ) async {
+        let driver = automationDriver(groups: [])
+        guard number != nil || branches.isEmpty == false else {
+            return
+        }
+
+        await withDiscardingTaskGroup { group in
+            for (key, state) in store.load().pullRequestAutomation where state.repositoryPath == repositoryPath
+                && state.localWorktreePath == nil && state.resolutions.isEmpty == false
+            {
+                if let number, state.number != number {
+                    continue
+                }
+                if let cached = pullRequests.cachedSummary(repositoryPath: repositoryPath, number: state.number),
+                   cached.headBranch.isEmpty == false, branches.isEmpty == false,
+                   branches.contains(cached.headBranch) == false
+                {
+                    continue
+                }
+                let context = AutofixContext(key: key, store: store, driver: driver, resolutionChanged: changed)
+                group.addTask {
+                    do {
+                        try await autofixCoordinator.resolveAfterPush(
+                            state: state, context: context, branches: branches,
+                        )
+                    } catch {
+                        // The dashboard retries outstanding marks on its next refresh.
+                        PerformanceLog.recordMessage(
+                            "Checking marked review conversations: " + error.localizedDescription,
+                            isError: false,
+                        )
+                    }
+                }
+            }
+        }
+    }
+
     func automationSummary(_ state: PullRequestAutomation, fresh: Bool) async throws -> PullRequestSummary? {
         if state.localWorktreePath != nil {
             return await localAutofixSummary(state)

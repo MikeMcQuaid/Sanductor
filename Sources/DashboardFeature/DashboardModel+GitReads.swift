@@ -22,6 +22,7 @@ extension DashboardModel {
     func gitReadScope(forcing paths: Set<String>, immediately: Bool = false) -> GitReadScope {
         let now = Date()
         guard hasLoaded else {
+            lastGitReadAt = now
             for group in groups {
                 gitReadAt[group.repository.path] = now
             }
@@ -33,7 +34,7 @@ extension DashboardModel {
             setting: Self.pollInterval, visible: isWindowVisible, onBattery: onBattery,
         )
         if immediately == false, paths.isEmpty, onBattery || isWindowVisible == false,
-           let last = gitReadAt.values.max(), now.timeIntervalSince(last) < Double(minimumInterval)
+           now.timeIntervalSince(lastGitReadAt) < Double(minimumInterval)
         {
             return .only([])
         }
@@ -49,14 +50,6 @@ extension DashboardModel {
                 ? (isSelected ? Self.selectedGitInterval : Self.idleGitInterval)
                 : (isSelected ? Self.unwatchedSelectedInterval : Self.unwatchedIdleInterval)
             let last = gitReadAt[path] ?? .distantPast
-            // Both prefix directions: an event trimmed to the
-            // repository directory still covers its deeper worktrees.
-            let touched = changed.contains { changedPath in
-                changedPath.hasPrefix(path) || group.items.contains { item in
-                    changedPath.hasPrefix(item.worktree.path)
-                        || item.worktree.path.hasPrefix(changedPath)
-                }
-            }
             // A repository whose `.git` something wrote under is due
             // a stack derivation for each of its worktrees: every
             // ref lives there, a linked worktree's included, so
@@ -65,20 +58,42 @@ extension DashboardModel {
             // event rather than how a change is found. An agent
             // editing sources touches the repository without moving
             // anything, and marked every worktree due each tick.
-            let refsMoved = changed.contains { $0.hasPrefix(path + "/.git") }
+            let refsMoved = changed.contains(path + "/.git")
             if refsMoved || paths.contains(path) {
                 for item in group.items {
                     nextStackDerivation[item.worktree.path] = .distantPast
                 }
             }
             let safety = RefreshCadence.slowed(interval, onBattery: onBattery)
-            if touched || now.timeIntervalSince(last) >= safety {
+            if now.timeIntervalSince(last) >= safety {
                 due.insert(path)
+            } else {
+                due.formUnion(changed.compactMap { checkoutToRead(for: $0, in: group) })
+            }
+            if due.contains(path) {
+                gitReadAt[path] = now
             }
         }
-        for repository in due {
-            gitReadAt[repository] = now
+        if due.isEmpty == false {
+            lastGitReadAt = now
         }
         return .only(due)
+    }
+
+    private func checkoutToRead(for change: String, in group: RepositoryGroup) -> String? {
+        let repo = group.repository.path
+        if change == repo || change.hasPrefix(repo + "/") || repo.hasPrefix(change + "/") {
+            return repo
+        }
+        for item in group.items {
+            let tree = item.worktree
+            if change == tree.path || change.hasPrefix(tree.path + "/") {
+                return tree.repositoryPath == repo && tree.isHostDirectory == false ? tree.path : repo
+            }
+        }
+        // A container event can add or remove a worktree, including an unregistered clone.
+        let container = service.worktreeContainer(repository: group.repository)
+        return change == container || change.hasPrefix(container + "/") || container.hasPrefix(change + "/")
+            ? repo : nil
     }
 }

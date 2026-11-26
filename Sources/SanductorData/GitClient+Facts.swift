@@ -143,14 +143,7 @@ public extension GitClient {
     /// The repository's GitHub `owner/name`, parsed from the origin
     /// remote, nil for non-GitHub or remoteless repositories.
     func fullName(of repository: Repository) async -> String? {
-        let modified = Self.configModified(at: repository.path)
-        if let known = await RepositoryFacts.shared.name(of: repository.path, at: modified) {
-            return known.value
-        }
-
-        let name = await readFullName(of: repository)
-        await RepositoryFacts.shared.remember(name: name, of: repository.path, at: modified)
-        return name
+        try? await readFullName(at: repository.path)
     }
 
     /// The base ref merges are judged against: the origin's default
@@ -177,17 +170,24 @@ public extension GitClient {
             )[.modificationDate] as? Date
     }
 
-    private func readFullName(of repository: Repository) async -> String? {
-        let result = try? await git(
-            ["remote", "get-url", "origin"],
-            in: repository.path,
-            allowFailure: true,
-        )
-        guard let result, result.succeeded else {
-            return nil
+    /// A failed config check must reach the caller and must never become a cached missing remote.
+    internal func readFullName(at path: String) async throws -> String? {
+        let modified = Self.configModified(at: path)
+        if let known = await RepositoryFacts.shared.name(of: path, at: modified) {
+            return known.value
         }
 
-        return GitHubRemote.fullName(ofURL: result.standardOutput.trimmingCharacters(in: .whitespacesAndNewlines))
+        let result = try await git(["remote", "get-url", "origin"], in: path, allowFailure: true)
+        // swiftlint:disable:next no_magic_numbers - Git remote returns 2 for an absent remote.
+        guard result.succeeded || result.status == 2 else {
+            throw CommandError(command: "git remote get-url origin", result: result)
+        }
+
+        let name = result.succeeded
+            ? GitHubRemote.fullName(ofURL: result.standardOutput.trimmingCharacters(in: .whitespacesAndNewlines))
+            : nil
+        await RepositoryFacts.shared.remember(name: name, of: path, at: modified)
+        return name
     }
 
     private func readDefaultBaseRef(of repository: Repository) async -> String? {
@@ -245,7 +245,12 @@ public extension GitClient {
 
     /// The commit a ref names, nil when unreadable.
     func commitHash(of ref: String, worktreePath: String) async -> String? {
-        await (try? git(["rev-parse", ref], in: worktreePath))?
+        try? await resolveCommit(ref, worktreePath: worktreePath)
+    }
+
+    /// Resolves a ref, preserving the reason a review cannot read it.
+    func resolveCommit(_ ref: String, worktreePath: String) async throws -> String {
+        try await git(["rev-parse", ref], in: worktreePath)
             .standardOutput
             .trimmingCharacters(in: .whitespacesAndNewlines)
     }

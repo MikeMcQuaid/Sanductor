@@ -8,7 +8,10 @@ import Testing
 struct MarkdownSelectionTests {
     // MARK: Internal
 
-    @Test(arguments: ["First paragraph.\n\nSecond paragraph.", "### Heading", "1. First\n2. Second"])
+    @Test(arguments: [
+        "First paragraph.\n\nSecond paragraph.", "### Heading", "1. First\n2. Second",
+        "Before **bold** and `inline`.\n\n```swift\nlet n = 42\n```\n\nAfter.",
+    ])
     func `rendered Markdown accepts selection and copy across its width`(markdown: String) async throws {
         let host = NSHostingView(rootView: MarkdownText(markdown)
             .frame(width: 400, alignment: .leading))
@@ -35,6 +38,9 @@ struct MarkdownSelectionTests {
             try await Task.sleep(for: .milliseconds(10))
         }
         let view = try #require(selectable)
+        #expect(descendants(host).count { candidate in
+            (candidate as? any NSUserInterfaceValidations)?.validateUserInterfaceItem(selectAll) == true
+        } == 1)
         #expect(host.hitTest(view.convert(NSPoint(x: 5, y: 5), to: host)) === view)
         let bounds = view.convert(view.bounds, to: host)
         #expect(host.hitTest(NSPoint(x: 399, y: bounds.midY)) === view)
