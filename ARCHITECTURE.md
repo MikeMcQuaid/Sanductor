@@ -1402,6 +1402,9 @@ diff size limit. Uncommitted snapshots remain limited to 256 KiB; a local
 feedback round containing commits and working changes applies that limit
 only to the uncommitted portion. Commit identities come from the loaded
 scope, including historical commits, unpushed commits and stack entries.
+Review reads explicit commit lists in ordered batches so even large
+branches fit Foundation's limit of 4,096 arguments per process.
+The process runner rejects commands over that limit before launch.
 Fixed instructions keep source text untrusted and require findings
 anchored to the diff; the tool restrictions and output schema remain
 enforced by the app.

@@ -5,6 +5,36 @@ import Testing
 
 struct ReviewCommitContextTests {
     @Test
+    func `large commit selections retain every message and unpushed row in order`() async throws {
+        let path = try TestSupport.temporaryDirectory("long-history")
+        defer { try? FileManager.default.removeItem(atPath: path) }
+        try await TestSupport.runGit(["init", "-q", "-b", "main"], in: path)
+        let count = 4_100
+        let history = (0 ... count)
+            .map { index in
+                "commit refs/heads/main\ncommitter Test <test@example.com> 1 +0000\n"
+                    + "data <<END\nChange \(index)\nEND\n\n"
+            }
+            .joined()
+        try history.write(toFile: path + "/history", atomically: true, encoding: .utf8)
+        try await TestSupport.run(["/bin/sh", "-c", "git fast-import --quiet <history"], in: path)
+
+        let git = GitClient(runner: FoundationProcessRunner())
+        let base = "HEAD~" + String(count)
+        let range = base + "..HEAD"
+        let revisions = try await TestSupport.runGit(["rev-list", range], in: path)
+            .standardOutput
+            .split(separator: "\n")
+            .map(String.init)
+        #expect(revisions.count == count)
+        let expected = try await git.reviewCommitContext(worktreePath: path, revisions: [range])
+        #expect(try await git.reviewCommitContext(worktreePath: path, revisions: revisions) == expected)
+        let rows = await git.branchCommits(worktreePath: path, baseRef: base)
+        #expect(rows.count == count + 1)
+        #expect(await git.unpushedCommitLines(worktreePath: path, upstreamRef: base, baseRef: nil) == rows)
+    }
+
+    @Test
     func `large committed changes include full messages and exclude later working edits`() async throws {
         let path = try TestSupport.temporaryDirectory("review-commits")
         defer { try? FileManager.default.removeItem(atPath: path) }
