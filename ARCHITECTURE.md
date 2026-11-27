@@ -3387,8 +3387,8 @@ Set up the new identity before running the Release workflow:
    **Public Beta** and create it. A different name requires a repository
    Actions variable `TESTFLIGHT_PUBLIC_GROUP` with that exact name.
 7. Check the **Release** dry run, which archives and validates without
-   uploading. Merge the automation into `main`; successful CI uploads a
-   private build. To publish an official release, choose GitHub
+   uploading. A Swift or package change on `main` exercises the private
+   upload after CI passes. To publish an official release, choose GitHub
    **Actions > Release > Run workflow**, select `main` and enter a fresh
    bare version. The workflow uploads, adds testing notes and submits
    beta review before adding the build to the configured external group.
@@ -3402,7 +3402,7 @@ Set up the new identity before running the Release workflow:
    testers notified automatically after any required approval.
 
 Only the Release dispatch repeats for official releases. Private builds
-follow successful `main` CI automatically. For failures that can be
+follow qualifying `main` pushes automatically. For failures that can be
 resolved without changing the release commit, address the cause and
 choose **Re-run failed jobs** within 30 days of the initial run.
 [GitHub reruns jobs at the original commit and only within that
@@ -3489,13 +3489,16 @@ numbers and uploads still processing. Rerunning an older workflow
 therefore cannot reuse its old run number. Failed public uploads prevent
 the GitHub tag and release from being published.
 
-Successful **GitHub Actions CI** push runs on this repository's `main`
-trigger the private TestFlight job at that run's exact commit. Failed CI
-and pull requests cannot upload. Main CI runs have separate concurrency
-groups so later pushes do not replace pending runs. Releases and private
-uploads share one serial queue, retaining up to GitHub's 100 pending
-runs. Build numbers are allocated inside this queue. Push dry runs use
-separate per-ref queues and cannot delay live releases.
+On a push to `main`, **GitHub Actions CI** compares the previous and new
+tips. A private build requires successful CI from this repository and a
+change to `Package.swift`, `Package.resolved` or Swift sources in
+`App/`, `Sources/` or `iOSApp/`.
+Each push cancels the private job for the tip it replaced, including
+when the new push changes only workflows or documentation.
+The release checks the live `main` tip before building and again after
+archiving, immediately before sending the binary to Apple.
+Public releases and private uploads allocate build numbers in one serial
+queue. Push dry runs use separate per-ref queues.
 Private builds use the nearest release tag as their marketing version
 and export with `testFlightInternalTestingOnly` enabled. They cannot be
 distributed externally. The internal group's automatic distribution
