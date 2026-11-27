@@ -3,6 +3,16 @@ import SanductorData
 import Testing
 
 struct BoundedProcessOutputTests {
+    @Test(arguments: [nil, 1_024] as [Int?])
+    func `commands over the argument limit throw a recoverable error`(limit: Int?) async throws {
+        let runner = FoundationProcessRunner()
+        let arguments = ["/usr/bin/true"] + Array(repeating: "x", count: 4_095)
+        #expect(try await runner.run(arguments, workingDirectory: nil, environment: [:], outputLimit: limit).succeeded)
+        await #expect(throws: POSIXError(.E2BIG)) {
+            try await runner.run(arguments + ["x"], workingDirectory: nil, environment: [:], outputLimit: limit)
+        }
+    }
+
     @Test(arguments: [false, true])
     func `either output stream is capped while the process runs`(standardError: Bool) async throws {
         let runner: any ProcessRunner = FoundationProcessRunner()

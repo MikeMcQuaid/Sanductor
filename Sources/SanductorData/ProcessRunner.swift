@@ -274,6 +274,12 @@ public struct FoundationProcessRunner: ProcessRunner {
         _ extraEnvironment: [String: String],
         outputLimit: Int?,
     ) async throws -> ProcessResult {
+        // Foundation raises an Objective-C exception when Process.arguments exceeds this count.
+        let maximumArguments = 4_096
+        guard arguments.count <= maximumArguments else {
+            throw POSIXError(.E2BIG)
+        }
+
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
         process.arguments = arguments

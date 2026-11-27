@@ -5,14 +5,7 @@ import Foundation
 public extension GitClient {
     /// Full identities and messages for precisely the selected commits or range.
     func reviewCommitContext(worktreePath: String, revisions: [String]) async throws -> String {
-        guard revisions.isEmpty == false else {
-            return ""
-        }
-
-        return try await git(
-            ["log", "--no-walk=unsorted", "--format=commit %H%n%B", "--end-of-options"] + revisions + ["--"],
-            in: worktreePath,
-        ).standardOutput
+        try await commitLog(revisions, format: "commit %H%n%B", in: worktreePath)
     }
 
     /// The branch's commits beyond the base ref, newest first, one
@@ -32,16 +25,24 @@ public extension GitClient {
     /// row; see `unpushedCommits` for why hashes will not do.
     func unpushedCommitLines(worktreePath: String, upstreamRef: String, baseRef: String?) async -> [String] {
         let hashes = await unpushedCommits(worktreePath: worktreePath, upstreamRef: upstreamRef, baseRef: baseRef)
-        var lines = [String]()
-        if hashes.isEmpty == false {
-            let result = try? await git(
-                ["log", "--no-walk=unsorted", "--format=%h %s%d"] + hashes.reversed(),
-                in: worktreePath,
-                allowFailure: true,
-            )
-            lines = (result?.standardOutput ?? "").split(separator: "\n").map(String.init)
-        }
+        let log = try? await commitLog(hashes.reversed(), format: "%h %s%d", in: worktreePath)
+        let lines = (log ?? "").split(separator: "\n").map(String.init)
         return await lines + baseLine(worktreePath: worktreePath, baseRef: upstreamRef)
+    }
+
+    private func commitLog(_ revisions: [String], format: String, in worktreePath: String) async throws -> String {
+        // Leave room for git's options within Foundation's 4,096-argument limit.
+        let batchSize = 2_048
+        var log = ""
+        for start in stride(from: 0, to: revisions.count, by: batchSize) {
+            try Task.checkCancellation()
+            log += try await git(
+                ["log", "--no-walk=unsorted", "--format=" + format, "--end-of-options"]
+                    + revisions[start...].prefix(batchSize) + ["--"],
+                in: worktreePath,
+            ).standardOutput
+        }
+        return log
     }
 
     /// The base commit's own line, which anchors a list: its ref
