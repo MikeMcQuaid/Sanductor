@@ -103,25 +103,25 @@ public struct HerdrClient: Sendable {
     /// replaces a controller leaked by an earlier app run, which
     /// would otherwise own the pane's input forever; full herdr
     /// clients (SSH attaches) are unaffected.
-    public func attachCommand(paneID: String) -> [String] {
+    public func attachCommand(paneID: String, size: (columns: Int, rows: Int)? = nil) -> [String] {
+        let viewport = size.map { ["--cols", String($0.columns), "--rows", String($0.rows)] } ?? []
         if isInsideSandbox {
             // The channel resolves its argv through `/usr/bin/env`,
             // so leading assignments select the server.
-            environment.map { $0.key + "=" + $0.value }.sorted()
-                + ["herdr", "terminal", "session", "control", paneID, "--takeover"]
-        } else {
-            launcher.command(
-                payload: exportPrefix + "exec herdr terminal session control "
-                    + paneID.shellQuoted + " --takeover",
-                initialDirectory: launcher.sharedWorkspace,
-                // Deterministic, so the pane's command compares equal
-                // across view updates: a fresh UUID here made every
-                // update look like a new command and reattach the
-                // client in a loop.
-                sessionID: paneID,
-                sessionName: paneID,
-            )
+            return environment.map { $0.key + "=" + $0.value }.sorted()
+                + ["herdr", "terminal", "session", "control", paneID, "--takeover"] + viewport
         }
+        return launcher.command(
+            payload: exportPrefix + "exec herdr terminal session control "
+                + ([paneID.shellQuoted, "--takeover"] + viewport).joined(separator: " "),
+            initialDirectory: launcher.sharedWorkspace,
+            // Deterministic, so the pane's command compares equal
+            // across view updates: a fresh UUID here made every
+            // update look like a new command and reattach the
+            // client in a loop.
+            sessionID: paneID,
+            sessionName: paneID,
+        )
     }
 
     // MARK: Internal

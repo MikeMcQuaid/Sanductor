@@ -3,6 +3,14 @@ import SanductorDomain
 import Testing
 
 struct SidebarStatusTests {
+    @Test
+    func `idle agents and open pull requests precede their respective waits and queues`() {
+        let priorities: [SidebarStatus] = [
+            .working, .idleAgent, .done, .waitingForCI, .waitingForReview, .open, .queued,
+        ]
+        #expect(SidebarStatus.allCases.filter(priorities.contains) == priorities)
+    }
+
     // swiftlint:disable large_tuple - Each case names CI, review, comments and the expected status.
     @Test(arguments: [
         ("FAILURE", "APPROVED", 0, SidebarStatus.ciFailing),

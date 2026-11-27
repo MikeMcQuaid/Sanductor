@@ -25,6 +25,7 @@ public struct BranchFacts: Sendable {
 
     // MARK: Internal
 
+    var isLocal = false
     var upstream: String?
 }
 
@@ -49,6 +50,7 @@ public extension GitClient {
             "%(upstream:track,nobracket)",
             counts,
             "%(committerdate:unix)",
+            "%(refname:rstrip=-2)",
             "%(objectname)",
         ].joined(separator: "\t")
         let result = try? await git(
@@ -61,6 +63,20 @@ public extension GitClient {
         }
 
         return Self.branchFacts(fromForEachRef: result.standardOutput)
+    }
+
+    /// Reuses the sidebar's ref read, including Git's name order for equally recent branches.
+    internal func recentBranches(in path: String, facts: [String: BranchFacts]) async -> [String] {
+        guard facts.isEmpty == false else {
+            return await branches(worktreePath: path, newestFirst: true)
+        }
+
+        return facts.filter(\.value.isLocal)
+            .sorted { lhs, rhs in
+                lhs.value.committedAt == rhs.value.committedAt ? lhs.key.utf8.lexicographicallyPrecedes(rhs.key.utf8)
+                    : lhs.value.committedAt > rhs.value.committedAt
+            }
+            .map(\.key)
     }
 
     /// Every branch and remote-tracking ref with the commit it
@@ -86,7 +102,7 @@ public extension GitClient {
 
     /// Parses what `for-each-ref` printed; separated for tests.
     static func branchFacts(fromForEachRef output: String) -> [String: BranchFacts] {
-        let fieldCount = 6
+        let fieldCount = 7
         let revision = output.split(separator: "\n")
             .compactMap { line -> String? in
                 let fields = line.components(separatedBy: "\t")
@@ -116,6 +132,7 @@ public extension GitClient {
                 behindUpstream: Self.upstreamCount("behind", upstream: upstream, track: track),
                 committedAt: Int(committed) ?? 0,
                 revision: fingerprint,
+                isLocal: fields.next() == "refs/heads",
                 upstream: upstream.isEmpty ? nil : upstream,
             )
         }

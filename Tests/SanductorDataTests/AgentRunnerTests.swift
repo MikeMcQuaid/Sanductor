@@ -6,6 +6,47 @@ import Testing
 /// on, the successor to the deleted paste-delivery coverage.
 struct AgentRunnerTests {
     @Test
+    func `a parent agent identifies worktrees it creates in another repository`() async throws {
+        let world = try await World.make()
+        defer { world.tearDown() }
+        let parent = world.root + "/parent"
+        try await TestSupport.makeRepository(at: parent)
+        let path = world.root + "/child"
+        let bundled = URL(filePath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .appending(path: "bin/agent-environment.sh")
+        try HookInstaller(paths: world.paths, agentEnvironment: bundled).ensureInstalled()
+        let script = world.paths.sanductorDirectory + "/agent-environment.sh"
+        try await world.service.startFresh(
+            sessionName: "sanductor--parent--feature--codex",
+            directory: parent,
+            command: "git -C " + world.repository.path.shellQuoted
+                + " worktree add -b child " + path.shellQuoted + " main",
+            probed: "test",
+            attributionArguments: "--model gpt-test -c model_reasoning_effort=high",
+        )
+        try #require(await TestSupport.poll { WorktreeAgent(at: path) != nil })
+        try await TestSupport.runGit(["switch", "-c", "renamed"], in: path)
+        let agent = WorktreeAgent(at: path)
+        #expect(agent?.agent == .codexCLI)
+        #expect(agent?.arguments == "--model gpt-test -c model_reasoning_effort=high")
+
+        let next = try await FoundationProcessRunner().run(
+            [
+                "/bin/zsh", "-c", ". " + script.shellQuoted + "\ngit -C " + path.shellQuoted
+                    + " -c commit.gpgsign=false commit --allow-empty -m Update",
+            ],
+            workingDirectory: parent,
+            environment: ["SANDUCTOR_WORKTREE_AGENT": "claude --model opus"],
+        )
+        try #require(next.succeeded)
+        #expect(WorktreeAgent(at: path)?.agent == .claudeCode)
+        #expect(WorktreeAgent(at: path)?.arguments == "--model opus")
+    }
+
+    @Test
     func `model discovery uses metadata without submitting a prompt`() {
         #expect(ClaudeCodeRunner().modelListingCommand.joined().contains("control_request"))
         #expect(ClaudeCodeRunner().modelListingCommand.joined().contains("--no-session-persistence"))

@@ -109,6 +109,10 @@ public extension SessionService {
     private func relatedCandidates(to reading: StackReading, base: String?, baseRef: String) async -> [StackCandidate] {
         let path = reading.path
         let checkedOut = reading.checkedOut
+        // Every fork with this tip is also in the base's history.
+        if await git.isAncestor(checkedOut, of: baseRef, worktreePath: path) {
+            return []
+        }
         let candidates = await git.branches(worktreePath: path)
             .filter { $0 != base && ($0 == checkedOut || reading.excluded.contains($0) == false) }
         var related = [StackCandidate]()

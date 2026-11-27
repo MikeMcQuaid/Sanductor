@@ -51,8 +51,8 @@ public extension SessionService {
     }
 
     /// The argv that attaches a terminal to a session's pane.
-    func attachCommand(paneID: String) -> [String] {
-        herdr.attachCommand(paneID: paneID)
+    func attachCommand(paneID: String, size: (columns: Int, rows: Int)? = nil) -> [String] {
+        herdr.attachCommand(paneID: paneID, size: size)
     }
 
     /// Kills one session's workspace, which kills the process tree
@@ -87,6 +87,7 @@ public extension SessionService {
         directory: String,
         command: String,
         probed version: String? = nil,
+        attributionArguments: String? = nil,
     ) async throws {
         let agent = agentKind(of: sessionName)
         await progress("Closing any previous session")
@@ -111,7 +112,11 @@ public extension SessionService {
             await progress("Asking the agent's CLI its version")
             await recordAgentVersion(sessionName: sessionName)
         }
-        try await herdr.newSession(name: sessionName, directory: directory, command: command)
+        let arguments = attributionArguments ?? store.load().arguments[sessionName] ?? ""
+        let attribution = (agent?.rawValue ?? "") + " " + arguments
+        let environment = (paths.sanductorDirectory + "/agent-environment.sh").shellQuoted
+        let setup = "export SANDUCTOR_WORKTREE_AGENT=" + attribution.shellQuoted + "; . " + environment
+        try await herdr.newSession(name: sessionName, directory: directory, command: command, setup: setup)
     }
 
     /// Asks the agent's CLI what version it is and remembers it

@@ -90,7 +90,7 @@ extension PullRequestsModel {
             return needsRestackBeforePush ? await restack() : await pushStack()
         }
         rebaseNeed = await fetchRebaseNeed(worktree)
-        tipSignature = await checkTipSigned(worktree) ? .signed : .unsigned
+        tipSignature = await checkSignature(worktree, worktree.branch) ? .signed : .unsigned
         if rebaseNeed != .nothing || tipSignature == .unsigned {
             guard await rebaseSigned() else {
                 return false

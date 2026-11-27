@@ -4,6 +4,17 @@ import Testing
 struct SandvaultLauncherTests {
     // MARK: Internal
 
+    @Test(arguments: [false, true])
+    func `a terminal controller starts at the displayed size`(inside: Bool) {
+        let herdr = HerdrClient(runner: RecordingRunner(), launcher: launcher, isInsideSandbox: inside)
+        let command = herdr.attachCommand(paneID: "p1", size: (183, 51))
+        if inside {
+            #expect(Array(command.suffix(4)) == ["--cols", "183", "--rows", "51"])
+        } else {
+            #expect(command.last?.hasSuffix("--cols 183 --rows 51") == true)
+        }
+    }
+
     @Test
     func `derives sandbox identity from the host user`() {
         #expect(launcher.sandboxUser == "sandvault-tester")

@@ -27,6 +27,7 @@ public struct TerminalPaneView: View {
     @preconcurrency
     public init(
         command: [String],
+        sizedCommand: ((Int, Int) -> [String])? = nil,
         reflowsCopies: Bool = false,
         isActive: Bool = true,
         stageAttachment: (@Sendable (PromptAttachment) throws -> String)? = nil,
@@ -36,6 +37,7 @@ public struct TerminalPaneView: View {
         reattachRequest: Int = 0,
     ) {
         transport = .control(command: command)
+        self.sizedCommand = sizedCommand
         self.reflowsCopies = reflowsCopies
         self.isActive = isActive
         self.stageAttachment = stageAttachment
@@ -57,6 +59,7 @@ public struct TerminalPaneView: View {
         onProcessTerminated: (@MainActor () -> Void)? = nil,
     ) {
         transport = .shell(directory: directory, environment: environment)
+        sizedCommand = nil
         reflowsCopies = false
         self.isActive = isActive
         stageAttachment = nil
@@ -72,6 +75,7 @@ public struct TerminalPaneView: View {
         ZStack {
             TerminalRepresentable(
                 transport: transport,
+                sizedCommand: sizedCommand,
                 reflowsCopies: reflowsCopies,
                 isActive: isActive,
                 stageAttachment: stageAttachment,
@@ -102,6 +106,7 @@ public struct TerminalPaneView: View {
     @State private var isHandedOff = false
     @State private var reattachRequest = 0
 
+    private let sizedCommand: ((Int, Int) -> [String])?
     private let transport: TerminalTransport
     private let ownerReattachRequest: Int
     private let reflowsCopies: Bool
@@ -136,6 +141,7 @@ struct TerminalRepresentable: NSViewRepresentable {
     // MARK: Internal
 
     let transport: TerminalTransport
+    let sizedCommand: ((Int, Int) -> [String])?
     let reflowsCopies: Bool
     let isActive: Bool
 
@@ -164,6 +170,7 @@ struct TerminalRepresentable: NSViewRepresentable {
     /// as soon as layout gives the view its real size.
     func makeNSView(context: Context) -> PaneTerminalView {
         let view = PaneTerminalView(frame: .zero)
+        view.isHidden = isActive == false
         view.terminalDelegate = context.coordinator
         if case .control = transport {
             view.hideScroller()
@@ -189,6 +196,7 @@ struct TerminalRepresentable: NSViewRepresentable {
         view.reflowsCopies = reflowsCopies
         context.coordinator.installBlockSelection(on: view)
         applyTheme(to: view, context: context)
+        context.coordinator.sizedCommand = sizedCommand
         context.coordinator.startWhenSized(transport, in: view)
         return view
     }
@@ -216,12 +224,18 @@ struct TerminalRepresentable: NSViewRepresentable {
         view.onCopyReply = onCopyReply
         view.onCopyAllOutput = onCopyAllOutput
         applyTheme(to: view, context: context)
-        context.coordinator.startWhenSized(transport, in: view)
         // Hidden in AppKit's sense, not merely transparent: a pane
         // at opacity zero still draws every frame its agent sends,
         // and a hidden one keeps its buffer, its size and its client
         // while drawing nothing until it is shown again.
+        let wasHidden = view.isHidden
         view.isHidden = isActive == false
+        context.coordinator.sizedCommand = sizedCommand
+        context.coordinator.startWhenSized(transport, in: view)
+        if wasHidden, isActive, context.coordinator.channel != nil {
+            let size = view.terminalDimensions
+            context.coordinator.resizeWhenSettled(columns: size.cols, rows: size.rows)
+        }
         context.coordinator.updateFocus(isActive: isActive, of: view)
         if reattachRequest != context.coordinator.seenReattachRequest {
             context.coordinator.seenReattachRequest = reattachRequest

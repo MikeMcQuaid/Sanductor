@@ -497,10 +497,12 @@ sanductor_new() {
 
   headline "Starting ${agent} in ${label}"
   created="$(herdr workspace create --cwd "${worktree}" --label "${label}" \
-    --env "SANDUCTOR_SESSION=${label}" --env "INITIAL_DIR=${worktree}" --no-focus)"
+    --env "SANDUCTOR_SESSION=${label}" --env "INITIAL_DIR=${worktree}" \
+    --env "SANDUCTOR_WORKTREE_AGENT=${agent} ${arguments}" --env "SANDUCTOR_AGENT_ENVIRONMENT=${command_directory}/agent-environment.sh" --no-focus)"
   pane="$(printf '%s' "${created}" |
     grep -o '"pane_id":"[^"]*"' | head -1 | cut -d '"' -f4)"
   [ -n "${pane}" ] || fail "herdr did not name a pane for ${label}" 70
+  command="(. \"\${SANDUCTOR_AGENT_ENVIRONMENT}\"; ${command})"
   herdr pane run "${pane}" "export TMPDIR=\"\$(mktemp -d)\"; ${command}" >&2
   remember "${defaults}" "repository=${repository}" "agent=${agent}" \
     "${agent}-model=${model}" "${agent}-effort=${effort}"

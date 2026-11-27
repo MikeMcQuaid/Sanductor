@@ -29,3 +29,18 @@ public struct NewPullRequest: Sendable {
     /// to merge, which is what an agent's first attempt usually is.
     public let isDraft: Bool
 }
+
+// MARK: - ExistingPullRequest
+
+/// GitHub identified an open PR for the requested head and base.
+public struct ExistingPullRequest: Error {
+    // MARK: Lifecycle
+
+    public init(number: Int) {
+        self.number = number
+    }
+
+    // MARK: Public
+
+    public let number: Int
+}

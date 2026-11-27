@@ -245,14 +245,26 @@ public struct GitClient: Sendable {
     /// is left exactly as it was. The caller fetches first and picks
     /// the ref. The branch is named rather than left to whichever
     /// the worktree holds, which is not always the one on screen.
-    public func rebaseSigned(worktreePath: String, branch: String, onto ref: String) async throws {
+    public func rebaseSigned(
+        worktreePath: String, branch: String, onto ref: String, from oldBase: String? = nil, conflictRef: String? = nil,
+    ) async throws {
+        let key = worktreePath + "#" + branch
         do {
             var arguments = ["rebase", "--force-rebase"]
             if AppSettings.requiresSignedCommits {
                 arguments.append("--gpg-sign")
             }
-            try await git(arguments + [ref, branch], in: worktreePath)
+            arguments += oldBase.map { ["--onto", ref, $0] } ?? [ref]
+            try await git(arguments + [branch], in: worktreePath)
+            await RepositoryFacts.shared.remember(conflict: nil, for: key)
         } catch {
+            // Aborting restores the index, so capture the conflict while Git still has it.
+            if let unmerged = try? await git(["ls-files", "--unmerged", "--"], in: worktreePath),
+               unmerged.standardOutput.isEmpty == false,
+               let tips = try? await git(["rev-parse", "refs/heads/" + branch, ref], in: worktreePath)
+            {
+                await RepositoryFacts.shared.remember(conflict: (conflictRef ?? ref, tips.standardOutput), for: key)
+            }
             _ = try? await git(["rebase", "--abort"], in: worktreePath, allowFailure: true)
             throw error
         }

@@ -53,7 +53,7 @@ Run [`gh auth login`][gh] as yourself, then [`sv codex`][sv] or [`sv claude`][sv
 
 Add a repository in the sidebar, then start from a prompt, issue, open discussion, branch, existing PR or unpublished security advisory.
 Choose repository paths inside the workspace in Settings → Advanced.
-Sanductor skips Git hooks, using `~/.gitconfig` for filters and signers.
+Host Git skips hooks and uses `~/.gitconfig` for filters and signers.
 Symlinks can point here but cannot grant access outside the workspace.
 Run `brew install` for your agents in the main checkout’s Shell.
 Agents survive quitting via [`herdr`][herdr]; Shell tabs close.

@@ -4,6 +4,7 @@ import SanductorDomain
 public extension GitClient {
     /// A status reading, including a configuration refusal that prevents reading the index.
     struct LocalState: Sendable {
+        public var hasRebaseConflict = false
         public let isDirty: Bool
         public let revision: String?
         public let configurationError: String?
@@ -41,8 +42,20 @@ public extension GitClient {
                 await revision += "\n" + (commitHash(of: "HEAD", worktreePath: worktreePath + "/" + path) ?? "")
             }
         }
-        return LocalState(
+        var local = LocalState(
             isDirty: status.isDirty, revision: LocalReviewInput.fingerprint(revision), configurationError: nil,
         )
+        if let branch = status.branch {
+            let key = worktreePath + "#" + branch
+            if let conflict = await RepositoryFacts.shared.rebaseConflicts[key],
+               let tips = try? await git(["rev-parse", "refs/heads/" + branch, conflict.ref], in: worktreePath)
+            {
+                local.hasRebaseConflict = tips.standardOutput == conflict.tips
+                if local.hasRebaseConflict == false {
+                    await RepositoryFacts.shared.forget(conflict: conflict, for: key)
+                }
+            }
+        }
+        return local
     }
 }

@@ -6,6 +6,30 @@ import Testing
 @MainActor
 struct TerminalResizeTests {
     @Test
+    func `a hidden agent pane waits for its visible size before attaching or resizing`() async throws {
+        let view = PaneTerminalView(frame: NSRect(x: 0, y: 0, width: 800, height: 400))
+        let coordinator = TerminalRepresentable.Coordinator(onProcessTerminated: nil)
+        defer { coordinator.tearDown() }
+        var sizes = [[Int]]()
+        coordinator.sizedCommand = { columns, rows in
+            sizes.append([columns, rows])
+            return ["/bin/cat"]
+        }
+        view.isHidden = true
+        coordinator.startWhenSized(.control(command: ["/bin/cat"]), in: view)
+        #expect(sizes.isEmpty)
+
+        view.isHidden = false
+        coordinator.startWhenSized(.control(command: ["/bin/cat"]), in: view)
+        let grid = view.terminalDimensions
+        #expect(sizes == [[grid.cols, grid.rows]])
+        coordinator.sizeChanged(source: view, newCols: 12, newRows: 8)
+        view.isHidden = true
+        try await Task.sleep(for: .milliseconds(300))
+        #expect(coordinator.sentSize?.columns == grid.cols)
+    }
+
+    @Test
     func `a run of size changes reaches herdr as the last size alone`() async throws {
         let record = URL(filePath: FileManager.default.currentDirectoryPath)
             .appendingPathComponent(".test-scratch/resizes-" + UUID().uuidString)

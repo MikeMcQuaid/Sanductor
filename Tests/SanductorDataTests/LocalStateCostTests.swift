@@ -1,10 +1,31 @@
 import Foundation
-import SanductorData
+@testable import SanductorData
 import Testing
 
 // MARK: - LocalStateCostTests
 
 struct LocalStateCostTests {
+    @Test
+    func `sidebar branch names and counts share a ref listing and merged tips skip the stack scan`() async throws {
+        let world = try await World.make()
+        defer { world.tearDown() }
+        let path = world.repository.path
+        try await TestSupport.runGit(["branch", "topic", "main"], in: path)
+        try await TestSupport.runGit(["update-ref", "refs/remotes/origin/other", "main"], in: path)
+        let runner = LocalStateRunner()
+        let service = world.service(herdr: world.herdr, git: GitClient(runner: runner))
+        let group = await service.group(
+            of: world.repository, reading: SidebarReading(panes: [], activity: [:], metadata: service.store.load()),
+        )
+        #expect(group.localBranches == ["main", "topic"])
+        let refReads = await runner.commands.count { $0.contains("for-each-ref") }
+        #expect(refReads == 1)
+        let main = try #require(group.items.first?.worktree)
+        #expect(await service.stack(for: main).branches.isEmpty)
+        let ancestryReads = await runner.commands.count { $0.contains("merge-base") }
+        #expect(ancestryReads <= 1)
+    }
+
     @Test
     func `changed submodule commits refresh an already dirty gitlink`() async throws {
         let path = try TestSupport.temporaryDirectory("local-state-submodule")

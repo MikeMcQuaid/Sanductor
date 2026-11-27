@@ -51,6 +51,7 @@ extension PullRequestsModel {
             UtilityTabTarget.requestSidebarRefresh()
             return true
         } catch {
+            UtilityTabTarget.requestSidebarRefresh()
             report(error.localizedDescription)
             return false
         }
@@ -63,18 +64,22 @@ extension PullRequestsModel {
     private func restackUntilSigned(_ worktree: Worktree) async throws -> (moved: [String], pushed: [String]) {
         let shouldPush = unpushedBelow == nil
         var (moved, pushed) = try await restackAndPush(worktree, shouldPush: shouldPush)
+        await verifyRestackedBranches()
+        if unsignedStackBranches.isEmpty == false {
+            let again = try await restackAndPush(worktree, shouldPush: shouldPush)
+            moved += again.moved.filter { moved.contains($0) == false }
+            pushed += again.pushed.filter { pushed.contains($0) == false }
+            await verifyRestackedBranches()
+        }
+        return (moved, pushed)
+    }
+
+    private func verifyRestackedBranches() async {
         await loadStack()
         if unsignedStackBranches.isEmpty == false {
             try? await Task.sleep(for: .milliseconds(Self.signatureSettleMilliseconds))
             await loadStack()
         }
-        if unsignedStackBranches.isEmpty == false {
-            let again = try await restackAndPush(worktree, shouldPush: shouldPush)
-            moved += again.moved.filter { moved.contains($0) == false }
-            pushed += again.pushed.filter { pushed.contains($0) == false }
-            await loadStack()
-        }
-        return (moved, pushed)
     }
 
     /// Restacks locally, then pushes the selected and published branches.

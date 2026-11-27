@@ -11,7 +11,7 @@ extension PullRequestsModelTests {
         var actions = [String]()
         var signed = need == .nothing || need == .rebase
         model.fetchRebaseNeed = { _ in actions.isEmpty ? need : .nothing }
-        model.checkTipSigned = { _ in signed }
+        model.checkSignature = { _, _ in signed }
         model.performRebase = { _ in
             #expect(model.isOpening)
             actions.append("prepare")
@@ -59,7 +59,7 @@ extension PullRequestsModelTests {
         await model.reload()
         if failure == "unsigned" {
             var reads = 0
-            model.checkTipSigned = { _ in
+            model.checkSignature = { _, _ in
                 reads += 1
                 return reads == 1
             }

@@ -41,7 +41,7 @@ extension PullRequestsModelTests {
         model.fetchRebaseNeed = { _ in .nothing }
         model.performPush = { _ in .origin }
         model.performRebase = { _ in "origin/main" }
-        model.checkTipSigned = { _ in true }
+        model.checkSignature = { _, _ in true }
         model.fetchTipCommit = { _ in "tip" }
         return model
     }

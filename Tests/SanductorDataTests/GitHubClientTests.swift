@@ -7,6 +7,31 @@ import Testing
 
 /// Exercises the pure parsing and prompt composition around `gh`.
 struct GitHubClientTests {
+    @Test(arguments: [true, false])
+    func `only the duplicate creation diagnostic identifies an existing PR`(duplicate: Bool) async {
+        let runner = RecordingRunner()
+        runner.status = 1
+        runner.standardError = (duplicate
+            ? "a pull request for branch \"feature\" into branch \"main\" already exists:"
+            : "creating the pull request failed:") + "\nhttps://github.com/o/r/pull/42"
+        let client = GitHubClient(runner: runner) { true }
+        do {
+            _ = try await client.createPullRequest(
+                worktreePath: "/repo",
+                request: NewPullRequest(title: "Work", body: "", labels: []),
+                head: "feature",
+                base: "main",
+            )
+            Issue.record("Expected a failed creation")
+        } catch let existing as ExistingPullRequest {
+            #expect(duplicate)
+            #expect(existing.number == 42)
+        } catch {
+            #expect(duplicate == false)
+            #expect(error is CommandError)
+        }
+    }
+
     @Test
     func `rest comments group into anchored threads by reply chains`() {
         let json = """

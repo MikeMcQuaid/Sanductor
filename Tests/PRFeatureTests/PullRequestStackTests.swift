@@ -40,7 +40,7 @@ struct PullRequestStackTests {
         #expect(model.unpushedBelow == nil)
 
         // Moving up: the top entry's own span, and the block.
-        model.clearDraft()
+        model.clearDraft(for: model.draftKey)
         model.show(branch: "upper")
         try? await Task.sleep(for: .milliseconds(200))
         #expect(model.listedRange == "middle..upper")

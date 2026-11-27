@@ -91,13 +91,11 @@ struct HerdrTerminalChannelIntegrationTests {
         let directory = try TestSupport.temporaryDirectory("control")
         defer { TestSupport.stopServerSync(configHome: home) }
 
-        // `command cat` echoes typed lines back through the pane's
-        // tty, so one session covers the opening replay, live frames
-        // and key delivery.
+        // Read the PTY size inside the pane on its first keystrokes.
         try await herdr.newSession(
             name: "sanductor--r--control--claude",
             directory: directory,
-            command: "command cat",
+            command: "head -n 1; stty size > " + (directory + "/size").shellQuoted + "; command cat",
         )
         let started = await TestSupport.poll {
             let panes = await (try? herdr.panes()) ?? []
@@ -106,9 +104,8 @@ struct HerdrTerminalChannelIntegrationTests {
         #expect(started)
         let pane = try #require(try await herdr.panes().first)
 
-        let channel = HerdrTerminalChannel(command: herdr.attachCommand(paneID: pane.paneID))
+        let channel = HerdrTerminalChannel(command: herdr.attachCommand(paneID: pane.paneID, size: (183, 51)))
         let stream = try await channel.start()
-        channel.send(HerdrTerminal.resizeCommand(columns: 80, rows: 24))
 
         // The watchdog releases on timeout, so a silent server ends
         // the stream instead of hanging the test.
@@ -140,9 +137,13 @@ struct HerdrTerminalChannelIntegrationTests {
                 break
             }
         }
+        let size = await TestSupport.poll(timeout: 5) {
+            (try? String(contentsOfFile: directory + "/size", encoding: .utf8)) == "51 183\n"
+        }
         watchdog.cancel()
         await channel.stop()
         #expect(typed, "the stream should open with a replay frame")
         #expect(sawEcho, "typed keys should echo back as rendered frames")
+        #expect(size, "the first reply should already use the measured viewport")
     }
 }

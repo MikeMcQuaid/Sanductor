@@ -162,8 +162,8 @@ public extension SessionService {
     }
 
     /// Whether the worktree's tip commit is GPG signed, gating Push.
-    func isTipSigned(worktree: Worktree) async -> Bool {
-        await git.isCommitSigned(worktreePath: worktree.path, ref: worktree.branch)
+    func isTipSigned(worktree: Worktree, at ref: String? = nil) async -> Bool {
+        await git.isCommitSigned(worktreePath: worktree.path, ref: ref ?? worktree.branch)
     }
 
     /// The commit a worktree's branch points at, which is what a

@@ -33,6 +33,7 @@ extension TerminalRepresentable {
         weak var view: PaneTerminalView?
         var channel: HerdrTerminalChannel?
         var framesSeen = 0
+        var sizedCommand: ((Int, Int) -> [String])?
 
         /// The size herdr was last told, so the same size is never
         /// sent twice in a row: the attach sends the view's size and
@@ -122,6 +123,9 @@ extension TerminalRepresentable {
             if started, transport != startedTransport {
                 discardClient(of: view)
             }
+            if case .control = transport, view.isHidden {
+                return
+            }
             guard started == false else {
                 return
             }
@@ -190,7 +194,7 @@ extension TerminalRepresentable {
                 var size = getWindowSize()
                 _ = process.updateWindowSize(&size)
             }
-            guard channel != nil, newCols > 0, newRows > 0 else {
+            guard channel != nil, view?.isHidden == false, newCols > 0, newRows > 0 else {
                 return
             }
 
@@ -305,7 +309,12 @@ extension TerminalRepresentable {
         }
 
         private func startControl(_ command: [String], in view: PaneTerminalView) {
-            let attached = HerdrTerminalChannel(command: command)
+            let size = view.terminalDimensions
+            let sized = sizedCommand?(size.cols, size.rows)
+            if sized != nil {
+                sentSize = (size.cols, size.rows)
+            }
+            let attached = HerdrTerminalChannel(command: sized ?? command)
             channel = attached
             pump = Task(priority: .userInitiated) { [weak self] in
                 guard let stream = try? await attached.start() else {
@@ -313,7 +322,9 @@ extension TerminalRepresentable {
                     return
                 }
 
-                self?.requestInitialState(of: view)
+                if self?.channel === attached, view.isHidden == false {
+                    self?.requestInitialState(of: view)
+                }
                 for await event in stream {
                     self?.handle(event, from: attached)
                 }

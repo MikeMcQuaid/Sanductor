@@ -22,18 +22,28 @@ extension PullRequestsModel {
         // Before the counts are read: a pull request from a fork has
         // no tracking ref until its remote is named, and everything
         // below counts against one.
-        _ = await nameFork(listedWorktree ?? worktree)
-        let signed = await checkTipSigned(listedWorktree ?? worktree)
-        let tip = await fetchTipCommit(listedWorktree ?? worktree)
-        let need = await fetchRebaseNeed(listedWorktree ?? worktree)
-        let template = await fetchTemplate(worktree.path)
         let live = await fetchCurrentBranch(worktree.path)
+        let selection = stacking.selected
+        let listed = self.worktree(on: selection ?? live ?? listedBranch) ?? worktree
+        _ = await nameFork(listed)
+        let tip = await fetchTipCommit(listed)
+        let signature: TipSignature =
+            if let tip {
+                await checkSignature(listed, tip) ? .signed : .unsigned
+            } else {
+                .unread
+            }
+        let need = await fetchRebaseNeed(listed)
+        let template = await fetchTemplate(worktree.path)
         let labels = availableLabels.isEmpty ? await fetchLabels() : availableLabels
-        guard generation == stacking.factsGeneration else {
+        guard generation == stacking.factsGeneration, selection == stacking.selected else {
             return
         }
 
-        tipSignature = signed ? .signed : .unsigned
+        if let live {
+            currentBranch = live
+        }
+        tipSignature = signature
         // Only the tip moving unpushes a branch: new commits, an
         // amend or a rebase, all of which give the push something
         // to send again. A tip that could not be read has moved
@@ -49,33 +59,7 @@ extension PullRequestsModel {
         if prTemplate.isEmpty {
             prTemplate = originalTemplate
         }
-        await prefillFromSingleCommit(worktree)
-        if let branch = live {
-            currentBranch = branch
-        }
-    }
-
-    /// Reverify signing and rebase facts when the sidebar changes,
-    /// keeping Push disabled until the new tip is verified.
-    func reverifyBranchFacts(from oldItems: [WorktreeItem]) {
-        guard let current = branchItem else {
-            return
-        }
-
-        let previous = oldItems.first { $0.worktree.path == current.worktree.path }
-        guard previous?.branchStatus != current.branchStatus else {
-            return
-        }
-
-        tipSignature = .unread
-        let generation = stacking.factsGeneration
-        Task {
-            guard generation == stacking.factsGeneration else {
-                return
-            }
-
-            await refreshWorktreeFacts(current.worktree)
-        }
+        await prefillFromSingleCommit(listed)
     }
 
     /// The rebase button's label names exactly what it would do.
@@ -109,11 +93,7 @@ extension PullRequestsModel {
     }
 
     func rebaseSigned() async -> Bool {
-        // Any layer of a stack rebases the whole of it. Rebasing one
-        // entry on its own rewrites what the branches above fork
-        // from, and a stack derived afterwards no longer reaches
-        // them: signing the bottom of an unopened stack lost the
-        // rest of it.
+        // Rebasing one layer alone would detach the branches stacked above it.
         guard stacking.stack.isStacked == false else {
             return await restack()
         }
@@ -127,41 +107,69 @@ extension PullRequestsModel {
         // and leaves nothing to read it from.
         let onlySigns = rebaseNeed == SessionService.RebaseNeed.sign
         do {
-            let target = try await rebaseUntilSigned(worktree)
+            var result = try await rebaseAndVerify(worktree)
+            if result.signature == .unsigned {
+                result = try await rebaseAndVerify(worktree)
+            }
+            if result.signature == .unread {
+                UtilityTabTarget.requestSidebarRefresh()
+                report("Could not confirm the current tip of `" + worktree.branch + "` after rebasing")
+                return false
+            }
             // Done means Push agrees; reporting success with the tip
             // still unsigned took a second press to notice.
-            if tipSignature != .signed {
+            if result.signature == .unsigned {
                 report("Rebased twice, but the tip still reads unsigned; check the signing key")
                 return false
             }
-            recordFinished(onlySigns ? .signed : .rebased, branch: listedBranch ?? worktree.branch)
-            note("Rebased `" + worktree.branch + "` on `" + target + "` and signed it.")
+            recordFinished(onlySigns ? .signed : .rebased, branch: worktree.branch)
+            note("Rebased `" + worktree.branch + "` on `" + result.target + "` and signed it.")
             UtilityTabTarget.requestSidebarRefresh()
             return true
         } catch {
+            if listedWorktree == worktree {
+                stacking.factsGeneration += 1
+                tipSignature = .unread
+            }
+            UtilityTabTarget.requestSidebarRefresh()
             report(error.localizedDescription)
             return false
         }
     }
 
-    /// Rebases and reads the tip back. A tip that reads unsigned is
-    /// read again after a moment, since the read after a rebase has
-    /// landed before the rebase did; one that still reads unsigned
-    /// is rebased once more before the signing key is questioned.
-    /// What the branch was rebased on.
-    private func rebaseUntilSigned(_ worktree: Worktree) async throws -> String {
-        var target = try await performRebase(worktree)
-        tipSignature = await checkTipSigned(worktree) ? .signed : .unsigned
-        if tipSignature != .signed {
+    private func rebaseAndVerify(_ worktree: Worktree) async throws -> (target: String, signature: TipSignature) {
+        let target = try await performRebase(worktree)
+        let need = await fetchRebaseNeed(worktree)
+        guard listedWorktree == worktree else {
+            return (target, .unread)
+        }
+
+        stacking.factsGeneration += 1
+        let verificationGeneration = stacking.factsGeneration
+        tipSignature = .unread
+        guard let commit = await fetchTipCommit(worktree) else {
+            return (target, .unread)
+        }
+
+        var signed = await checkSignature(worktree, commit)
+        if signed == false {
             try? await Task.sleep(for: .milliseconds(Self.signatureSettleMilliseconds))
-            tipSignature = await checkTipSigned(worktree) ? .signed : .unsigned
+            signed = await checkSignature(worktree, commit)
         }
-        if tipSignature != .signed {
-            target = try await performRebase(worktree)
-            tipSignature = await checkTipSigned(worktree) ? .signed : .unsigned
+        let confirmationGeneration = stacking.factsGeneration
+        guard await fetchTipCommit(worktree) == commit, listedWorktree == worktree,
+              confirmationGeneration == stacking.factsGeneration
+        else {
+            return (target, .unread)
         }
-        rebaseNeed = await fetchRebaseNeed(worktree)
-        return target
+
+        let signature: TipSignature = signed ? .signed : .unsigned
+        // A concurrent refresh owns the displayed facts even when it saw the same tip.
+        if verificationGeneration == confirmationGeneration {
+            rebaseNeed = need
+            tipSignature = signature
+        }
+        return (target, signature)
     }
 
     /// How long a tip that reads unsigned straight after a rebase

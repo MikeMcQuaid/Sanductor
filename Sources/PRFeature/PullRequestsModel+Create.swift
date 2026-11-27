@@ -1,4 +1,5 @@
 import Foundation
+import SanductorData
 import SanductorDomain
 import TerminalUI
 
@@ -81,8 +82,7 @@ extension PullRequestsModel {
         }
 
         let body = Self.joined(body: prBody, template: prTemplate)
-        let labels = prLabels
-        let isDraft = prIsDraft
+        let draft = (key: draftKey, labels: prLabels, isDraft: prIsDraft)
         isOpening = true
         defer { isOpening = false }
         if isFullyPushed == false {
@@ -98,51 +98,69 @@ extension PullRequestsModel {
             }
         }
         do {
-            let url = try await performCreate(worktree, title, body, labels, isDraft)
-            finishOpening(url: url, title: title, worktree: worktree, isDraft: isDraft)
+            let url = try await performCreate(worktree, title, body, draft.labels, draft.isDraft)
+            let summary = Self.created(
+                url: url,
+                title: title,
+                worktree: worktree,
+                base: stack.parent(of: worktree.branch) ?? defaultBranch,
+                listed: summaries,
+                isDraft: draft.isDraft,
+            )
+            finishOpening(summary, worktree: worktree, submittedDraft: draft.key)
             Task {
-                do {
-                    try await performLinkStack(worktree)
-                } catch {
-                    report("Stacking on GitHub failed: " + error.localizedDescription)
-                }
-                await assignClosingIssues(pullRequestURL: url)
+                await linkStackAndAssignClosingIssues(worktree: worktree, pullRequestURL: url)
             }
             return true
+        } catch let existing as ExistingPullRequest {
+            return await openExisting(existing.number, worktree: worktree, submittedDraft: draft.key)
         } catch {
             report(error.localizedDescription)
             return false
         }
     }
 
-    private func finishOpening(url: String, title: String, worktree: Worktree, isDraft: Bool) {
-        pullRequests.invalidateListings(repositoryPath: repository.path)
-        UtilityTabTarget.requestSidebarRefresh()
-        let created = Self.created(
-            url: url,
-            title: title,
-            worktree: worktree,
-            base: stack.parent(of: worktree.branch) ?? defaultBranch,
-            listed: summaries,
-            isDraft: isDraft,
-        )
-        if let created {
-            if summaries.contains(where: { $0.number == created.number }) == false {
-                summaries.insert(created, at: 0)
+    private func openExisting(_ number: Int, worktree: Worktree, submittedDraft: String?) async -> Bool {
+        pullRequests.invalidate(repositoryPath: repository.path, number: number)
+        do {
+            guard let summary = try await fetchSummary(number), summary.headBranch == worktree.branch else {
+                report("Could not read existing pull request #" + String(number) + " for `" + worktree.branch + "`")
+                return false
             }
-            cacheCreated(created, branch: worktree.branch)
-            select(created)
+
+            finishOpening(summary, worktree: worktree, submittedDraft: submittedDraft)
+            return true
+        } catch {
+            report("Reading existing pull request #" + String(number) + " failed: " + error.localizedDescription)
+            return false
         }
-        loadingDraft = true
-        prTitle = ""
-        prLabels = []
-        prBody = ""
-        prTemplate = originalTemplate
-        loadingDraft = false
-        clearDraft()
     }
 
-    private func assignClosingIssues(pullRequestURL: String) async {
+    private func finishOpening(_ created: PullRequestSummary?, worktree: Worktree, submittedDraft: String?) {
+        pullRequests.invalidateListings(repositoryPath: repository.path)
+        UtilityTabTarget.requestSidebarRefresh()
+        clearDraft(for: submittedDraft)
+        if let created {
+            cacheCreated(created, branch: worktree.branch)
+            guard submittedDraft == draftKey else {
+                return
+            }
+
+            if let index = summaries.firstIndex(where: { $0.number == created.number }) {
+                summaries[index] = created
+            } else {
+                summaries.insert(created, at: 0)
+            }
+            select(created)
+        }
+    }
+
+    private func linkStackAndAssignClosingIssues(worktree: Worktree, pullRequestURL: String) async {
+        do {
+            try await performLinkStack(worktree)
+        } catch {
+            report("Stacking on GitHub failed: " + error.localizedDescription)
+        }
         note("Opened pull request " + pullRequestURL)
         do {
             try await performAssignClosingIssues(pullRequestURL)
@@ -181,7 +199,7 @@ extension PullRequestsModel {
         defer { isBranchActionRunning = false }
         // The tip can change during preparation, so verify it again
         // before pushing and let the combined action retry signing.
-        guard await checkTipSigned(worktree) else {
+        guard await checkSignature(worktree, worktree.branch) else {
             tipSignature = .unsigned
             rebaseNeed = await fetchRebaseNeed(worktree)
             setStatus(

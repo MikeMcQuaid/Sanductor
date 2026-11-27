@@ -1,10 +1,35 @@
 import SanductorData
+import SanductorDomain
 import TerminalUI
 
 /// Reloading the listing and the merge queue answer, split from the
 /// model body for length; the merge queue, loading and page-limit
 /// flags are settable here for that reason.
 extension PullRequestsModel {
+    /// Reverify signing and rebase facts when the sidebar changes,
+    /// keeping Push disabled until the new tip is verified.
+    func reverifyBranchFacts(from oldItems: [WorktreeItem]) {
+        guard let current = branchItem else {
+            return
+        }
+
+        let previous = oldItems.first { $0.worktree.path == current.worktree.path }
+        guard previous?.branchStatus != current.branchStatus else {
+            return
+        }
+
+        tipSignature = .unread
+        stacking.factsGeneration += 1
+        let generation = stacking.factsGeneration
+        Task {
+            guard generation == stacking.factsGeneration else {
+                return
+            }
+
+            await refreshWorktreeFacts(current.worktree)
+        }
+    }
+
     /// The merge queue answer for the repository, which decides
     /// whether the merge action queues or merges.
     func loadMergeQueue() async {

@@ -239,30 +239,6 @@ public extension GitClient {
         try await git(["checkout", branch], in: worktreePath)
     }
 
-    /// Moves a branch from one base to another, replaying only its
-    /// own commits and signing each: `--onto` with the base the
-    /// branch actually forked from is what keeps a stack from
-    /// gaining its parent's commits twice. Failure aborts, leaving
-    /// the branch exactly as it was.
-    func rebaseSigned(branch: String, onto newBase: String, from oldBase: String, worktreePath: String) async throws {
-        do {
-            // Forced like the single-branch rebase: without it a
-            // branch already in place fast-forwards, rewriting and
-            // signing nothing, which left unsigned tips unsigned.
-            var arguments = ["rebase", "--force-rebase"]
-            if AppSettings.requiresSignedCommits {
-                arguments.append("--gpg-sign")
-            }
-            try await git(
-                arguments + ["--onto", newBase, oldBase, branch],
-                in: worktreePath,
-            )
-        } catch {
-            _ = try? await git(["rebase", "--abort"], in: worktreePath, allowFailure: true)
-            throw error
-        }
-    }
-
     /// Puts a branch back exactly where it was, for a restack that
     /// could not finish.
     func reset(branch: String, to commit: String, worktreePath: String) async throws {

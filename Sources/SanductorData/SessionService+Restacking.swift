@@ -32,7 +32,7 @@ extension SessionService {
     ) async throws {
         let originalTip = await git.tip(of: branch, worktreePath: worktreePath)
         do {
-            try await git.rebaseSigned(branch: branch, onto: parent, from: oldBase, worktreePath: worktreePath)
+            try await git.rebaseSigned(worktreePath: worktreePath, branch: branch, onto: parent, from: oldBase)
         } catch {
             guard let fallback, let originalTip, Task.isCancelled == false,
                   await git.refExists(worktreePath: worktreePath, ref: fallback)
@@ -62,10 +62,7 @@ extension SessionService {
             PerformanceLog.recordMessage(firstFailure + "\nRetrying against " + fallback, isError: false)
             do {
                 try await git.rebaseSigned(
-                    branch: branch,
-                    onto: remoteTip,
-                    from: remoteTip,
-                    worktreePath: worktreePath,
+                    worktreePath: worktreePath, branch: branch, onto: remoteTip, from: remoteTip, conflictRef: fallback,
                 )
             } catch {
                 throw SessionServiceError(
