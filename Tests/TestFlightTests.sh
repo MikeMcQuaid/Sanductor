@@ -6,12 +6,21 @@ cd "$(dirname "$0")/.."
 ruby -ryaml <<'WORKFLOW'
 workflow = YAML.load_file('.github/workflows/release.yml')
 jobs = workflow.fetch('jobs')
+def enabled?(job, values)
+  expression = job.fetch('if').gsub(/\s+/, ' ')
+  values.each { |key, value| expression = expression.gsub(key, value.inspect) }
+  eval(expression)
+end
 release = jobs.fetch('release')
 unless Array(release['needs']).include?('testflight')
   abort 'GitHub publication can run before TestFlight succeeds'
 end
-if release.fetch('if', '').match?(/\b(always|failure|cancelled)\s*\(/)
-  abort 'GitHub publication bypasses successful dependencies'
+results = %w[success skipped failure cancelled]
+%w[workflow_dispatch push workflow_run].product(results, results, results, [false, true]).each do |event, build, smoke, upload, cancelled|
+  values = { 'github.event_name' => event, 'cancelled()' => cancelled, 'needs.build.result' => build,
+             'needs.smoke-test.result' => smoke, 'needs.testflight.result' => upload }
+  expected = !cancelled && event == 'workflow_dispatch' && [build, smoke, upload].all? { |result| result == 'success' }
+  abort 'GitHub publication must require successful release jobs' unless enabled?(release, values) == expected
 end
 testflight = jobs.fetch('testflight')
 if Array(testflight['needs']).include?('release') || testflight.fetch('if', '').include?('needs.release')
@@ -23,6 +32,14 @@ end
 unless workflow.dig('concurrency', 'queue') == 'max' && workflow.dig('concurrency', 'group') == "${{ github.event_name == 'push' && format('sanductor-release-dry-run-{0}', github.ref) || 'sanductor-release' }}"
   abort 'Releases and private uploads must share a serial queue'
 end
+ci = YAML.load_file('.github/workflows/tests.yml').fetch('jobs').fetch('testflight-changes')
+unless ci['if'] == "github.event_name == 'push'" &&
+       ci.fetch('concurrency') == { 'group' => 'private-testflight-${{ github.event.before }}', 'cancel-in-progress' => true } &&
+       testflight.dig('concurrency', 'group') == "private-testflight-${{ github.event.workflow_run.head_sha || github.run_id }}"
+  abort 'A main push must cancel only the private build for the previous tip'
+end
+candidate = jobs.fetch('private-build')
+abort 'TestFlight must wait for the Swift change check' unless testflight.fetch('needs').include?('private-build')
 %w[workflow_run workflow_dispatch push].product(%w[push pull_request], %w[main feature],
   %w[local foreign], %w[success failure cancelled skipped], %w[success failure skipped],
   %w[success failure skipped], %w[maintainer dependabot[bot]], [false, true]).each do |event, cause, branch, repo, conclusion, build, smoke, actor, cancelled|
@@ -33,14 +50,14 @@ end
     'github.event.workflow_run.conclusion' => conclusion, 'github.actor' => actor,
     'needs.build.result' => build, 'needs.smoke-test.result' => smoke, 'cancelled()' => cancelled
   }
-  expression = testflight.fetch('if').gsub(/\s+/, ' ')
-  values.each { |key, value| expression = expression.gsub(key, value.inspect) }
-  expected = !cancelled && if event == 'workflow_run'
-    cause == 'push' && branch == 'main' && repo == 'local' && conclusion == 'success'
-  else
-    actor != 'dependabot[bot]' && build == 'success' && smoke == 'success'
+  trusted = event == 'workflow_run' && cause == 'push' && branch == 'main' && repo == 'local' && conclusion == 'success'
+  abort "Unsafe private candidate: #{values}" unless enabled?(candidate, values) == trusted
+  %w[true false].each do |changed|
+    values['needs.private-build.outputs.eligible'] = trusted ? changed : ''
+    expected = !cancelled && (trusted && changed == 'true' ||
+      event != 'workflow_run' && actor != 'dependabot[bot]' && build == 'success' && smoke == 'success')
+    abort "Unsafe TestFlight trigger: #{values}" unless enabled?(testflight, values) == expected
   end
-  abort "Unsafe TestFlight trigger: #{values}" unless eval(expression) == expected
 end
 build_steps = jobs.fetch('build').fetch('steps')
 quota = build_steps.index { |step| step.fetch('run', '').include?('check-release-limit') }
@@ -59,6 +76,9 @@ end
 steps = testflight.fetch('steps')
 upload = steps.find { |step| step['id'] == 'upload' }
 abort 'Upload step needs outputs for distribution recovery' unless upload
+unless steps.last.fetch('if').include?("steps.upload.outputs.superseded != 'true'")
+  abort 'A superseded archive must skip distribution'
+end
 prepare = steps.find { |step| step['id'] == 'prepare' }
 abort 'Allocate an upload identity before archiving' unless prepare
 restore = steps.index { |step| step.dig('with', 'pattern') == 'testflight-upload*' }
@@ -85,7 +105,50 @@ trap 'rm -rf "${scratch}"' EXIT
 mkdir -p "${scratch}/bin"
 export TESTFLIGHT_TEST_DIRECTORY="${scratch}"
 export PATH="${scratch}/bin:${PATH}"
+export GITHUB_OUTPUT="${scratch}/output"
 
+(
+  changes="$(ruby -ryaml -e "puts YAML.load_file('.github/workflows/tests.yml').dig('jobs', 'testflight-changes', 'steps').find { |s| s['id'] == 'swift' }.fetch('run')")"
+  git init -q "${scratch}/push"
+  cd "${scratch}/push"
+  export BEFORE GITHUB_SHA
+  echo 'old revision' >Package.resolved
+  git add Package.resolved
+  BEFORE="$(git write-tree)"
+  mkdir -p .github/workflows Tests App Sources/Feature iOSApp
+  touch .github/workflows/ci.yml .github/Tool.swift Tests/Fixture.swift
+  git add .github Tests
+  GITHUB_SHA="$(git write-tree)"
+  bash -eu -c "${changes}"
+  [[ ! -s "${GITHUB_OUTPUT}" ]] || exit 1
+  for path in Package.resolved Package.swift App/App.swift iOSApp/App.swift Sources/Feature/App.swift; do
+    BEFORE="${GITHUB_SHA}"
+    echo changed >>"${path}"
+    git add -- "${path}"
+    GITHUB_SHA="$(git write-tree)"
+    : >"${GITHUB_OUTPUT}"
+    bash -eu -c "${changes}"
+    grep -qx changed=true "${GITHUB_OUTPUT}" || {
+      echo "Private build skipped ${path}" >&2
+      exit 1
+    }
+  done
+  # Removing a shipped Swift source also changes the build.
+  BEFORE="${GITHUB_SHA}"
+  git rm --cached -q Sources/Feature/App.swift
+  GITHUB_SHA="$(git write-tree)"
+  : >"${GITHUB_OUTPUT}"
+  bash -eu -c "${changes}"
+  grep -qx changed=true "${GITHUB_OUTPUT}"
+)
+
+cat >"${scratch}/bin/gh" <<'GITHUB'
+#!/bin/bash
+set -eu
+[[ "$*" == 'api repos/test/Sanductor/git/ref/heads/main --jq .object.sha' ]] || exit 1
+[[ "${TESTFLIGHT_TEST_FAILURE}" != lookup ]] || exit 1
+cat "${TESTFLIGHT_TEST_DIRECTORY}/main"
+GITHUB
 cat >"${scratch}/bin/security" <<'SECURITY'
 #!/bin/bash
 set -euo pipefail
@@ -253,6 +316,26 @@ for audience in public private dry-run; do
       [[ "$(/usr/libexec/PlistBuddy -c "Print :provisioningProfiles:com.mikemcquaid.Sanductor" "${scratch}/export.plist")" == "${uuid}" ]]
     fi
   done
+done
+export GITHUB_EVENT_NAME=workflow_run GITHUB_REPOSITORY=test/Sanductor
+for failure in none superseded lookup; do
+  export TESTFLIGHT_TEST_FAILURE="${failure}"
+  git rev-parse HEAD >"${scratch}/main"
+  [[ "${failure}" != superseded ]] || echo newer-tip >"${scratch}/main"
+  rm -f "${scratch}/calls" "${GITHUB_OUTPUT}"
+  if script/testflight --internal >"${scratch}/run.log" 2>&1; then
+    [[ "${failure}" != lookup ]] || exit 1
+  else
+    [[ "${failure}" == lookup ]] || exit 1
+  fi
+  if [[ "${failure}" == none ]]; then
+    [[ "$(cat "${scratch}/calls")" == $'archive\nupload' ]] || exit 1
+  else
+    [[ "$(cat "${scratch}/calls")" == archive ]] || exit 1
+  fi
+  if [[ "${failure}" == superseded ]]; then
+    grep -qx superseded=true "${GITHUB_OUTPUT}"
+  fi
 done
 echo 'TestFlight script tests passed'
 
