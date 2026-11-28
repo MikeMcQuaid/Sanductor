@@ -71,7 +71,7 @@ Quit the app and link `~/.sanductor/settings.plist` to your dotfiles.
 - **Prompts**: Back up prompts, schedules and Work settings in iCloud.
 - **Secrets**: Save a named Keychain value and use `$NAME` in prompts.
 - **Sessions**: Inspect and stop agents and browser pages.
-- **Review**: Pick reviewers, models, effort and review or fix prompts.
+- **Review**: Pick reviewers, models, effort, prompts and comment order.
 - **Notifications**: Set Mac and iPhone alerts, sounds and a Dock badge.
 - **Fonts**: Customise fonts and sizes.
 - **Editor**: Choose the external editor for files and worktrees.

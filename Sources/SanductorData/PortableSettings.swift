@@ -218,6 +218,7 @@ public final class PortableSettings {
     private static let toggles: Set<String> = [
         AppSettings.requireSignedCommitsKey, "sendFinishedToPhone", "sendNeedsInputToPhone",
         "notifyFinished", "notifyNeedsInput", "badgeNeedsInput", AppSettings.inhibitsSleepKey,
+        AppSettings.newestCommentsFirstKey,
     ]
     private static let fontSizes: Set<String> = [
         AppSettings.interfaceFontSizeKey, AppSettings.codeFontSizeKey, AppSettings.repositoryFontSizeKey,

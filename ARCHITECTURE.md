@@ -2525,7 +2525,7 @@ steps.
 The installed and development builds share a bundle identifier and
 preferences. This keeps the two in sync, including edits made while
 testing a development build.
-The host keeps portable agent, review model, font, sidebar and notification
+The host keeps portable agent, review, font, sidebar and notification
 preferences in an XML property list at `~/.sanductor/settings.plist`.
 Move the file to a dotfiles checkout and symlink it back while the app
 is closed. On launch the file supplies the preferences; changing one in
@@ -3684,8 +3684,9 @@ name never competes with opening the thread.
 CodeRabbit and Copilot share their product names and brand marks in
 conversation headers. Other GitHub commenters reuse `OwnerAvatar` and
 its memory and disk cache, with a person placeholder while unavailable;
-local agent findings keep their existing agent marks. The timeline orders
-dated entries chronologically and shows only the latest from each bot,
+local agent findings keep their existing agent marks. The timeline keeps
+the description on top, orders dated entries newest first, or oldest
+first when Settings → Review asks, and shows only the latest from each bot,
 adding "Latest of N comments" beside its name when more than one exists;
 inline findings remain separate. Bot bodies hide command help, the
 change-stack link and the Autofix checkbox. CodeRabbit’s billing notices

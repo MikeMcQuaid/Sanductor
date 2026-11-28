@@ -23,6 +23,18 @@ struct PullRequestTimelineTests {
     }
 
     @Test
+    func `newest first reverses the entries the timeline kept`() {
+        let timeline = PullRequestTimeline(description: "Description", events: [
+            ReviewComment(id: 1, author: "coderabbitai", body: "Old review", date: Date(timeIntervalSince1970: 1)),
+            ReviewComment(id: 2, author: "reviewer", body: "Reply", date: Date(timeIntervalSince1970: 2)),
+            ReviewComment(id: 3, author: "coderabbitai[bot]", body: "Review", date: Date(timeIntervalSince1970: 3)),
+            ReviewComment(id: 4, author: "reviewer", body: "Thanks", date: Date(timeIntervalSince1970: 4)),
+        ])
+        #expect(timeline.ordered(newestFirst: false).map(\.id) == [2, 3, 4])
+        #expect(timeline.ordered(newestFirst: true).map(\.id) == [4, 3, 2])
+    }
+
+    @Test
     func `timeline entries keep compact headers above full width comments`() async throws {
         let host = NSHostingView(rootView: PullRequestTimeline(description: "", events: [
             ReviewComment(id: 1, author: "reviewer", body: "Comment."),
