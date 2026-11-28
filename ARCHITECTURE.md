@@ -628,8 +628,14 @@ resolve locally without changing HEAD, and returning restores an edited
 commit message and its baseline. A request counter allows repeated clicks
 on the same commit. Other links without a web scheme and host are refused
 with a message rather than handed to the system opener, whose failure is
-an unhelpful "error -50". The terminal’s link delegate opens web links
-only and leaves a clicked file path selectable.
+an unhelpful "error -50". The Mac agent terminal opens a web link from
+herdr’s OSC 8 frame in the Browser tab. Cmd-click uses the configured
+external browser. Clicking an underlined label without a destination
+looks up its Markdown link in the agent’s transcript. Only an
+unambiguous destination opens. The terminal and Reader use Quick Look
+to preview private copies of regular files up to 64 MiB from the shared
+workspace. Dragging selects text and bare file paths remain selectable.
+The iPhone opens web links in its browser.
 
 ### The AgentRunner seam
 

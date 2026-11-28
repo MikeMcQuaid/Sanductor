@@ -99,24 +99,26 @@ extension RootView {
             // the conversations page would claim the session ended.
             LaunchProgressView("Attaching to the agent…", waitingOn: "herdr to answer")
         } else if let session = item.session {
-            let isOnScreen = isSelected && isCovered == false
+            let path = item.worktree.path
+            let shown = isSelected && isCovered == false
             let showsReader = dependencies.dashboard.readerSessions.contains(session.name)
             // The reader covers the terminal rather than replacing
             // it: the pane keeps its client and its size underneath,
             // hidden, so going back to it attaches nothing.
             ZStack {
-                agentTerminal(for: session, in: item.worktree.path, isActive: isOnScreen && showsReader == false)
+                agentTerminal(for: session, in: path, isActive: shown && showsReader == false)
                     .allowsHitTesting(showsReader == false)
                 SessionReaderView(
                     session: session,
-                    worktreePath: item.worktree.path,
+                    worktreePath: path,
                     service: dependencies.service,
-                    isActive: isOnScreen && dependencies.dashboard.isWindowVisible,
+                    isActive: shown && dependencies.dashboard.isWindowVisible,
                     isPresented: showsReader,
                 )
                 .id(session.agent)
                 .hidden(showsReader == false)
             }
+            .modifier(AgentOutputLinks(service: dependencies.service, agent: session.agent, path: path, active: shown))
             .id(session.name)
         } else if centreShowsEditor(for: item) {
             // Chosen from the conversations page; the branches above

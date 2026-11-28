@@ -16,7 +16,7 @@ No Sanductor account, subscription or hosted relay exists or is planned.
 
 ## ✨ Features
 
-- Runs [Codex CLI] or [Claude Code] in parallel [worktrees](https://git-scm.com/docs/git-worktree) as a sandboxed non-admin macOS user, without containers or virtual machines.
+- Runs [Codex CLI] or [Claude Code] with web links and file previews in parallel [worktrees](https://git-scm.com/docs/git-worktree) as a sandboxed non-admin macOS user, without containers or virtual machines.
 - Reviews changes with fresh agent sessions, [CodeRabbit](https://www.coderabbit.ai) or [Copilot](https://docs.github.com/copilot/code-review), including findings outside the diff.
 - Copies stack feedback, resolves marked reviews on push and reruns CI.
 - Opt-in autofix feeds reviews, CI failures and merge conflicts back to agents, resumes after relaunch and never signs or pushes.

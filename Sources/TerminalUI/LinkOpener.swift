@@ -128,10 +128,18 @@ public enum LinkOpener {
             }
         } else {
             let defaults = UserDefaults.standard
+            pendingBrowserAddress = address
             defaults.set(address, forKey: UtilityTabTarget.addressKey)
             defaults.set(defaults.integer(forKey: UtilityTabTarget.requestKey) + 1, forKey: UtilityTabTarget.requestKey)
             defaults.set(UtilityTabTarget.browser, forKey: UtilityTabTarget.key)
+            defaults.set(true, forKey: UtilityTabTarget.visibilityKey)
         }
+    }
+
+    /// The first visit can mount the browser after its request was published.
+    public static func takePendingBrowserAddress() -> String? {
+        defer { pendingBrowserAddress = nil }
+        return pendingBrowserAddress
     }
 
     /// Opens a link only when it is a web link, ignoring anything
@@ -141,16 +149,22 @@ public enum LinkOpener {
     @discardableResult
     @preconcurrency
     @MainActor
-    public static func openWeb(_ address: String) -> Bool {
-        guard let url = URL(string: address), isWeb(url) else {
+    public static func openWeb(
+        _ address: String, inExternalBrowser: Bool = NSEvent.modifierFlags.contains(.command),
+    ) -> Bool {
+        guard address.rangeOfCharacter(from: .controlCharacters.union(.newlines)) == nil,
+              let url = URL(string: address), isWeb(url)
+        else {
             return false
         }
 
-        open(address)
+        open(url.absoluteString, inExternalBrowser: inExternalBrowser)
         return true
     }
 
     // MARK: Private
+
+    private static var pendingBrowserAddress: String?
 
     /// Whether a link has a web scheme and a host, the only shape
     /// either browser can open.

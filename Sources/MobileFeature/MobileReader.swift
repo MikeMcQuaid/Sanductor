@@ -30,6 +30,7 @@
                             .structuredTextStyle(.gitHub)
                             .textual
                             .textSelection(.enabled)
+                            .environment(\.openURL, .agentWebLink)
                     }
                 } else {
                     LaunchProgressView("Reading the conversation…", waitingOn: path == nil
@@ -80,6 +81,16 @@
 
         private var path: String? {
             model.sidebarEntry(for: session)?.transcriptPath
+        }
+    }
+
+    extension OpenURLAction {
+        static let agentWebLink = Self { url in
+            guard ["http", "https"].contains(url.scheme?.lowercased() ?? ""), url.host() != nil else {
+                return .discarded
+            }
+
+            return .systemAction
         }
     }
 #endif

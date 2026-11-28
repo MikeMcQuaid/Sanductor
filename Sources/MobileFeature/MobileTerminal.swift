@@ -91,14 +91,10 @@
                 // SwiftTerm owns rendering.
             }
 
-            func requestOpenLink(source _: TerminalView, link: String, params _: [String: String]) {
-                guard let url = URL(string: link), ["https", "http"].contains(url.scheme?.lowercased() ?? ""),
-                      url.host != nil
-                else {
-                    return
+            func requestOpenLink(source _: TerminalView, request: TerminalLinkRequest) {
+                if let url = URL(string: request.link) {
+                    OpenURLAction.agentWebLink(url)
                 }
-
-                UIApplication.shared.open(url)
             }
 
             // MARK: Private
@@ -190,6 +186,7 @@
 
         func makeUIView(context: Context) -> PhoneTerminalView {
             let view = PhoneTerminalView(frame: .zero, font: style.uiKitFont)
+            view.linkHighlightMode = .always
             applyAppearance(to: view)
             view.changeScrollback(nil)
             view.agent = session.agent
