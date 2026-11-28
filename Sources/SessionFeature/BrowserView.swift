@@ -60,7 +60,8 @@ public struct BrowserView: View {
             // A worktree with no address of its own takes the one
             // last asked for, which is how a pull request page opens
             // in a worktree that has never had a browser.
-            address = Self.addresses(in: storedAddresses)[worktreePath] ?? (isActive ? requestedAddress : "")
+            address = (isActive ? LinkOpener.takePendingBrowserAddress() : nil)
+                ?? Self.addresses(in: storedAddresses)[worktreePath] ?? (isActive ? requestedAddress : "")
             load()
         }
         .onChange(of: address) {
@@ -74,12 +75,12 @@ public struct BrowserView: View {
         // what changes: the same page asked for twice writes the
         // same address, and the pane would sit on whatever it had
         // wandered to since.
-        .onChange(of: requestedCount) {
-            guard isActive, requestedAddress.isEmpty == false else {
+        .onChange(of: isActive ? requestedCount : nil) {
+            guard isActive, let pending = LinkOpener.takePendingBrowserAddress() else {
                 return
             }
 
-            address = requestedAddress
+            address = pending
             load()
         }
         .onDisappear { BrowserPanes.shared.remove(worktreePath: worktreePath) }

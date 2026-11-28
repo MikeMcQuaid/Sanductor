@@ -2,6 +2,7 @@ import AppKit
 import QuartzCore
 import SanductorDomain
 import SwiftTerm
+import SwiftUI
 
 // MARK: - PaneTerminalView
 
@@ -43,6 +44,10 @@ final class PaneTerminalView: TerminalView {
     /// herdr frames omit the agent's input modes, so pastes need
     /// brackets and modified keys must bypass the shell mapping.
     var isHerdrBacked = false
+
+    var agentOutputLink: Binding<AgentOutputLink?>?
+    var activatedLink = false
+    var commandClick = false
 
     /// Reads the pane's whole recent output, for agent panes whose
     /// local buffer holds only the rendered screen: a selection can
@@ -89,7 +94,7 @@ final class PaneTerminalView: TerminalView {
 
     override func mouseDragged(with event: NSEvent) {
         if let press = selectionPress {
-            guard event.locationInWindow != press.locationInWindow else {
+            guard isClick(event, from: press) == false else {
                 return
             }
 
@@ -106,10 +111,17 @@ final class PaneTerminalView: TerminalView {
     }
 
     override func mouseUp(with event: NSEvent) {
-        selectionPress = nil
+        defer { selectionPress = nil }
+        activatedLink = false
+        commandClick = event.modifierFlags.contains(.command)
         super.mouseUp(with: event)
         if selectionActive {
             onNativeSelection?()
+        } else if activatedLink == false, event.clickCount == 1,
+                  let press = selectionPress, isClick(event, from: press),
+                  let agentOutputLink, let label = underlinedLabel(at: convert(event.locationInWindow, from: nil))
+        {
+            agentOutputLink.wrappedValue = .label(label, externalBrowser: commandClick)
         }
     }
 
@@ -236,6 +248,15 @@ final class PaneTerminalView: TerminalView {
         let scroller = view.subviews.compactMap { $0 as? NSScroller }.first { $0.isHidden == false }
         let gridWidth = optimal.width - (scroller?.frame.width ?? 0)
         return CGSize(width: gridWidth / CGFloat(columns), height: optimal.height / CGFloat(rows))
+    }
+
+    /// SwiftTerm tracks mouse movement for hover links across the whole window.
+    func setActive(_ active: Bool) {
+        isHidden = active == false
+        let mode: LinkHighlightMode = active && isHerdrBacked ? .hover : .hoverWithModifier
+        if linkHighlightMode != mode {
+            linkHighlightMode = mode
+        }
     }
 
     /// Routes one wheel event to herdr when this pane owns the

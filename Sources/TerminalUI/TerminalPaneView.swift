@@ -170,9 +170,9 @@ struct TerminalRepresentable: NSViewRepresentable {
     /// as soon as layout gives the view its real size.
     func makeNSView(context: Context) -> PaneTerminalView {
         let view = PaneTerminalView(frame: .zero)
-        view.isHidden = isActive == false
         view.terminalDelegate = context.coordinator
         if case .control = transport {
+            view.agentOutputLink = context.environment.agentOutputLink
             view.hideScroller()
             view.dropLocalScrollback()
             view.isHerdrBacked = true
@@ -187,6 +187,7 @@ struct TerminalRepresentable: NSViewRepresentable {
             // coordinator takes it as the baseline, not as a press.
             context.coordinator.seenReattachRequest = reattachRequest
         }
+        view.setActive(isActive)
         // Mouse reporting stays on (SwiftTerm's default): programs
         // that ask for the mouse, like Claude Code's own transcript
         // scrolling and pagers, get it, and Shift bypasses to local
@@ -205,6 +206,9 @@ struct TerminalRepresentable: NSViewRepresentable {
     /// also retries here as a fallback and reattaches when SwiftUI
     /// reused the view for a different command.
     func updateNSView(_ view: PaneTerminalView, context: Context) {
+        if view.isHerdrBacked {
+            view.agentOutputLink = context.environment.agentOutputLink
+        }
         if view.font != codeStyle.appKitFont {
             view.font = codeStyle.appKitFont
         }
@@ -229,7 +233,7 @@ struct TerminalRepresentable: NSViewRepresentable {
         // and a hidden one keeps its buffer, its size and its client
         // while drawing nothing until it is shown again.
         let wasHidden = view.isHidden
-        view.isHidden = isActive == false
+        view.setActive(isActive)
         context.coordinator.sizedCommand = sizedCommand
         context.coordinator.startWhenSized(transport, in: view)
         if wasHidden, isActive, context.coordinator.channel != nil {

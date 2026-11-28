@@ -60,6 +60,7 @@ struct TerminalKeyRoutingTests {
     static func focusedPane(herdrBacked: Bool) throws -> Pane {
         let view = PaneTerminalView(frame: NSRect(x: 0, y: 0, width: 400, height: 200))
         view.isHerdrBacked = herdrBacked
+        view.setActive(true)
         let capture = InputCapture()
         view.terminalDelegate = capture
         let window = NSWindow(contentRect: view.frame, styleMask: [], backing: .buffered, defer: false)
