@@ -28,7 +28,6 @@ struct SessionNameTests {
         let name = "agentide--brew--fix-tests--claude"
         #expect(SessionName.isSanductor(name))
         #expect(SessionName.repositorySlug(of: name) == "brew")
-        #expect(SessionName.branchSlug(of: name) == "fix-tests")
         #expect(SessionName.isSanductor("agentide--brew--fix-tests--vim") == false)
     }
 

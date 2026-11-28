@@ -8,6 +8,32 @@ import Testing
 struct AutofixConflictIntegrationTests {
     // MARK: Internal
 
+    @Test(arguments: [false, true])
+    func `an aborted rebase flags the worktree until its base or branch moves`(retry: Bool) async throws {
+        let (world, target) = try await Self.makeConflict()
+        defer { world.tearDown() }
+        let path = target.worktree.path
+        let git = world.service.git
+        try await git.fetch(repositoryPath: path)
+        let base = "refs/remotes/origin/release/next"
+        if retry {
+            let oldBase = try #require(await git.tip(of: "main", worktreePath: path))
+            await #expect(throws: SessionServiceError.self) {
+                try await world.service.rebaseStackBranch(
+                    branch: "feature", onto: base, from: oldBase, fallback: base, worktreePath: path,
+                )
+            }
+        } else {
+            await #expect(throws: CommandError.self) {
+                try await git.rebaseSigned(worktreePath: path, branch: "feature", onto: base)
+            }
+        }
+        #expect(await git.localState(worktreePath: path).hasRebaseConflict)
+        #expect(await git.isDirty(worktreePath: path) == false)
+        try await TestSupport.runGit(["update-ref", base, "main"], in: path)
+        #expect(await git.localState(worktreePath: path).hasRebaseConflict == false)
+    }
+
     @Test
     func `conflict detection fetches in the worktree without changing its index or files`() async throws {
         let (world, target) = try await Self.makeConflict()

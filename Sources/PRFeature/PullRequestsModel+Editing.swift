@@ -45,7 +45,7 @@ extension PullRequestsModel {
     /// Leaves the edit without saving it, and forgets what was
     /// typed: cancelling is the one deliberate discard.
     func cancelEditing() {
-        clearDraft()
+        clearDraft(for: draftKey)
         editingNumber = nil
         editingSplitsTemplate = false
     }

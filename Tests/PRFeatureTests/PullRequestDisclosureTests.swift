@@ -11,6 +11,31 @@ struct PullRequestDisclosureTests {
     // MARK: Internal
 
     @Test
+    func `filling a child worktree template uses the recorded agent without a live session`() throws {
+        let path = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString).path
+        try FileManager.default.createDirectory(atPath: path + "/.git", withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(atPath: path) }
+        let value = "codex --model gpt-test -c model_reasoning_effort=high"
+        try #require(unsafe setxattr(path + "/.git", "com.mikemcquaid.Sanductor.agent", value, value.utf8.count, 0, 0)
+            == 0)
+        let fixtures = PullRequestsModelTests()
+        let model = fixtures.makeModel(items: [fixtures.item(branch: "feature", ahead: 1, path: path)])
+        model.prTemplate = Self.homebrewTemplate
+        model.launchChoices = { _ in LaunchChoices() }
+        model.tickTemplateBoxes()
+        #expect(model.prTemplate.contains("Codex with GPT Test at High effort, with local review and testing."))
+    }
+
+    @Test
+    func `a matching branch in another repository supplies no disclosure`() {
+        let fixtures = PullRequestsModelTests()
+        let model = fixtures.makeModel(items: [fixtures.item(branch: "feature", ahead: 1)])
+        model.store.update { $0.sessionsByWorktree["/other/feature"] = "sanductor--other--feature--claude" }
+        model.launchChoices = { _ in LaunchChoices() }
+        #expect(model.disclosure == nil)
+    }
+
+    @Test
     func `the disclosure goes in the template's own section, once`() throws {
         let sentence = "Claude Code with opus-5 at Extra High effort, with local review and testing."
         let template = try #require(PullRequestsModel.disclosing(in: Self.homebrewTemplate, sentence: sentence))

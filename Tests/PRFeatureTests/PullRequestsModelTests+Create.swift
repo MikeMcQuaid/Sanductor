@@ -10,6 +10,62 @@ import Testing
 /// without waiting for a poll. Split from the model tests for length.
 extension PullRequestsModelTests {
     @Test(arguments: [false, true])
+    func `opening after a checkout clears only the submitted draft`(existing: Bool) async throws {
+        let model = makeModel(items: [item(branch: "feature", ahead: 0)])
+        model.prTitle = "Submitted"
+        model.saveDraft()
+        let submitted = try #require(model.draftKey)
+        let switchBranch = {
+            model.currentBranch = "next"
+            model.prTitle = "Next title"
+            model.prBody = "Next body"
+            model.prLabels = ["next"]
+            model.saveDraft(afterDelay: true)
+        }
+        model.performCreate = { _, _, _, _, _ in
+            if existing {
+                throw ExistingPullRequest(number: 42)
+            }
+            switchBranch()
+            return "https://github.com/o/r/pull/42"
+        }
+        model.fetchSummary = { _ in
+            if existing {
+                switchBranch()
+            }
+            return summary(42, head: "feature")
+        }
+
+        #expect(await model.createPullRequest())
+        model.flushDraft()
+        let current = try #require(model.draftKey)
+        let drafts = model.store.load().pullRequestDrafts
+        #expect(drafts[submitted] == nil)
+        #expect(drafts[current]?.title == "Next title")
+        #expect(model.prBody == "Next body")
+        #expect(model.prLabels == ["next"])
+    }
+
+    @Test
+    func `an already open PR is fetched by number and selected with its own details`() async {
+        let model = makeModel(items: [item(branch: "feature", ahead: 0)])
+        let existing = summary(42, head: "feature", body: "Already published")
+        model.prTitle = "Local draft"
+        model.performCreate = { _, _, _, _, _ in throw ExistingPullRequest(number: 42) }
+        model.fetchSummary = { number in
+            #expect(number == 42)
+            return existing
+        }
+        model.performAssignClosingIssues = { _ in Issue.record("Unexpected issue assignment") }
+        model.performLinkStack = { _ in Issue.record("Unexpected stack change") }
+
+        #expect(await model.createPullRequest())
+        #expect(model.selected?.title == existing.title)
+        #expect(model.selected?.body == existing.body)
+        #expect(model.pullRequests.branchSummary(repositoryPath: model.repository.path, branch: "feature") == existing)
+    }
+
+    @Test(arguments: [false, true])
     func `opening assigns closing issues without losing a created PR on assignment failure`(fails: Bool) async {
         let model = makeModel(items: [item(branch: "feature", ahead: 0)])
         var actions = [String]()

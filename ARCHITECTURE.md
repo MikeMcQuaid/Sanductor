@@ -312,6 +312,10 @@ Each whole line is a separate `terminal.scroll` record, batched into one
 write: herdr 0.9.5 ignores the `lines` count when forwarding wheel input to
 mouse-aware agents or alternate-screen applications. Sending one record
 per line preserves accelerated gestures and ordinary scrollback alike.
+A Mac controller attaches with the measured columns and rows. An
+unsized attach briefly switches the agent to 120 × 40, which can leave
+a second copy of a redrawn reply in scrollback at a different width.
+Hidden Mac agent panes retain their last viewport until they are shown.
 Keystrokes go back as `terminal.input`, resizes as `terminal.resize` and
 the wheel as `terminal.scroll`. The channel reads its client through
 the pipe's readability handler, never a blocking read: every mounted
@@ -1127,9 +1131,10 @@ reads git before offering branches not held by other worktrees.
   An edit in a linked worktree refreshes its status. Shared Git
   metadata changes, manual refreshes and safety reads cover all rows.
   The sidebar, PR pane and Review pane share each worktree's branch
-  status. The batch includes commit identities, so moving the default
-  branch or rewriting a tip refreshes the panes even if counts stay
-  unchanged. Review refreshes preserve edited commit messages.
+  status. The same read supplies the sidebar's local branches in
+  commit-date order. The batch includes commit identities, so moving
+  the default branch or rewriting a tip refreshes the panes even if
+  counts stay unchanged. Review refreshes preserve edited commit messages.
   Uncommitted revisions combine porcelain status with changed files'
   metadata, including nanosecond modification and change times, so
   same-size edits and restored modification times refresh the views.
@@ -1255,8 +1260,9 @@ when collapsed; each device remembers collapsed groups independently.
 Both platforms use Domain's status classification and priority:
 launch failures and agent questions come first, followed by local
 actions (including unpushed commits, failing CI and reviews to address),
-working turns and external waits, completed turns, Idle agents, Worktree,
-Branch and exited sessions. Idle agents contain a running recognised
+working turns, idle agents, completed turns, CI and review waits, open
+and queued pull requests, draft and closed work, Worktree, Branch and
+exited sessions. Idle agents contain a running recognised
 agent; idle entries without one group as Worktree for linked worktrees,
 Branch for the main checkout on another or unknown branch and Default
 branch for the main checkout on its recorded default. On your Mac,
@@ -2061,7 +2067,15 @@ steps.
   still an ancestor, the default branch is already integrated and every
   commit unique to the branch verifies, else origin/HEAD. The ancestor
   test keeps an amended branch out of that path (its pushed commit is a
-  stale twin, not a parent). A fetch inside the minute is reused (`gitFetchedAt`).
+  stale twin, not a parent). Signing checks both rebase attempts after
+  allowing verification to settle. Each verification names the commit
+  it checks. Push enables only if that commit is still the listed
+  branch's tip. A failed retry invalidates its signature reading.
+  A local rebase that hits unmerged entries leaves a conflict badge on
+  the worktree after Git aborts, until its branch or base moves or a
+  retry succeeds. A stack retry rebases onto a pinned commit and tracks
+  the remote branch for badge expiry. A fetch inside the minute is
+  reused (`gitFetchedAt`).
 - **The same form edits an open pull request.** The pencil beside the
   browser button in the conversation's header puts the pull request's
   title and body into the creation form in the conversation's place, with the generate
@@ -2088,7 +2102,9 @@ steps.
   key. Cancelling an edit discards its pending save too.
   As soon as GitHub returns the URL, the form unlocks and selects
   the new pull request. Stack linking and closing-issue assignment
-  continue in the background.
+  continue in the background. If GitHub says the requested PR already
+  exists, the form reads and selects that PR by number. Either result
+  clears the submitted draft and preserves a newly selected branch's form.
   GitHub's closing issue references identify issues
   to assign to the authenticated user through `gh issue edit` with
   `--add-assignee @me`, preserving existing assignees. Issue URLs keep
@@ -2113,8 +2129,13 @@ steps.
   generate button drafts from the branch's commits through the
   on-device model and asks before replacing typed text. Fill template
   ticks every box and writes the AI disclosure from the session's model
-  and effort, and only into a template. The template is read from the
-  working copy or, for sparse checkouts, from git. Committed files use
+  and effort. Agent panes record the agent and launch options in the
+  worktree's local `.git` extended attributes on launch, checkout and
+  commit. Git runs the post-checkout hook in the new worktree even when
+  it belongs to another repository. The template can therefore disclose
+  the creating agent after it exits and even if the child worktree has
+  never run a session. The template is read from the working copy or,
+  for sparse checkouts, from git. Committed files use
   `cat-file blob` so a missing literal path cannot become a pattern
   that returns unrelated content.
 - **A stack rebases as one.** Rebasing any layer, the bottom included,
@@ -2185,7 +2206,9 @@ steps.
   Reading one needs no checkout (`git diff parent...branch`). The
   derivation is cached against one `for-each-ref` line (`StackCache`),
   remotes included, since a fetch that moves the default branch changes
-  what a stack is. The lists beside it, what a restack would move,
+  what a stack is. A tip already merged into the base shares no
+  unmerged work with any branch, so its stack skips the ancestry scan.
+  The lists beside it, what a restack would move,
   what a push would send and what is unsigned, are read with it
   (`StackFacts`) and kept under the same line, in the metadata too,
   so the tab's questions cost one process while nothing has moved

@@ -5,9 +5,7 @@ import SanductorDomain
 extension PullRequestsModel {
     // MARK: Internal
 
-    /// Writes the disclosure into the template's own AI section,
-    /// and nowhere else: a template without one has nothing to say
-    /// about it, and the body is not the place to volunteer it.
+    /// Writes the disclosure only into the template's own AI section.
     func discloseInTemplate() {
         guard let disclosure, let ticked = Self.disclosing(in: prTemplate, sentence: disclosure) else {
             return
@@ -16,43 +14,28 @@ extension PullRequestsModel {
         prTemplate = ticked
     }
 
-    /// The sentence itself: the harness, the model and effort it was
-    /// started with, and what was done with the result. Read from
-    /// the session's own arguments, the only record of them, and
-    /// written the way the pickers write them.
+    /// The last recorded agent in this worktree, falling back to its own session history.
     var disclosure: String? {
-        guard let worktree = branchItem?.worktree else {
+        guard let worktree = listedWorktree else {
             return nil
         }
 
-        // Which session wrote the listed branch: one whose name
-        // embeds that branch, wherever it ran, else the one running
-        // in this worktree, which is the row's own reading and the
-        // answer for every entry of a stack, else what the metadata
-        // recorded. Failing all three, the worktree's newest
-        // conversation still names the agent, on the pickers'
-        // defaults.
         let metadata = store.load()
-        let branchSession = listedBranch.flatMap { listed in
-            metadata.sessionsByWorktree
-                .values
-                .first { SessionName.branchSlug(of: $0) == SessionName.slug(listed) }
-        }
-        let session = branchSession ?? branchItem?.session?.name ?? metadata.sessionsByWorktree[worktree.path]
-        guard let agent = session.flatMap({ name in
+        let holder = items.first { item in
+            item.worktree.repositoryPath == worktree.repositoryPath && item.worktree.branch == worktree.branch
+        } ?? branchItem
+        let session = holder?.session?.name ?? holder.flatMap { metadata.sessionsByWorktree[$0.worktree.path] }
+        let recorded = WorktreeAgent(at: holder?.worktree.path ?? worktree.path)
+        guard let agent = recorded?.agent ?? holder?.session?.agent ?? session.flatMap({ name in
             AgentKind.allCases.first { name.hasSuffix("--" + $0.rawValue) }
-        }) ?? branchItem?.session?.agent ?? branchItem?.pastSessions.first?.agent
-        else {
+        }) ?? holder?.pastSessions.first?.agent else {
             return nil
         }
 
-        // A launch with the picker's defaults writes no flags, so
-        // the defaults are what ran: the runner's first model and
-        // its default effort, the same the picker showed.
-        let arguments = session.flatMap { metadata.arguments[$0] } ?? ""
+        let arguments = recorded?.arguments ?? session.flatMap { metadata.arguments[$0] } ?? ""
         let choices = launchChoices(agent)
-        let model = Self.model(inArguments: arguments) ?? choices.models.first
-        let effort = Self.effort(inArguments: arguments) ?? choices.defaultEffort
+        let model = Self.model(inArguments: arguments) ?? (recorded == nil ? choices.models.first : nil)
+        let effort = Self.effort(inArguments: arguments) ?? (recorded == nil ? choices.defaultEffort : nil)
         let named = model.map { " with " + AgentOptionName.display($0, named: choices.names) } ?? ""
         let level = effort.map { " at " + AgentOptionName.display($0) + " effort" } ?? ""
         return agent.displayName + named + level + ", with local review and testing."

@@ -7,8 +7,14 @@ struct HookInstaller {
     // MARK: Lifecycle
 
     /// Creates an installer for a workspace.
-    init(paths: WorkspacePaths) {
+    init(
+        paths: WorkspacePaths,
+        agentEnvironment: URL? = Bundle.main.url(
+            forResource: "agent-environment", withExtension: "sh", subdirectory: "bin",
+        ),
+    ) {
         self.paths = paths
+        self.agentEnvironment = agentEnvironment
     }
 
     // MARK: Internal
@@ -28,6 +34,11 @@ struct HookInstaller {
             try manager.createDirectory(atPath: directory, withIntermediateDirectories: true)
         }
         try PromptPayload.adoptExisting(paths: paths, store: MetadataStore(file: paths.metadataFile))
+        if let agentEnvironment {
+            // A development app can run from the host's private DerivedData directory.
+            try Data(contentsOf: agentEnvironment)
+                .write(to: URL(filePath: paths.sanductorDirectory + "/agent-environment.sh"), options: .atomic)
+        }
         try installScript()
         try installSettingsEntries()
     }
@@ -35,6 +46,7 @@ struct HookInstaller {
     // MARK: Private
 
     private let paths: WorkspacePaths
+    private let agentEnvironment: URL?
 
     private var scriptPath: String {
         paths.userTemplateDirectory + "/.claude/sanductor-notify.sh"

@@ -34,7 +34,7 @@ extension TerminalRepresentable.Coordinator {
         settlingResize?.cancel()
         settlingResize = Task { [weak self] in
             try? await Task.sleep(for: .milliseconds(Self.resizeSettleMilliseconds))
-            guard Task.isCancelled == false, let self, channel != nil else {
+            guard Task.isCancelled == false, let self, channel != nil, view?.isHidden == false else {
                 return
             }
 

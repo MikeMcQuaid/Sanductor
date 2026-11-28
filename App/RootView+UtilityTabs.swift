@@ -14,8 +14,12 @@ extension RootView {
         // only the screen, so a selection can never reach what was
         // scrolled past.
         let readAll: () async -> String? = { await dependencies.service.readOutput(sessionName: session.name) }
+        func attach(size: (Int, Int)?) -> [String] {
+            session.paneID.map { dependencies.service.attachCommand(paneID: $0, size: size) } ?? []
+        }
         return TerminalPaneView(
-            command: session.paneID.map(dependencies.service.attachCommand(paneID:)) ?? [],
+            command: attach(size: nil),
+            sizedCommand: { attach(size: ($0, $1)) },
             reflowsCopies: true,
             isActive: isActive,
             stageAttachment: dependencies.service.stageDroppedFile,

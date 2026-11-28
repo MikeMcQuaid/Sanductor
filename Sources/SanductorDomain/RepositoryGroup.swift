@@ -20,6 +20,7 @@ public struct WorktreeItem: Identifiable, Hashable, Sendable {
         revision: String? = nil,
         onlyPublishedChanges: Bool = false,
         configurationError: String? = nil,
+        hasRebaseConflict: Bool = false,
     ) {
         self.worktree = worktree
         self.session = session
@@ -31,6 +32,7 @@ public struct WorktreeItem: Identifiable, Hashable, Sendable {
         self.behindUpstream = behindUpstream
         self.lastActivityAt = lastActivityAt
         self.revision = revision
+        self.hasRebaseConflict = hasRebaseConflict
         self.configurationError = configurationError
         self.onlyPublishedChanges = onlyPublishedChanges
     }
@@ -49,6 +51,8 @@ public struct WorktreeItem: Identifiable, Hashable, Sendable {
 
     /// Whether the worktree has uncommitted changes.
     public let isDirty: Bool
+
+    public let hasRebaseConflict: Bool
 
     /// Why Git could not safely read the working tree.
     public let configurationError: String?

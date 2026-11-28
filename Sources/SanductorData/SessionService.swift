@@ -241,7 +241,11 @@ public struct SessionService: Sendable {
 
         let launch = try validate(options, for: agent)
         let sessionName = SessionName.make(repository: slot.repository.name, branch: slot.branch, agent: agent)
-        let arguments = runner(for: agent).optionArguments(model: launch.model, effort: launch.effort)
+        let agentRunner = runner(for: agent)
+        let arguments = agentRunner.optionArguments(model: launch.model, effort: launch.effort)
+        let catalogue = store.load().modelCatalogues[agent.rawValue]
+        let model = launch.model ?? catalogue?.models.first
+        let effort = launch.effort ?? model.flatMap { catalogue?.defaultEfforts[$0] } ?? agentRunner.defaultEffort
         await progress("Writing the prompt file")
         let promptFile = try PromptPayload.write(prompt.delivery, paths: paths, store: store)
 
@@ -253,8 +257,9 @@ public struct SessionService: Sendable {
         try await startFresh(
             sessionName: sessionName,
             directory: slot.path,
-            command: runner(for: agent).launchCommand(extraArguments: arguments, promptFile: promptFile),
+            command: agentRunner.launchCommand(extraArguments: arguments, promptFile: promptFile),
             probed: version,
+            attributionArguments: agentRunner.optionArguments(model: model, effort: effort),
         )
 
         await progress("Recording the session `" + sessionName + "`")

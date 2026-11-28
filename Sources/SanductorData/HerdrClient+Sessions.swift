@@ -165,7 +165,7 @@ public extension HerdrClient {
     /// rather than per server, so it applies to a server already
     /// running. The first call also births the server inside the
     /// sandbox.
-    func newSession(name: String, directory: String, command: String) async throws {
+    func newSession(name: String, directory: String, command: String, setup: String? = nil) async throws {
         try await ensureServer()
         await progress("Creating the workspace `" + name + "`")
         let created = try await herdr([
@@ -186,7 +186,8 @@ public extension HerdrClient {
 
         await progress("Workspace created; its pane is `" + paneID + "`")
         await progress("Running `" + command.prefix(StartWait.commandPreview) + "`")
-        try await herdr(["pane", "run", paneID, "export TMPDIR=\"$(mktemp -d)\"; " + command])
+        let launch = setup.map { "(" + $0 + "; " + command + ")" } ?? command
+        try await herdr(["pane", "run", paneID, "export TMPDIR=\"$(mktemp -d)\"; " + launch])
         await progress("Waiting for the shell to hand over to the agent")
         // The command is typed into the pane's just-started shell,
         // which reads it once its own startup finishes; waiting for

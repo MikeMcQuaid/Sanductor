@@ -162,11 +162,11 @@ final class PullRequestsModel {
         fetchTipCommit = { worktree in
             await service.tipCommit(worktree: worktree)
         }
-        checkTipSigned = { worktree in
+        checkSignature = { worktree, ref in
             // Settings can waive signing for repositories whose
             // remote runs no signature hook.
             AppSettings.requiresSignedCommits
-                ? await service.isTipSigned(worktree: worktree)
+                ? await service.isTipSigned(worktree: worktree, at: ref)
                 : true
         }
         currentBranch = branch
@@ -346,7 +346,7 @@ final class PullRequestsModel {
     var nameFork: (Worktree) async -> String?
     var performPush: (Worktree) async throws -> PushDestination
     var performRebase: (Worktree) async throws -> String
-    var checkTipSigned: (Worktree) async -> Bool
+    var checkSignature: (Worktree, String) async -> Bool
     var fetchTipCommit: (Worktree) async -> String?
 
     /// The visible page. Only `showNextPage` asks GitHub further,

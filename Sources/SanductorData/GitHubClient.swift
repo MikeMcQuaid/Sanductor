@@ -151,9 +151,24 @@ public struct GitHubClient: Sendable {
             + ["--head", head, "--base", base]
             + request.labels.flatMap { ["--label", $0] }
             + (request.isDraft ? ["--draft"] : [])
-        return try await gh(arguments, in: worktreePath)
-            .standardOutput
-            .trimmingCharacters(in: .whitespacesAndNewlines)
+        do {
+            return try await gh(arguments, in: worktreePath)
+                .standardOutput
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+        } catch let failure as CommandError {
+            let lines = failure.result.standardError.split(separator: "\n")
+            let headBranch = head.split(separator: ":").last.map(String.init) ?? head
+            let prefix = "a pull request for branch "
+            let suffix = " into branch \"" + base + "\" already exists:"
+            guard [head, headBranch].contains(where: { lines.dropLast().last == prefix + "\"" + $0 + "\"" + suffix }),
+                  let link = lines.last?.wholeMatch(of: #/https://github\.com/[\w.-]+/[\w.-]+/pull/([1-9][0-9]*)/#),
+                  let number = Int(link.1)
+            else {
+                throw failure
+            }
+
+            throw ExistingPullRequest(number: number)
+        }
     }
 
     /// Enables automerge for a pull request.

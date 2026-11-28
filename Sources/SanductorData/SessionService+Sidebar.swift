@@ -228,7 +228,6 @@ public extension SessionService {
         unchanged: [Worktree: WorktreeItem] = [:],
     ) async -> RepositoryGroup {
         async let fullName = git.fullName(of: repository)
-        async let localBranches = git.branches(worktreePath: repository.path, newestFirst: true)
         async let worktrees = listedWorktrees(of: repository, metadata: reading.metadata)
         let baseRef = await git.defaultBaseRef(of: repository)
         // One read for every branch's counts and dates, rather than
@@ -283,7 +282,7 @@ public extension SessionService {
             repository: Repository(name: repository.name, path: repository.path, fullName: fullName),
             items: sorted,
             defaultBranch: baseRef.map(Self.branchName(fromBaseRef:)),
-            localBranches: localBranches,
+            localBranches: git.recentBranches(in: repository.path, facts: facts),
         )
     }
 
@@ -339,6 +338,7 @@ public extension SessionService {
             revision: (known?.revision ?? "") + "\n" + (local.revision ?? ""),
             onlyPublishedChanges: git.onlyPublishedChanges(in: worktree, facts: known, base: baseRef),
             configurationError: local.configurationError,
+            hasRebaseConflict: local.hasRebaseConflict,
         )
     }
 

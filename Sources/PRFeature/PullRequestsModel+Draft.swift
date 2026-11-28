@@ -172,8 +172,8 @@ extension PullRequestsModel {
     }
 
     /// Forgets a branch's draft once its pull request exists.
-    func clearDraft() {
-        guard let key = draftKey else {
+    func clearDraft(for key: String?) {
+        guard let key else {
             return
         }
 
@@ -185,10 +185,17 @@ extension PullRequestsModel {
         store.update { metadata in
             metadata.pullRequestDrafts.removeValue(forKey: key)
         }
+        guard draftKey == key else {
+            return
+        }
+
         loadingDraft = true
         prTitle = ""
         prBody = ""
         prTemplate = ""
+        if editingNumber == nil {
+            prLabels = []
+        }
         loadingDraft = false
     }
 }

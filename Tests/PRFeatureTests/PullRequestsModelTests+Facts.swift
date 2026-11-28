@@ -10,6 +10,21 @@ import Testing
 @MainActor
 extension PullRequestsModelTests {
     @Test
+    func `a facts refresh verifies the newly checked out branch`() async {
+        let row = item(branch: "feature", ahead: 1)
+        let model = makeModel(items: [row])
+        model.stacking.facts = { _ in StackFacts(stack: BranchStack(base: nil, branches: [], checkedOut: "next")) }
+        model.fetchCurrentBranch = { _ in "next" }
+        model.fetchTipCommit = { $0.branch + "-tip" }
+        model.checkSignature = { _, commit in commit == "feature-tip" }
+
+        await model.refreshWorktreeFacts(row.worktree)
+        #expect(model.listedBranch == "next")
+        #expect(model.tipSignature == .unsigned)
+        #expect(model.canPush == false)
+    }
+
+    @Test
     func `a reload supersedes the queued sidebar refresh`() async {
         let model = makeModel(items: [item(branch: "main", ahead: 2)])
         model.currentBranch = "main"

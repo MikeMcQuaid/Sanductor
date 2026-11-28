@@ -103,7 +103,7 @@ extension PullRequestsModelTests {
         // Amended outside the app between the last read and the
         // click: the push re-reads the signature, declines quietly
         // and never reaches the remote.
-        model.checkTipSigned = { _ in false }
+        model.checkSignature = { _, _ in false }
         var pushed = false
         model.performPush = { _ in
             pushed = true
@@ -118,12 +118,12 @@ extension PullRequestsModelTests {
     @Test
     func `an unsigned tip dims Push and explains itself`() async {
         let model = makeModel(items: [item(branch: "feature", ahead: 2)])
-        model.checkTipSigned = { _ in false }
+        model.checkSignature = { _, _ in false }
         await model.reload()
         #expect(model.canPush == false)
         #expect(model.pushHelp.contains("not GPG signed"))
 
-        model.checkTipSigned = { _ in true }
+        model.checkSignature = { _, _ in true }
         await model.reload()
         #expect(model.canPush)
     }
@@ -131,7 +131,7 @@ extension PullRequestsModelTests {
     @Test
     func `an unsigned tip with nothing to push reads as pushed`() async {
         let model = makeModel(items: [item(branch: "feature", ahead: 0)])
-        model.checkTipSigned = { _ in false }
+        model.checkSignature = { _, _ in false }
         await model.reload()
         #expect(model.pushHelp.contains("already pushed"))
     }

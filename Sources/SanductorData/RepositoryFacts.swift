@@ -23,7 +23,19 @@ actor RepositoryFacts {
 
     static let shared: RepositoryFacts = .init()
 
+    private(set) var rebaseConflicts: [String: (ref: String, tips: String)] = [:]
+
     private(set) var pushStatus: [String: (revision: String, published: Bool)] = [:]
+
+    func remember(conflict: (ref: String, tips: String)?, for key: String) {
+        rebaseConflicts[key] = conflict
+    }
+
+    func forget(conflict: (ref: String, tips: String), for key: String) {
+        if let current = rebaseConflicts[key], current == conflict {
+            rebaseConflicts[key] = nil
+        }
+    }
 
     /// The remembered name, unless the file it was read against has
     /// been written since.

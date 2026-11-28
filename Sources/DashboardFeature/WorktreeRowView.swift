@@ -174,6 +174,11 @@ struct WorktreeRowView: View {
                 AgentIcon(agent, size: Self.agentIconSize)
                     .hoverHelp("A " + agent.displayName + " session runs here")
             }
+            if item.hasRebaseConflict, pullRequest?.state != "OPEN" || pullRequest?.mergeable != "CONFLICTING" {
+                Octicon("exclamationmark.triangle.fill", colour: ChecksStyle.mergeableColour(for: "CONFLICTING"))
+                    .accessibilityLabel("Rebase conflict")
+                    .hoverHelp("The last rebase of this branch had conflicts")
+            }
             pullRequestBadge
                 .layoutPriority(1)
             Text(counts)

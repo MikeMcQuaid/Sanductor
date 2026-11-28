@@ -33,7 +33,7 @@ extension PullRequestsModelTests {
         var actions = [String]()
         var signed = need == .nothing || need == .rebase
         model.fetchRebaseNeed = { _ in actions.isEmpty ? need : .nothing }
-        model.checkTipSigned = { _ in signed }
+        model.checkSignature = { _, _ in signed }
         model.performRebase = { _ in
             #expect(model.isBranchActionRunning)
             actions.append("rebase")
@@ -80,7 +80,7 @@ extension PullRequestsModelTests {
         let model = makeModel(items: [item(branch: "feature", ahead: 1)])
         await model.reload()
         var signed = false
-        model.checkTipSigned = { _ in signed }
+        model.checkSignature = { _, _ in signed }
         model.performRebase = { _ in
             signed = true
             return "origin/main"

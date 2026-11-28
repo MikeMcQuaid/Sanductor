@@ -130,11 +130,7 @@ extension GitClient {
 
         try await preservingChanges(in: [path]) {
             do {
-                if let oldBase {
-                    try await rebaseSigned(branch: branch, onto: tip, from: oldBase, worktreePath: path)
-                } else {
-                    try await rebaseSigned(worktreePath: path, branch: branch, onto: tip)
-                }
+                try await rebaseSigned(worktreePath: path, branch: branch, onto: tip, from: oldBase)
             } catch {
                 if held != branch {
                     try? await checkout(branch: held, worktreePath: path)
