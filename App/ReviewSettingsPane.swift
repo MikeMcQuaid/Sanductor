@@ -31,6 +31,7 @@ struct ReviewSettingsPane: View {
             Text("Model and effort changes apply to the next review. New-session defaults stay separate.")
                 .interfaceFont(.caption)
                 .foregroundStyle(.secondary)
+            conversationsSection
             Section("Feedback loop prompts") {
                 Picker("Prompt", selection: $prompt) {
                     ForEach(FeedbackPrompt.allCases, id: \.self) { kind in
@@ -51,7 +52,18 @@ struct ReviewSettingsPane: View {
 
     @AppStorage(AppSettings.reviewAgentKey)
     private var reviewAgent = ""
+    @AppStorage(AppSettings.newestCommentsFirstKey)
+    private var newestCommentsFirst = true
     @State private var prompt: FeedbackPrompt = .localReview
+
+    private var conversationsSection: some View {
+        Section("Pull request conversations") {
+            Toggle("Show newest comments first", isOn: $newestCommentsFirst)
+            Text("Off, a pull request's comments and reviews read oldest first; its description stays on top.")
+                .interfaceFont(.caption)
+                .foregroundStyle(.secondary)
+        }
+    }
 }
 
 // MARK: - ReviewAgentSettings

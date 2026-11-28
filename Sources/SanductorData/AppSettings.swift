@@ -18,6 +18,10 @@ public enum AppSettings {
     /// The default reviewer; empty selects the other agent.
     public static let reviewAgentKey = "reviewAgent"
 
+    /// The pull request timeline's order toggle, on until turned off;
+    /// off is oldest first.
+    public static let newestCommentsFirstKey = "newestCommentsFirst"
+
     /// The poll cadence's storage key, in seconds.
     public static let pollIntervalKey = "pollIntervalSeconds"
 

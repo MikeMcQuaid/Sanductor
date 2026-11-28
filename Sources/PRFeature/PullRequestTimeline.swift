@@ -1,3 +1,4 @@
+import SanductorData
 import SanductorDomain
 import SwiftUI
 import TerminalUI
@@ -36,7 +37,7 @@ struct PullRequestTimeline: View {
                 MarkdownText(description)
                 Divider()
             }
-            ForEach(events) { event in
+            ForEach(ordered(newestFirst: newestFirst)) { event in
                 VStack(alignment: .leading, spacing: Self.headerSpacing) {
                     header(for: event)
                     if event.body.isEmpty == false {
@@ -48,6 +49,14 @@ struct PullRequestTimeline: View {
                     Rectangle().fill(.separator).frame(width: Self.railWidth)
                 }
             }
+        }
+    }
+
+    func ordered(newestFirst: Bool) -> [ReviewComment] {
+        if newestFirst {
+            events.reversed()
+        } else {
+            events
         }
     }
 
@@ -68,6 +77,9 @@ struct PullRequestTimeline: View {
 
     private static let headerSpacing: CGFloat = 4
     private static let railWidth: CGFloat = 2
+
+    @AppStorage(AppSettings.newestCommentsFirstKey)
+    private var newestFirst = true
 
     private let botCommentCounts: [ReviewBot: Int]
 
