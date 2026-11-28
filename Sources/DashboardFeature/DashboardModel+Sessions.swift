@@ -51,6 +51,7 @@ public extension DashboardModel {
 
     /// Creates a session working on a GitHub issue; `reveals` is
     /// false for every launch of several picks but the first.
+    @discardableResult
     func createSession(
         fromIssue number: Int,
         repository: Repository,
@@ -59,11 +60,11 @@ public extension DashboardModel {
         options: AgentLaunchOptions = AgentLaunchOptions(),
         baseBranch: String? = nil,
         reveals: Bool = true,
-    ) async {
+    ) async -> LaunchFailure? {
         let draft = LaunchDraft(
             text: context, source: .issue, agent: agent, options: options, number: number, base: baseBranch,
         )
-        await run(draft, in: repository, placeholder: "issue-\(number)", reveals: reveals) { service in
+        return await run(draft, in: repository, placeholder: "issue-\(number)", reveals: reveals) { service in
             try await service.createSession(
                 fromIssue: number,
                 repository: repository,
@@ -77,6 +78,7 @@ public extension DashboardModel {
 
     /// Creates a session on a pull request's own branch; `reveals` as
     /// for issues.
+    @discardableResult
     func createSession(
         fromPullRequest number: Int,
         repository: Repository,
@@ -84,17 +86,17 @@ public extension DashboardModel {
         agent: AgentKind,
         options: AgentLaunchOptions = AgentLaunchOptions(),
         reveals: Bool = true,
-    ) async {
+    ) async -> LaunchFailure? {
         // One launch per pull request at a time: a second found the
         // first's worktree before its agent was running, and killed
         // that agent to start its own. A launch holds a progress log
         // under its placeholder's path until it ends.
         guard isLaunching(pullRequest: number, in: repository) == false else {
-            return
+            return nil
         }
 
         let draft = LaunchDraft(text: context, source: .pullRequest, agent: agent, options: options, number: number)
-        await run(draft, in: repository, placeholder: "pr-\(number)", reveals: reveals) { service in
+        return await run(draft, in: repository, placeholder: "pr-\(number)", reveals: reveals) { service in
             try await service.createSession(
                 fromPullRequest: number,
                 repository: repository,

@@ -51,17 +51,33 @@ struct ExternalEditSpool {
 
     /// Tells the shim the app has the file on screen, so a shim that
     /// is never claimed can report that the app is not running
-    /// rather than waiting for an editor that will never appear.
+    /// rather than waiting for an editor that will never appear. The
+    /// claim names the app's process, so a command waiting on a
+    /// session can tell an app that quit from one still starting it.
     func claim(_ edit: ExternalEdit) {
-        write("", to: path(id: edit.id, suffix: Self.openSuffix))
+        write(
+            String(ProcessInfo.processInfo.processIdentifier) + "\n",
+            to: path(id: edit.id, suffix: Self.openSuffix),
+        )
     }
 
     /// Answers a request: a saved file lets the command carry on, a
     /// cancelled one fails it, which is how git is told to abort a
     /// rebase. The shim removes the files it read, and a request
-    /// whose shim has gone is swept rather than answered.
-    func finish(_ edit: ExternalEdit, saved: Bool) {
-        write(saved ? "0" : "1", to: path(id: edit.id, suffix: Self.doneSuffix))
+    /// whose shim has gone is swept rather than answered: a session
+    /// takes long enough to start that its command can be
+    /// interrupted first, and an answer nothing reads would stay in
+    /// the spool for good. The reason a session did not start
+    /// follows the status on lines of its own.
+    func finish(_ edit: ExternalEdit, saved: Bool, message: String = "") {
+        guard FileManager.default.fileExists(atPath: path(id: edit.id, suffix: Self.requestSuffix)) else {
+            return
+        }
+
+        write(
+            (saved ? "0" : "1") + (message.isEmpty ? "" : "\n" + message),
+            to: path(id: edit.id, suffix: Self.doneSuffix),
+        )
     }
 
     /// Drops a request nothing is waiting on, once it has been

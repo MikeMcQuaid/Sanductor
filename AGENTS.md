@@ -89,12 +89,14 @@ conventional-commit prefixes such as `feat:`, `fix:` or `chore:`.
   and `sanductor new`,
   which asks its way to a session over SSH the way the app does,
   defaulting to what the window last chose (published by the app as
-  `sanductor/session-defaults`). Nothing installs it: an SSH login
-  aliases the bundled path. It speaks the way Homebrew's own scripts
-  do, a blue `==>` before each step, bold labels, green defaults and
-  bold `Warning:`/`Error:` labels, colour only on a terminal that has
-  not set `NO_COLOR`. `CommandLineSessionTests` pins its names to
-  `SessionName`
+  `sanductor/session-defaults`). Started from an issue, a pull request
+  or a discussion it asks the running app instead, through the editor
+  shim's spool, since only the app runs host-side `gh` and git.
+  Nothing installs it: an SSH login aliases the bundled path. It speaks
+  the way Homebrew's own scripts do, a blue `==>` before each step,
+  bold labels, green defaults and bold `Warning:`/`Error:` labels,
+  colour only on a terminal that has not set `NO_COLOR`.
+  `CommandLineSessionTests` pins its names to `SessionName`
 - `docs/`: the images `README.md` embeds
 - `script/`: development tasks
 - `Brewfile`: development dependencies

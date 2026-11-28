@@ -19,6 +19,7 @@ extension DashboardModel {
         )
     }
 
+    @discardableResult
     func startDiscussion(
         _ url: String,
         repository: Repository,
@@ -28,11 +29,11 @@ extension DashboardModel {
         worktree: Worktree? = nil,
         baseBranch: String? = nil,
         reveals: Bool = true,
-    ) async {
+    ) async -> LaunchFailure? {
         let draft = LaunchDraft(
             text: context, source: .discussion, agent: agent, options: options, base: baseBranch, discussionURL: url,
         )
-        await run(
+        return await run(
             draft,
             in: worktree == nil ? repository : nil,
             placeholder: worktree == nil ? "discussion" : nil,

@@ -947,7 +947,20 @@ terminal count too. It fetches only origin, when configured; a failed
 fetch stops creation. It runs itself as the sandbox user when started
 as the host user, and focuses the new workspace instead of attaching
 when already inside herdr
-(`HERDR_PANE_ID`), which refuses a nested client. App Intents
+(`HERDR_PANE_ID`), which refuses a nested client. Its non-interactive
+form also starts from an issue, a pull request or a discussion
+(`--issue`, `--pull-request`, `--discussion`), with standard input as
+the optional context. Those are the running app's to start, never the
+command's: asking GitHub and checking a pull request out are host-side
+`gh` and git in a checkout the sandbox can write, which only
+`GitHubClient` and `GitClient` may run (the security model says why).
+The command therefore spools a `session` request beside the editor
+shim's and waits; the app starts it through the new session form's own
+functions, leaving the selection alone, and answers with the failure
+when there is one, which the command exits non-zero with. The app's
+claim names its process, so a command whose app quits before answering
+fails rather than waiting on it. The sandbox user cannot reach the
+spool, so over SSH a source is refused. App Intents
 (`App/SanductorShortcuts.swift`) resolve entities from the dashboard's
 in-memory groups and reach the app through `AppDependencies.shared`,
 since the system invokes them outside any view. Start Agent Session
@@ -2667,7 +2680,7 @@ The variables shell files and scripts can read or set:
 | `SANDUCTOR_DEVELOPMENT_TEAM` | you, running `script/build`, `script/install` or `script/test` | the Apple team id: `script/build` signs the app for iCloud with it, which iPhone alerts need, and `script/test` signs the app and the App Intents runner alike, which the framework requires; unset, `script/build` uses the team `script/signing` finds, while `script/test` skips the bundle; set empty, builds stay ad hoc |
 | `SANDUCTOR_DEVELOPER_ID_PROFILE` | the release workflow, running `script/package` | a base64 encoded Developer ID provisioning profile with iCloud; set, the packaged app is signed for iCloud and embeds it |
 | `SANDUCTOR_SKIP_INTENT_TESTS` | you, running `script/test` | leaves the App Intents bundle out even with a team set |
-| `SANDUCTOR_DRY_RUN` | you, running `sanductor new` | prints what it would make instead of making it |
+| `SANDUCTOR_DRY_RUN` | you, running `sanductor new` | prints what it would make, or ask the app for, instead of doing it |
 
 ### From a phone
 
