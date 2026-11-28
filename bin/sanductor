@@ -15,7 +15,9 @@
 # It then makes the worktree, writes the prompt file, creates the
 # herdr workspace under the label the app recognises, launches the
 # agent and attaches to it. The app needs telling nothing, since it
-# derives every session from herdr and git.
+# derives every session from herdr and git. Started from an issue, a
+# pull request or a discussion it asks the running app instead: only
+# the app may ask GitHub or check a pull request out.
 set -eu
 
 command_directory="$(/bin/realpath "$0")"
@@ -89,6 +91,16 @@ $(bold 'sanductor new') --repository <name> --agent <claude|codex>
     [--model <name>] [--effort <name>] --no-attach
     Read the prompt from standard input and print the created herdr
     workspace as JSON. Only existing repositories are accepted.
+
+$(bold 'sanductor new') --repository <name> --agent <claude|codex>
+    [--model <name>] [--effort <name>]
+    (--issue <number> | --pull-request <number> | --discussion <url>)
+    --no-attach
+    Start from an issue, a pull request (on its own branch) or a
+    discussion, with standard input as optional extra context. The
+    running app starts the session, so this prints nothing, waits
+    until the agent has started and works only as yourself on the
+    Mac, not over SSH.
 
 $(bold 'sanductor repositories')
     List existing repository names, one per line, from the
@@ -285,6 +297,30 @@ create_worktree() {
   git -C "${repository_path}" worktree add --no-track -b "${branch}" "${worktree}" "${base}" >&2
 }
 
+# The app names its own spool, so a development build never answers
+# the installed app's shells; anything else means the installed one.
+spool="${SANDUCTOR_EDITS:-${HOME}/.sanductor/edits}"
+
+# How long to wait for the app to take a request, as a count of
+# polls: long enough to cover a busy app, short enough that a shell
+# without one says so rather than hanging.
+claim_tries=50
+poll_seconds=0.2
+
+# The app claims a request as soon as it acts on it, so an unclaimed
+# one means it is not running.
+await_claim() {
+  tries=0
+  while [ ! -e "${spool}/$1.open" ] && [ ! -e "${spool}/$1.done" ]; do
+    if [ "${tries}" -ge "${claim_tries}" ]; then
+      rm -f "${spool}/$1.request"
+      fail "Sanductor did not answer; is it running?" 69
+    fi
+    tries=$((tries + 1))
+    sleep "${poll_seconds}"
+  done
+}
+
 # The sessions live in a herdr server the sandbox user owns, and
 # only that user can reach its socket. Run as the host user, the
 # command therefore runs itself as the sandbox user, through the
@@ -317,6 +353,8 @@ sanductor_new() {
   model=""
   effort=""
   no_attach=""
+  source=""
+  reference=""
   if [ "$#" -gt 0 ]; then
     while [ "$#" -gt 0 ]; do
       case "$1" in
@@ -324,14 +362,18 @@ sanductor_new() {
           no_attach=1
           shift
           ;;
-        --repository | --agent | --model | --effort)
+        --repository | --agent | --model | --effort | --issue | --pull-request | --discussion)
           [ "$#" -ge 2 ] || fail "missing value for $1"
           case "$1" in
             --repository) repository="$2" ;;
             --agent) agent="$2" ;;
             --model) model="$2" ;;
             --effort) effort="$2" ;;
-            *) fail "unknown option: $1" ;;
+            *)
+              [ -z "${source}" ] || fail "choose one of --issue, --pull-request and --discussion"
+              source="${1#--}"
+              reference="$2"
+              ;;
           esac
           shift 2
           ;;
@@ -352,14 +394,38 @@ sanductor_new() {
       *[!a-zA-Z0-9_./:-]*) fail "invalid model or effort" ;;
       *) ;;
     esac
+    case "${source}" in
+      issue | pull-request)
+        case "${reference}" in
+          '' | 0* | *[!0-9]*) fail "--${source} takes a number" ;;
+          *) ;;
+        esac
+        ;;
+      discussion)
+        case "${reference}" in
+          *[!a-zA-Z0-9_./:-]*) reference="" ;;
+          https://github.com/?*/discussions/*) ;;
+          *) reference="" ;;
+        esac
+        case "${reference##*/discussions/}" in
+          '' | *[!0-9]*) fail "--discussion takes an https://github.com/.../discussions/<number> address" ;;
+          *) ;;
+        esac
+        ;;
+      *) ;;
+    esac
   fi
   # Already the sandbox user when its home is this account's own,
   # and a dry run never reaches the server, so it stays where it is:
-  # tests run as neither user and have no sandbox to enter.
+  # tests run as neither user and have no sandbox to enter. A source
+  # stays too, as the host user: the app is asked, and its spool is
+  # in that user's home, where nothing in the sandbox can reach it.
   case "${HOME}" in
-    /Users/sandvault-*) ;;
+    /Users/sandvault-*)
+      [ -z "${source}" ] || fail "--${source} cannot be used by the sandbox user" 69
+      ;;
     *)
-      if [ -z "${SANDUCTOR_DRY_RUN:-}" ]; then
+      if [ -z "${SANDUCTOR_DRY_RUN:-}" ] && [ -z "${source}" ]; then
         [ -f "/var/sandvault/sandbox-sandvault-${USER}.sb" ] ||
           fail "no sandvault sandbox for ${USER}; sessions run as its user" 69
         if [ -n "${no_attach}" ]; then
@@ -388,8 +454,11 @@ sanductor_new() {
     root="$(cd "${repositories_root}" && pwd -P)"
     [ "$(cd "${repository_path}" && pwd -P)" = "${root}/${repository}" ] ||
       fail "repository must be inside ${root}" 66
-    prompt="$(cat)"
-    [ -n "${prompt}" ] || fail "a prompt is required"
+    # A source's context is optional, so a terminal is not waited on
+    # for one: only a pipe or a file is read.
+    prompt=""
+    [ -n "${source}" ] && [ -t 0 ] || prompt="$(cat)"
+    [ -n "${prompt}${source}" ] || fail "a prompt is required"
   else
     repositories="$(default_for repositories "${defaults}")"
     if [ -z "${repositories}" ] && [ -d "${repositories_root}" ]; then
@@ -440,6 +509,55 @@ sanductor_new() {
       *" ${effort} "*) ;;
       *) fail "effort is not supported by the selected model" ;;
     esac
+  fi
+
+  # Only the app may ask GitHub or check a pull request out: both
+  # are host-side `gh` and git in a checkout the sandbox can write.
+  # So a source is spooled for the app as the editor shim's requests
+  # are, with what was typed as its context, and the app's answer is
+  # this command's: nothing once the agent has started, or why not.
+  # The repository goes as the app lists it, under the directory it
+  # published, which a symlink keeps from being the physical path.
+  if [ -n "${source}" ]; then
+    request="$(/usr/bin/jq --null-input --compact-output \
+      --arg path "${repository_path}" --arg directory "$(pwd -P)" --argjson process "$$" \
+      --arg agent "${agent}" --arg model "${model}" --arg effort "${effort}" \
+      --arg source "${source}" --arg reference "${reference}" --arg context "${prompt}" \
+      '{path: $path, workingDirectory: $directory, processIdentifier: $process, kind: "session",
+        session: {agent: $agent, model: $model, effort: $effort,
+          source: $source, reference: $reference, context: $context}}')"
+    if [ -n "${SANDUCTOR_DRY_RUN:-}" ]; then
+      printf '%s\n' "${request}"
+      return 0
+    fi
+    id="$(/usr/bin/uuidgen)"
+    mkdir -p "${spool}"
+    trap 'rm -f "${spool}/${id}.request" "${spool}/${id}.open" "${spool}/${id}.done"; exit 130' HUP INT TERM
+    printf '%s\n' "${request}" >"${spool}/${id}.request.partial"
+    mv "${spool}/${id}.request.partial" "${spool}/${id}.request"
+    headline "Asking Sanductor to start ${agent} in ${repository}"
+    await_claim "${id}"
+    # The claim names the app's process: one that has quit will never
+    # answer, and its answer may have landed just before it went.
+    while [ ! -e "${spool}/${id}.done" ]; do
+      app=""
+      { read -r app <"${spool}/${id}.open"; } 2>/dev/null || true
+      case "${app}" in
+        '' | *[!0-9]*) ;;
+        *)
+          if ! kill -0 "${app}" 2>/dev/null && [ ! -e "${spool}/${id}.done" ]; then
+            rm -f "${spool}/${id}.request" "${spool}/${id}.open"
+            fail "Sanductor quit before the session started" 69
+          fi
+          ;;
+      esac
+      sleep "${poll_seconds}"
+    done
+    answer="$(cat "${spool}/${id}.done")"
+    rm -f "${spool}/${id}.request" "${spool}/${id}.open" "${spool}/${id}.done"
+    trap - HUP INT TERM
+    [ "${answer}" = 0 ] || fail "$(printf '%s\n' "${answer}" | sed 1d)" 1
+    return 0
   fi
 
   repository_path="${repositories_root}/${repository}"
@@ -540,10 +658,6 @@ if [ "${1:-}" = "repositories" ]; then
   exit 0
 fi
 
-# The app names its own spool, so a development build never answers
-# the installed app's shells; anything else means the installed one.
-spool="${SANDUCTOR_EDITS:-${HOME}/.sanductor/edits}"
-
 # The app bundle this command shipped in: bin sits at
 # Contents/Resources/bin, so three directories up is the app. The
 # copy in the shared workspace (for SSH) lives outside any bundle
@@ -553,12 +667,6 @@ case "${app_bundle}" in
   *.app) ;;
   *) app_bundle="" ;;
 esac
-
-# How long to wait for the app to take a request, as a count of
-# polls: long enough to cover a busy app, short enough that a shell
-# without one says so rather than hanging.
-claim_tries=50
-poll_seconds=0.2
 
 wait_for_answer=no
 while [ "$#" -gt 0 ]; do
@@ -682,17 +790,7 @@ for file in "$@"; do
     continue
   fi
 
-  # The app claims a request as soon as it shows the file, so an
-  # unclaimed one means it is not running.
-  tries=0
-  while [ ! -e "${spool}/${id}.open" ] && [ ! -e "${spool}/${id}.done" ]; do
-    if [ "${tries}" -ge "${claim_tries}" ]; then
-      rm -f "${request}"
-      fail "Sanductor did not answer; is it running?" 69
-    fi
-    tries=$((tries + 1))
-    sleep "${poll_seconds}"
-  done
+  await_claim "${id}"
   # The file is on screen: bring the app forward. The terminal's own
   # child may ask that of the system where the app asking for itself
   # is refused by cooperative activation.

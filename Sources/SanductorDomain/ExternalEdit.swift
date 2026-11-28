@@ -13,12 +13,14 @@ public struct ExternalEdit: Identifiable, Hashable, Sendable {
         workingDirectory: String,
         processIdentifier: Int32,
         kind: Kind = .edit,
+        session: Session? = nil,
     ) {
         self.id = id
         self.path = path
         self.workingDirectory = workingDirectory
         self.processIdentifier = processIdentifier
         self.kind = kind
+        self.session = session
     }
 
     /// Decodes one spooled request, whose file name is its id; nil
@@ -28,12 +30,19 @@ public struct ExternalEdit: Identifiable, Hashable, Sendable {
             return nil
         }
 
+        let asked = payload.kind.flatMap(Kind.init(rawValue:)) ?? .edit
+        // A session request says what to start, and nothing else does.
+        guard (asked == .session) == (payload.session != nil) else {
+            return nil
+        }
+
         self.init(
             id: id,
             path: payload.path,
             workingDirectory: payload.workingDirectory,
             processIdentifier: payload.processIdentifier,
-            kind: payload.kind.flatMap(Kind.init(rawValue:)) ?? .edit,
+            kind: asked,
+            session: payload.session,
         )
     }
 
@@ -54,12 +63,57 @@ public struct ExternalEdit: Identifiable, Hashable, Sendable {
 
         /// Select this worktree or repository.
         case select
+
+        /// Start a session in this repository from a GitHub source
+        /// and hold the command until it has started or failed.
+        case session
+    }
+
+    /// Where a session request's prompt comes from.
+    public enum Source: String, Decodable, Sendable {
+        /// An issue, by number.
+        case issue
+
+        /// An open pull request, by number, worked on in its own
+        /// branch.
+        case pullRequest = "pull-request"
+
+        /// A discussion, by address: it may belong to the
+        /// organisation rather than the repository.
+        case discussion
+    }
+
+    /// What `sanductor new` asks the app to start when the prompt is
+    /// GitHub's to supply: only the app may ask GitHub or check a
+    /// pull request out, so the command hands over its arguments as
+    /// it took them.
+    public struct Session: Decodable, Hashable, Sendable {
+        /// The agent's name as session names spell it.
+        public let agent: String
+
+        /// The model, empty for the agent's own default.
+        public let model: String
+
+        /// The effort, empty for the model's own default.
+        public let effort: String
+
+        /// Where the prompt comes from.
+        public let source: Source
+
+        /// Which one: a number, or a discussion's address.
+        public let reference: String
+
+        /// What the user added, which may be nothing.
+        public let context: String
     }
 
     // swiftlint:enable explicit_enum_raw_value
 
     /// What was asked for.
     public let kind: Kind
+
+    /// What to start, for a session request and no other.
+    public let session: Session?
 
     /// The request's identity, which is its spool file's name.
     public let id: String
@@ -81,7 +135,7 @@ public struct ExternalEdit: Identifiable, Hashable, Sendable {
     /// Whether the command is still there waiting for an answer;
     /// only then does its process being alive mean anything.
     public var waitsForAnswer: Bool {
-        kind == .edit
+        kind == .edit || kind == .session
     }
 
     /// The file's name, for the editor's header.
@@ -104,5 +158,6 @@ public struct ExternalEdit: Identifiable, Hashable, Sendable {
         let processIdentifier: Int32
         /// Absent in requests from an older shim, which all waited.
         let kind: String?
+        let session: Session?
     }
 }

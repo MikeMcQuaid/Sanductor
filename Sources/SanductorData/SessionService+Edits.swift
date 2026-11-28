@@ -120,10 +120,11 @@ public extension SessionService {
     }
 
     /// Releases the waiting command: a saved file lets it carry on,
-    /// a cancelled one fails it.
+    /// a cancelled one fails it, and a session that did not start
+    /// fails it with the reason.
     @concurrent
-    func finishEdit(_ edit: ExternalEdit, saved: Bool) async {
-        ExternalEditSpool(directory: paths.editsDirectory).finish(edit, saved: saved)
+    func finishEdit(_ edit: ExternalEdit, saved: Bool, message: String = "") async {
+        ExternalEditSpool(directory: paths.editsDirectory).finish(edit, saved: saved, message: message)
     }
 
     // MARK: Private

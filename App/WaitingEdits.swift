@@ -44,11 +44,22 @@ final class WaitingEdits {
     ) async {
         self.prefersCentreEditor = prefersCentreEditor
         for await edits in service.pendingEdits() {
-            // Only a waiting request holds a pane; the others are
+            // Only a waiting edit holds a pane; the others are
             // acted on and dropped as they arrive.
-            all = edits.filter(\.waitsForAnswer)
+            all = edits.filter { $0.kind == .edit }
             if all.isEmpty {
                 restorePreviousPane()
+            }
+            // A session takes seconds to start and its command waits
+            // for the outcome, so it starts once, beside this loop:
+            // an editor another command is stopped on cannot wait
+            // behind it.
+            for edit in edits where edit.kind == .session && Self.starting.insert(edit.id).inserted {
+                Task {
+                    await service.claimEdit(edit)
+                    let failure = await dashboard.startSession(edit)
+                    await service.finishEdit(edit, saved: failure == nil, message: failure ?? "")
+                }
             }
             for edit in edits where edit.waitsForAnswer == false {
                 act(on: edit, dashboard: dashboard)
@@ -79,6 +90,12 @@ final class WaitingEdits {
     }
 
     // MARK: Private
+
+    /// The session requests already taken, so each starts once
+    /// however often the spool is read while it does. The app's
+    /// rather than the window's: a window made again mid-launch
+    /// reads the same request as pending.
+    private static var starting: Set<String> = []
 
     /// The request already brought to the front, so each one
     /// interrupts once, and the tab to go back to afterwards.
